@@ -1,0 +1,72 @@
+/* css/style.css */
+body {
+    margin: 0;
+    padding: 20px;
+    background-color: #f0f2f5;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    justify-content: center;
+}
+
+#app {
+    background: #fff;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    max-width: 860px;
+    width: 100%;
+}
+
+#ui-header {
+    display: flex;
+    flex-wrap: wrap; /* 允许一排排不下时自动换行 */
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px; /* 元素之间的间距 */
+    margin-bottom: 16px;
+}
+
+#ui-header h1 {
+    font-size: 24px;
+    margin: 0;
+    color: #333;
+}
+
+#turnIndicator {
+    font-weight: bold;
+    font-size: 18px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: #e0e0e0;
+}
+
+#endTurn {
+    background: #333;
+    color: #fff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+}
+#endTurn:hover { background: #555; }
+
+#canvas-container {
+    border: 2px solid #333;
+    border-radius: 8px;
+    background: #fff;
+    overflow: hidden;
+    width: 100%;
+    max-width: 1200px; /* 强制最大宽度，避免拉成超长条 */
+    margin: 0 auto;    /* 居中对齐 */
+}
+
+#gameCanvas {
+    display: block;
+    width: 100%;  /* 宽度跟随容器，自动调整 */
+    height: auto; /* 高度等比例缩放 */
+    cursor: pointer;
+    /* 如果想要显示得特别大，可以给个最小高度 */
+    min-height: 500px; 
+}
