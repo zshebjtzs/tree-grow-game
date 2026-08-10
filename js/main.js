@@ -323,8 +323,16 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
                         alert('🔵 蓝方所有根节点被摧毁！🔴 红方胜利！');
                         game.isGameOver = true; updateUI(); renderGame();
                     } else {
-                        // 切换回合
-                        game.switchTurn(); updateUI(); renderGame();
+                        // 【规则修正】战斗结束后，当前攻击方完成一步，解除其冻结状态
+                        const aliveOwnNodes = game.getAliveNodesByOwner(game.currentTurn);
+                        for (const node of aliveOwnNodes) {
+                            if (node.isFrozen) node.isFrozen = false;
+                        }
+
+                        // 若未结束，切换给对手
+                        game.switchTurn();
+                        updateUI();
+                        renderGame();
                     }
                 }, 500); // 500ms 动画持续时长
                 return; // 跳出事件监听
@@ -334,6 +342,12 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
         // 如果没有发生战斗，正常渲染和切换回合
         renderGame();
         if (!game.isGameOver) {
+            // 【规则修正】防守方完成了一步，回合结束前解除当前玩家所有冻结
+            const aliveOwnNodes = game.getAliveNodesByOwner(game.currentTurn);
+            for (const node of aliveOwnNodes) {
+                if (node.isFrozen) node.isFrozen = false;
+            }
+
             game.switchTurn();
             updateUI();
             renderGame();
@@ -343,17 +357,18 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
 
 endTurnBtn.addEventListener('click', () => {
     if (game.isGameOver || gamePhase !== 'playing' || isAnimating) return;
-    // 在回合结束瞬间，清空当前玩家所有节点的冻结状态
-    const aliveNodes = game.getAliveNodesByOwner(game.currentTurn);
+    
+    // 清空当前玩家所有节点的冻结状态
+    const aliveOwnNodes = game.getAliveNodesByOwner(game.currentTurn);
     let unfrozenCount = 0;
-    for (const node of aliveNodes) {
+    for (const node of aliveOwnNodes) {
         if (node.isFrozen) {
             node.isFrozen = false;
             unfrozenCount++;
         }
     }
     if (unfrozenCount > 0) {
-        console.log(`【解冻】当前玩家 ${game.currentTurn} 结束回合，${unfrozenCount} 个被冻结的节点已解除休整。`);
+        console.log(`【解冻】当前玩家 ${game.currentTurn} 跳过回合，${unfrozenCount} 个被冻结的节点已解除休整。`);
     }
 
     selectedNodeId = null;

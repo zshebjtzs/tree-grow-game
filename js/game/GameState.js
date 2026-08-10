@@ -36,7 +36,13 @@ export class GameState {
     getAliveNodes() { return this.nodes.filter(n => !n.isDestroyed); }
     getAliveNodesByOwner(owner) { return this.nodes.filter(n => n.owner === owner && !n.isDestroyed); }
     getNode(id) { return this.nodes.find(n => n.id === id); }
-    switchTurn() { if (this.isGameOver) return; this.currentTurn = this.currentTurn === 'red' ? 'blue' : 'red'; return this.currentTurn; }
+    switchTurn() {
+        if (this.isGameOver) return;
+        // 【核心修正】不要在切换回合时清空冻结状态！
+        // 冻结状态必须保留到防守方结束完自己的完整回合后，才能解除。
+        this.currentTurn = this.currentTurn === 'red' ? 'blue' : 'red';
+        return this.currentTurn;
+    }
 
     deleteNodes(nodeIds) {
         const idSet = new Set(nodeIds);
