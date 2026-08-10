@@ -5,18 +5,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>生长树：图论</title>
     <!-- 引入第三方 delaunay 库 -->
-    <script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "d3-delaunay": "https://cdn.jsdelivr.net/npm/d3-delaunay@6/+esm"
+        }
+    }
+    </script>
     <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
     <div id="app">
         <div id="ui-header">
             <h1>🌳 生长树：图论</h1>
-            <div id="turnIndicator">当前回合：红方</div>
-            <div>
-                <!-- 新增：保存与读档按钮 -->
-                <button id="saveBtn" style="margin-right: 8px;">💾 保存</button>
-                <button id="loadBtn" style="margin-right: 8px;">📂 读档</button>
+            
+            <!-- 【第二阶段新增】模式选择与参数配置 -->
+            <div id="game-config-panel">
+                <div class="config-group">
+                    <label>模式：</label>
+                    <select id="mode-select">
+                        <option value="pvp">🟢 双人对战 (PVP)</option>
+                        <option value="pve">🤖 人机对战 (PVE)</option>
+                    </select>
+                </div>
+                <div class="config-group" id="difficulty-group" style="display: none;">
+                    <label>难度：</label>
+                    <select id="difficulty-select">
+                        <option value="easy">简单</option>
+                        <option value="medium" selected>普通</option>
+                        <option value="hard">困难</option>
+                    </select>
+                </div>
+                <button id="start-game-btn" class="primary-btn">开始游戏</button>
+            </div>
+
+            <div id="game-status-area">
+                <div id="turnIndicator">准备开局</div>
+                <button id="saveBtn">💾 保存</button>
+                <button id="loadBtn">📂 读档</button>
                 <button id="endTurn">⏭️ 跳过回合</button>
             </div>
         </div>
@@ -25,6 +51,6 @@
         </div>
     </div>
     
-    <script src="./js/bundle.js"></script>
+    <script type="module" src="./js/bundle.js"></script>
 </body>
 </html>

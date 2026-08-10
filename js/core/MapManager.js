@@ -1,4 +1,7 @@
 // js/core/MapManager.js
+// 用标准的裸导入，浏览器会通过刚才的 import map 自动去 CDN 加载
+import * as d3 from 'd3-delaunay';
+
 export class MapManager {
     constructor(canvasWidth, canvasHeight) {
         this.width = canvasWidth;

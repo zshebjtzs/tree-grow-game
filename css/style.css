@@ -24,6 +24,60 @@ body {
     align-items: center;
     gap: 12px; /* 元素之间的间距 */
     margin-bottom: 16px;
+    background: #fafafa; /* 加个背景区分 */
+    padding: 12px;
+    border-radius: 8px;
+}
+
+#game-config-panel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fff;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+}
+
+.config-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.config-group select, #start-game-btn {
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+}
+
+#start-game-btn {
+    background: #4CAF50;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+}
+#start-game-btn:hover { background: #45a049; }
+#start-game-btn:disabled { background: #aaa; cursor: not-allowed; }
+
+#game-status-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto; /* 推到最右边 */
+}
+
+#turnIndicator {
+    font-weight: bold;
+    font-size: 16px;
+    padding: 4px 12px;
+    background: #fff;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    min-width: 120px;
+    text-align: center;
 }
 
 #ui-header h1 {
