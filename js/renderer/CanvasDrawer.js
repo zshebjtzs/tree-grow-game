@@ -57,12 +57,52 @@ export class CanvasDrawer {
         });
     }
     
-    renderNodes(nodes, selectedNodeId = null) {
+    // 第三个参数：dyingNodes（即将被摧毁的节点列表）
+    renderNodes(nodes, selectedNodeId = null, dyingNodes = []) {
         const ctx = this.ctx;
         const alive = nodes.filter(n => !n.isDestroyed);
 
+        // ==========================================
+        // 1. 优先绘制【死亡特效】
+        // ==========================================
+        if (dyingNodes && dyingNodes.length > 0) {
+            ctx.save();
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 25;
+
+            // 绘制红色的死亡连线
+            dyingNodes.forEach(node => {
+                if (node.parentId !== null) {
+                    const parent = alive.find(n => n.id === node.parentId);
+                    if (parent) {
+                        ctx.beginPath();
+                        ctx.moveTo(parent.x, parent.y);
+                        ctx.lineTo(node.x, node.y);
+                        ctx.strokeStyle = '#ff3333';
+                        ctx.lineWidth = 5;
+                        ctx.stroke();
+                    }
+                }
+            });
+
+            // 绘制闪烁发光的死亡节点
+            const pulse = 1 + 0.3 * Math.sin(Date.now() / 150); // 脉动效果
+            dyingNodes.forEach(node => {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 16 * pulse, 0, Math.PI * 2);
+                ctx.fillStyle = '#ff0000';
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            });
+            ctx.restore();
+        }
+
+        // ==========================================
+        // 2. 绘制正常存活的节点和连线
+        // ==========================================
         alive.forEach(node => {
-            // 画连线
             if (node.parentId !== null) {
                 const parent = alive.find(n => n.id === node.parentId);
                 if (parent) {
@@ -77,7 +117,6 @@ export class CanvasDrawer {
         });
 
         alive.forEach(node => {
-            // 【优化】如果是选中的节点，画一个更大的外发光圈
             if (selectedNodeId === node.id) {
                 ctx.beginPath();
                 ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
@@ -86,7 +125,6 @@ export class CanvasDrawer {
                 ctx.stroke();
             }
 
-            // 【优化】节点圆点半径由 8 增大到 12
             ctx.beginPath();
             ctx.arc(node.x, node.y, 12, 0, Math.PI * 2);
             ctx.fillStyle = node.owner === 'red' ? '#ff4d4d' : '#4d79ff';
