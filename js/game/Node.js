@@ -9,6 +9,7 @@ export class Node {
         this.childrenIds = [];  // 子节点ID数组
         this.isRoot = false;    // 是否为根节点
         this.isDestroyed = false; // 是否被摧毁
+        this.isFrozen = false; // 是否被冻结
     }
 
     // 添加子节点

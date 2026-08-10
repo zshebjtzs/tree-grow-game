@@ -134,18 +134,35 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
     }
 
     if (clickedNode) {
-        if (clickedNode.owner === game.currentTurn) {
-            if (clickedNode.isRoot && clickedNode.childrenIds.length > 0) {
-                alert('规则限制：根节点不能作为分叉点再次生长。');
-                selectedNodeId = null;
-            } else {
-                selectedNodeId = clickedNode.id;
-                console.log(`已选中父节点 ID: ${selectedNodeId}`);
-            }
-        } else {
+        // 1. 所有拦截判断：利用卫语句提前阻断非法操作
+
+        // 1.1 如果是对方的节点，直接拦截
+        if (clickedNode.owner !== game.currentTurn) {
             alert('这是对手的节点！');
             selectedNodeId = null;
+            renderGame();
+            return;
         }
+
+        // 1.2 如果是处于冻结状态的节点，直接拦截
+        if (clickedNode.isFrozen) {
+            alert('规则限制：该节点因分支刚被摧毁，本回合处于休整状态，无法生长！');
+            selectedNodeId = null;
+            renderGame();
+            return;
+        }
+
+        // 1.3 如果是已有子节点的根节点，直接拦截
+        if (clickedNode.isRoot && clickedNode.childrenIds.length > 0) {
+            alert('规则限制：根节点不能作为分叉点再次生长。');
+            selectedNodeId = null;
+            renderGame();
+            return;
+        }
+
+        // 2. 核心选中逻辑：通过所有拦截后，执行选中
+        selectedNodeId = clickedNode.id;
+        console.log(`已选中父节点 ID: ${selectedNodeId}`);
         renderGame();
         return;
     }
@@ -267,6 +284,28 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
                     game.deleteNodes(nodesToDelete);
                     dyingNodes = [];
                     isAnimating = false;
+
+                    // 查找并冻结被摧毁分支的父节点
+                    const parentIdsToFreeze = new Set();
+                    for (const id of nodesToDelete) {
+                        const destroyedNode = game.getNode(id);
+                        // 如果这个被删的节点有父节点
+                        if (destroyedNode && destroyedNode.parentId !== null) {
+                            const parent = game.getNode(destroyedNode.parentId);
+                            // 父节点幸存 且 父节点不是根节点（根节点已死或不可冻结）
+                            if (parent && !parent.isRoot) {
+                                parentIdsToFreeze.add(parent.id);
+                            }
+                        }
+                    }
+                    // 应用冻结状态
+                    for (const pid of parentIdsToFreeze) {
+                        const parentNode = game.getNode(pid);
+                        if (parentNode) {
+                            parentNode.isFrozen = true;
+                            console.log(`【冻结】节点 ${pid} (区域 ${parentNode.areaId}) 的分支被摧毁，本回合被封禁生长。`);
+                        }
+                    }
                     
                     // 重新渲染去除死亡残留
                     renderGame();
@@ -309,6 +348,19 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
 
 endTurnBtn.addEventListener('click', () => {
     if (game.isGameOver || gamePhase !== 'playing' || isAnimating) return;
+    // 在回合结束瞬间，清空当前玩家所有节点的冻结状态
+    const aliveNodes = game.getAliveNodesByOwner(game.currentTurn);
+    let unfrozenCount = 0;
+    for (const node of aliveNodes) {
+        if (node.isFrozen) {
+            node.isFrozen = false;
+            unfrozenCount++;
+        }
+    }
+    if (unfrozenCount > 0) {
+        console.log(`【解冻】当前玩家 ${game.currentTurn} 结束回合，${unfrozenCount} 个被冻结的节点已解除休整。`);
+    }
+
     selectedNodeId = null;
     game.switchTurn();
     updateUI();
