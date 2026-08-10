@@ -161,6 +161,28 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
     const result = ruleEngine.canGrow(game, parentNode, clickedAreaId);
     if (!result.allowed) { alert(`非法生长！原因：${result.reason}`); return; }
 
+    // 除了己方基地，一个区域只能容纳一个节点
+    const currentBaseId = game.currentTurn === 'red' ? redBaseId : blueBaseId;
+    const enemyBaseId = game.currentTurn === 'red' ? blueBaseId : redBaseId;
+
+    // 1. 绝对禁止向己方基地区域生长（防止绕回老巢）
+    if (clickedAreaId === currentBaseId) {
+        alert('规则限制：禁止向己方基地区域生长！');
+        return;
+    }
+
+    // 2. 普通区域和敌方基地的节点碰撞限制
+    // 敌方基地必须是特例，因为它要用来触发“突入获胜”的胜利条件。
+    // 如果不是敌方基地，且区域内已经有存活节点，则禁止堆叠生长。
+    if (clickedAreaId !== enemyBaseId) {
+        const hasNodeInArea = game.getAliveNodes().some(n => n.areaId === clickedAreaId);
+        if (hasNodeInArea) {
+            alert('规则限制：除基地外，每个区域最多只能容纳一个节点！');
+            return; // 阻止生长
+        }
+    }
+
+    // 第三步：执行生长
     const newNode = game.addNode(parentNode.id, x, y, clickedAreaId, game.currentTurn);
     if (newNode) {
         console.log(`【生长成功】父节点 ID: ${parentNode.id}，新节点 ID: ${newNode.id}，位于区域 ${clickedAreaId}`);
