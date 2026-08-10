@@ -175,9 +175,10 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
     // 敌方基地必须是特例，因为它要用来触发“突入获胜”的胜利条件。
     // 如果不是敌方基地，且区域内已经有存活节点，则禁止堆叠生长。
     if (clickedAreaId !== enemyBaseId) {
-        const hasNodeInArea = game.getAliveNodes().some(n => n.areaId === clickedAreaId);
-        if (hasNodeInArea) {
-            alert('规则限制：除基地外，每个区域最多只能容纳一个节点！');
+        // 必须只查找己方节点，敌方节点不禁止，用来触发进攻！
+        const hasOwnNodeInArea = game.getAliveNodesByOwner(game.currentTurn).some(n => n.areaId === clickedAreaId);
+        if (hasOwnNodeInArea) {
+            alert('规则限制：除基地外，己方在一个区域内只能拥有一个据点！');
             return; // 阻止生长
         }
     }
