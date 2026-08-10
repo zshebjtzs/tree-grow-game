@@ -5,7 +5,7 @@ export class CanvasDrawer {
         this.ctx = this.canvas.getContext('2d');
     }
 
-    renderMap(areas, redBaseId = null, blueBaseId = null) {
+    renderMap(areas, redBaseId = null, blueBaseId = null, shortEdges = []) {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -18,7 +18,7 @@ export class CanvasDrawer {
         for (let i = 0; i < this.canvas.height; i += 50) {
             ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(this.canvas.width, i); ctx.stroke();
         }
-
+        
         areas.forEach(area => {
             const pts = area.vertices;
             if (pts.length < 3) return;
@@ -38,8 +38,28 @@ export class CanvasDrawer {
             ctx.strokeStyle = '#333';
             ctx.lineWidth = 2;
             ctx.stroke();
+        });
 
-            // 根据区域大小动态调整字号
+        // ==========================================
+        // 【新增】在填充完所有区域后，绘制极短边阻断红线
+        // ==========================================
+        ctx.save();
+        ctx.strokeStyle = '#ff0000'; // 醒目的警告红
+        ctx.lineWidth = 4;           // 加粗线条，形成视觉上的阻断感
+        for (let edge of shortEdges) {
+            ctx.beginPath();
+            ctx.moveTo(edge.p1[0], edge.p1[1]);
+            ctx.lineTo(edge.p2[0], edge.p2[1]);
+            ctx.stroke();
+        }
+        ctx.restore();
+        // ==========================================
+
+        // 根据区域大小动态调整字号并标记区域ID
+        areas.forEach(area => {
+            const pts = area.vertices;
+            if (pts.length < 3) return;
+            
             let maxDist = 0;
             const cx = area.center[0];
             const cy = area.center[1];

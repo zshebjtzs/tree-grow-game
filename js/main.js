@@ -503,12 +503,43 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
 
         // 如果开启了人机模式，蓝方基地自动由 AI 选址
         if (isAIMode) {
-            // 简单模拟 AI 选址：让 AI 随机选一个未被红方占据的区域
-            const availableAreas = mapAreas.filter(a => a.id !== redBaseId);
-            const randomArea = availableAreas[Math.floor(Math.random() * availableAreas.length)];
+            // ==========================================
+            // 【优化】利用 BFS 图论算法，强制 AI 与玩家基地保持距离
+            // ==========================================
+            const MIN_DISTANCE = 4; // 至少相隔 4 条黑线（跨越 3 个区域），避免贴脸
+            
+            // 1. 找出所有符合距离条件的候选区域
+            let candidateAreas = mapAreas.filter(area => {
+                if (area.id === redBaseId) return false; // 不能是红方基地
+                
+                // 调用已有的 ruleEngine 计算图论最短路径
+                const path = ruleEngine.getAreaPath(redBaseId, area.id);
+                if (!path) return false; // 如果被“阻断红线”隔绝或不可达，直接排除
+                
+                const distance = path.length - 1; // 计算跨越的黑线数量
+                return distance >= MIN_DISTANCE;
+            });
+
+            let selectedArea;
+            // 2. 如果有符合条件的距离足够远的区域，从中随机选一个
+            if (candidateAreas.length > 0) {
+                selectedArea = candidateAreas[Math.floor(Math.random() * candidateAreas.length)];
+            } else {
+                // 3. 兜底逻辑：如果地图被红线阻断得极其厉害，找不到这么远的区域，
+                // 强行选择距离红方基地“最远”的那块区域
+                let maxDist = -1;
+                for (const area of mapAreas) {
+                    if (area.id === redBaseId) continue;
+                    const path = ruleEngine.getAreaPath(redBaseId, area.id);
+                    if (path && path.length - 1 > maxDist) {
+                        maxDist = path.length - 1;
+                        selectedArea = area;
+                    }
+                }
+            }
             
             setTimeout(() => {
-                blueBaseId = randomArea.id;
+                blueBaseId = selectedArea.id;
                 // 直接进入开局
                 gamePhase = 'playing';
                 generateRootNodesInArea(redBaseId, 'red', 3);
@@ -795,7 +826,7 @@ endTurnBtn.addEventListener('click', () => {
 });
 
 function renderGame() {
-    // 【修改点】将 dyingNodes 传递给渲染器
-    drawer.renderMap(mapAreas, redBaseId, blueBaseId);
+    // 将 mapManager.shortEdges 传递给 CanvasDrawer
+    drawer.renderMap(mapAreas, redBaseId, blueBaseId, mapManager.shortEdges || []);
     drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes);
 }
