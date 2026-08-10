@@ -77,10 +77,127 @@ drawer.renderMap(mapAreas);
 drawer.renderNodes(game.getAliveNodes(), selectedNodeId);
 updateUI();
 
-// 存读档逻辑略去，保持与之前一致（因篇幅省略）
-function getGameBlob() { /* 保持原代码 */ }
-async function saveGame() { /* 保持原代码 */ }
-async function loadGame() { /* 保持原代码 */ }
+// 存读档逻辑
+function getGameBlob() {
+    if (gamePhase === 'selectRed') {
+        alert('游戏还没正式开局（未选好基地），无法保存！');
+        return null;
+    }
+    const data = {
+        gameState: game.toJSON(),
+        mapSeeds: mapManager.seeds,
+        redBaseId: redBaseId,
+        blueBaseId: blueBaseId,
+        gamePhase: gamePhase
+    };
+    return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+}
+
+async function saveGame() {
+    const blob = getGameBlob();
+    if (!blob) return;
+
+    try {
+        // 方案一：使用现代浏览器 API 弹出系统原生“另存为”对话框
+        if ('showSaveFilePicker' in window) {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: 'growth_tree_save.sav',
+                types: [{
+                    description: '生长树存档文件',
+                    accept: { 'application/json': ['.sav'] }
+                }]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            alert(`✅ 存档已成功保存到：${handle.name}`);
+        } else {
+            // 方案二：浏览器不支持系统弹窗时的兜底下载方案
+            fallbackDownload(blob);
+        }
+    } catch (err) {
+        if (err.name !== 'AbortError') {
+            console.error('保存出错：', err);
+            fallbackDownload(blob);
+        }
+    }
+}
+
+// 兜底下载方案
+function fallbackDownload(blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'growth_tree_save.sav';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    alert('💾 游戏已以 .sav 文件下载，请在浏览器下载文件夹中查找。');
+}
+
+async function loadGame() {
+    try {
+        let file;
+        // 方案一：调用系统原生的“打开文件”选择框
+        if ('showOpenFilePicker' in window) {
+            const [handle] = await window.showOpenFilePicker({
+                types: [{
+                    description: '生长树存档文件',
+                    accept: { 'application/json': ['.sav', '.json'] }
+                }],
+                multiple: false
+            });
+            file = await handle.getFile();
+        } else {
+            // 方案二：兼容不支持 API 的浏览器，通过隐藏的 input 元素选取文件
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.sav,.json';
+            const filePromise = new Promise((resolve) => {
+                input.onchange = (e) => resolve(e.target.files[0]);
+            });
+            input.click();
+            file = await filePromise;
+            if (!file) return;
+        }
+
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        // 验证存档完整性
+        if (!data.mapSeeds || !data.gameState) {
+            alert('❌ 存档文件格式错误，无法读取！');
+            return;
+        }
+
+        // 1. 恢复地图
+        mapAreas = mapManager.loadMapFromSeeds(data.mapSeeds);
+        
+        // 2. 恢复游戏状态
+        game = GameState.fromJSON(data.gameState);
+        
+        // 3. 恢复变量
+        redBaseId = data.redBaseId;
+        blueBaseId = data.blueBaseId;
+        gamePhase = data.gamePhase;
+        selectedNodeId = null;
+
+        // 4. 重建规则引擎
+        ruleEngine = new RuleEngine(mapManager);
+
+        // 5. 重新渲染并更新UI
+        renderGame();
+        updateUI();
+        console.log('【读档成功】已恢复之前进度！');
+        alert(`✅ 读档成功！读取到文件：${file.name}`);
+    } catch (err) {
+        if (err.name !== 'AbortError') {
+            console.error('读档出错：', err);
+            alert('❌ 读取存档失败，请检查文件或控制台报错。');
+        }
+    }
+}
 
 saveBtn.addEventListener('click', saveGame);
 loadBtn.addEventListener('click', loadGame);
