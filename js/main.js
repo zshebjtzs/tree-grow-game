@@ -228,8 +228,19 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
         // ==========================================
         if (rivalNode) {
             let nodesToDelete = [];
+            let freezeTargetId = null; // 【关键修改】用于存储需要冻结的分支点ID
             console.log(`【战斗触发】玩家 ${newNode.owner} 进入了 ${rivalNode.owner} 的区域`);
 
+            // --- 分支决策部分 ---
+            let stopNode = null; // 记录回溯停止的位置
+            let cursor = rivalNode;
+            while (cursor) {
+                if (cursor.childrenIds.length >= 2) { stopNode = cursor; break; }
+                if (!cursor.parentId) break;
+                cursor = game.getNode(cursor.parentId);
+            }
+
+            // 判定1：是否触发“直接摧毁分支点（≤3条连接）”
             if (rivalNode.childrenIds.length >= 2 && rivalNode.getDegree() <= 3) {
                 console.log(`-> 触发【直接摧毁分支点】ID ${rivalNode.id}`);
                 let queue = [rivalNode.id];
@@ -239,100 +250,84 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
                     let cNode = game.getNode(cId);
                     if (cNode) { for (let childId of cNode.childrenIds) queue.push(childId); }
                 }
-            } else {
-                const degree = rivalNode.getDegree();
-                if (degree > 3) {
-                    console.log(`-> 触发【免疫堡垒自动防御】ID ${rivalNode.id} (连接数 ${degree}) 绝对安全。`);
-                    nodesToDelete.push(newNode.id);
-                } else {
-                    console.log(`-> 触发【连锁摧毁】向上回溯`);
-                    let cursor = rivalNode;
-                    let stopNode = null;
-                    while (cursor) {
-                        if (cursor.childrenIds.length >= 2) { stopNode = cursor; break; }
-                        if (!cursor.parentId) break;
-                        cursor = game.getNode(cursor.parentId);
-                    }
-                    let pathIds = [];
-                    let delCursor = rivalNode;
-                    while (delCursor) {
-                        if (stopNode && delCursor.id === stopNode.id) break;
-                        pathIds.push(delCursor.id);
-                        if (!delCursor.parentId) break;
-                        delCursor = game.getNode(delCursor.parentId);
-                    }
-                    let queue = [...pathIds];
-                    while (queue.length > 0) {
-                        let cId = queue.shift();
-                        nodesToDelete.push(cId);
-                        let cNode = game.getNode(cId);
-                        if (cNode) { for (let childId of cNode.childrenIds) queue.push(childId); }
+            } 
+            // 判定2：是否触发“免疫堡垒（>3条连接）”
+            else if (rivalNode.getDegree() > 3) {
+                console.log(`-> 触发【免疫堡垒自动防御】ID ${rivalNode.id} 绝对安全。`);
+                nodesToDelete.push(newNode.id);
+            } 
+            // 判定3：普通连锁摧毁（向上回溯到分支点）
+            else {
+                console.log(`-> 触发【连锁摧毁】向上回溯`);
+                // 收集从被攻击节点到 stopNode 之间的路径（不包含 stopNode 本身）
+                let pathIds = [];
+                let delCursor = rivalNode;
+                while (delCursor) {
+                    if (stopNode && delCursor.id === stopNode.id) break;
+                    pathIds.push(delCursor.id);
+                    if (!delCursor.parentId) break;
+                    delCursor = game.getNode(delCursor.parentId);
+                }
+                // 收集这些路径及其下属全部子节点
+                let queue = [...pathIds];
+                while (queue.length > 0) {
+                    let cId = queue.shift();
+                    nodesToDelete.push(cId);
+                    let cNode = game.getNode(cId);
+                    if (cNode) { for (let childId of cNode.childrenIds) queue.push(childId); }
+                }
+
+                // 【核心修复】：确认需要冻结的起始点
+                // 只有当分支点（stopNode）存在，且它没有被列入这次的摧毁名单时，才冻结它
+                if (stopNode && !nodesToDelete.includes(stopNode.id)) {
+                    // 如果分支点不是根节点，则记录它的ID
+                    if (!stopNode.isRoot) {
+                        freezeTargetId = stopNode.id;
+                        console.log(`-> 即将冻结起始分支点 ID: ${freezeTargetId}`);
                     }
                 }
             }
 
+            // --- 执行动画与清理 ---
             if (nodesToDelete.length > 0) {
                 nodesToDelete = [...new Set(nodesToDelete)];
-                
-                // 【核心改动】开启战斗动画，延迟执行删除
                 isAnimating = true;
                 dyingNodes = nodesToDelete.map(id => game.getNode(id)).filter(Boolean);
-                renderGame(); // 立刻将节点变成闪烁红色
+                renderGame(); // 显示红色闪烁特效
 
                 setTimeout(() => {
-                    // 执行最终的内存清理
+                    // 1. 执行内存清理
                     game.deleteNodes(nodesToDelete);
                     dyingNodes = [];
-                    isAnimating = false;
 
-                    // 查找并冻结被摧毁分支的父节点
-                    const parentIdsToFreeze = new Set();
-                    for (const id of nodesToDelete) {
-                        const destroyedNode = game.getNode(id);
-                        // 如果这个被删的节点有父节点
-                        if (destroyedNode && destroyedNode.parentId !== null) {
-                            const parent = game.getNode(destroyedNode.parentId);
-                            // 父节点幸存 且 父节点不是根节点（根节点已死或不可冻结）
-                            if (parent && !parent.isRoot) {
-                                parentIdsToFreeze.add(parent.id);
-                            }
+                    // 2. 【应用冻结】直接对记录下来的分支点进行标记
+                    if (freezeTargetId) {
+                        const targetNode = game.getNode(freezeTargetId);
+                        if (targetNode) {
+                            targetNode.isFrozen = true;
+                            console.log(`【冻结执行】节点 ${targetNode.id} (区域 ${targetNode.areaId}) 的分支被摧毁，本回合被封禁。`);
                         }
                     }
-                    // 应用冻结状态
-                    for (const pid of parentIdsToFreeze) {
-                        const parentNode = game.getNode(pid);
-                        if (parentNode) {
-                            parentNode.isFrozen = true;
-                            console.log(`【冻结】节点 ${pid} (区域 ${parentNode.areaId}) 的分支被摧毁，本回合被封禁生长。`);
-                        }
-                    }
-                    
-                    // 重新渲染去除死亡残留
+
+                    // 3. 解除动画锁定，重绘
+                    isAnimating = false;
                     renderGame();
 
-                    // 判定胜利条件
+                    // 4. 胜利判定
                     const redRoots = game.getPlayerRootNodes('red');
                     const blueRoots = game.getPlayerRootNodes('blue');
                     if (redRoots.length === 0) {
                         alert('🔴 红方所有根节点被摧毁！🔵 蓝方胜利！');
-                        game.isGameOver = true;
-                        updateUI();
-                        renderGame();
+                        game.isGameOver = true; updateUI(); renderGame();
                     } else if (blueRoots.length === 0) {
                         alert('🔵 蓝方所有根节点被摧毁！🔴 红方胜利！');
-                        game.isGameOver = true;
-                        updateUI();
-                        renderGame();
+                        game.isGameOver = true; updateUI(); renderGame();
                     } else {
-                        // 若未结束，切换给对手
-                        game.switchTurn();
-                        updateUI();
-                        renderGame();
+                        // 切换回合
+                        game.switchTurn(); updateUI(); renderGame();
                     }
                 }, 500); // 500ms 动画持续时长
-
-                // 由于开启了动画，跳出当前事件监听，防止立即切换回合
-                return; 
+                return; // 跳出事件监听
             }
         }
 
