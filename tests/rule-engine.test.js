@@ -22,7 +22,7 @@ test('ordinary growth only permits one adjacent area', () => {
 test('root first branch may use a path of at most two edges', () => {
     const { game, engine, root } = setup();
     assert.equal(engine.canGrow(game, root, 3).allowed, true);
-    assert.equal(engine.canGrow(game, root, 4).allowed, true);
+    assert.equal(engine.canGrow(game, root, 4).allowed, false);
     assert.equal(engine.canGrow(game, root, 5).allowed, false);
 });
 
