@@ -294,16 +294,20 @@ function triggerAITurn() {
     const areaCenters = mapAreas.map(area => area.center);
 
     const requestId = ++aiRequestId;
-    aiWorker.postMessage({
-        requestId,
-        gameStateData: gameStateData,
-        adjacency: adjacency,
-        areaCenters: areaCenters,
-        difficulty: difficultySelect.value,
-        playerSide: 'blue',
-        redBaseId: redBaseId,
-        blueBaseId: blueBaseId
-    });
+    try {
+        aiWorker.postMessage({
+            requestId,
+            gameStateData: gameStateData,
+            adjacency: adjacency,
+            areaCenters: areaCenters,
+            difficulty: difficultySelect.value,
+            playerSide: 'blue',
+            redBaseId: redBaseId,
+            blueBaseId: blueBaseId
+        });
+    } catch (error) {
+        failAITurn(error?.message || '无法向 AI Worker 发送请求');
+    }
 }
 
 // 界面更新函数
@@ -610,6 +614,18 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
                 }
             }
             
+            if (!selectedArea) {
+                // 即使地图拓扑不连通，也允许 AI 从任意非红方基地的区域开局。
+                selectedArea = mapAreas.find(area => area.id !== redBaseId);
+            }
+            if (!selectedArea) {
+                gamePhase = 'selectRed';
+                blueBaseId = null;
+                updateUI();
+                alert('无法为 AI 选择基地，请重新开始游戏。');
+                return;
+            }
+
             setTimeout(() => {
                 blueBaseId = selectedArea.id;
                 // 直接进入开局
