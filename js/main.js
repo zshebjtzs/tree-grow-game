@@ -149,7 +149,7 @@ function processSuccessfulGrowth(newNode, owner) {
         n.id !== newNode.id && 
         n.owner !== newNode.owner && 
                const combat = resolveCombat(game, newNode, rivalNode);
-        const nodesToDelete = combat.nodesToDelete;
+        let nodesToDelete = combat.nodesToDelete;
         const freezeTargetId = combat.freezeTargetId;
         console.log(`-> 战斗结算：摧毁 ${nodesToDelete.length} 个节点${freezeTargetId ? `，冻结节点 ${freezeTargetId}` : ''}`);
 
