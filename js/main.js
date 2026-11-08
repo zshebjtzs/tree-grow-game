@@ -624,13 +624,12 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
     const parentNode = aliveNodes.find(n => n.id === selectedNodeId);
     if (!parentNode || parentNode.owner !== game.currentTurn) { selectedNodeId = null; renderGame(); return; }
 
-    const result = ruleEngine.canGrow(game, parentNode, clickedAreaId);
+    const currentBaseId = game.currentTurn === 'red' ? redBaseId : blueBaseId;
+    const enemyBaseId = game.currentTurn === 'red' ? blueBaseId : redBaseId;
+    const result = ruleEngine.canGrow(game, parentNode, clickedAreaId, { ownBaseId: currentBaseId, enemyBaseId });
     if (!result.allowed) { alert(`非法生长！原因：${result.reason}`); return; }
 
     // 除了己方基地，一个区域只能容纳一个节点
-    const currentBaseId = game.currentTurn === 'red' ? redBaseId : blueBaseId;
-    const enemyBaseId = game.currentTurn === 'red' ? blueBaseId : redBaseId;
-
     // 1. 绝对禁止向己方基地区域生长（防止绕回老巢）
     if (clickedAreaId === currentBaseId) {
         alert('规则限制：禁止向己方基地区域生长！');
