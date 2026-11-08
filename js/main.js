@@ -3,6 +3,7 @@ import { GameState } from './game/GameState.js';
 import { MapManager } from './core/MapManager.js';
 import { CanvasDrawer } from './renderer/CanvasDrawer.js';
 import { RuleEngine } from './game/RuleEngine.js';
+import { resolveCombat } from './game/CombatResolver.js';
 
 // 1. 初始化各模块
 let game = new GameState();
@@ -19,11 +20,13 @@ let selectedNodeId = null;
 
 let dyingNodes = [];
 let isAnimating = false;
+let combatTimeoutId = null;
 
 // --- AI 相关变量 ---
 let isAIMode = false;       
 let isAIThinking = false;   
-let aiWorker = null;        
+let aiWorker = null;
+let aiRequestId = 0;         
 
 // 3. 获取 UI 控件
 const turnIndicator = document.getElementById('turnIndicator');
@@ -36,18 +39,40 @@ const difficultyGroup = document.getElementById('difficulty-group');
 const startGameBtn = document.getElementById('start-game-btn');
 
 // --- AI Worker 初始化 ---
+function failAITurn(message) {
+    console.error('AI 对战不可继续:', message);
+    invalidateAIRequest();
+    game.isGameOver = true;
+    updateUI();
+    renderGame();
+    alert('AI 对战发生错误，已停止本局游戏。请重新开始或切换双人模式。');
+}
+
 if (window.Worker) {
-    aiWorker = new Worker('js/ai/AIWorker.js', { type: 'module' });
-    
-    // 【第四阶段核心】接收 AI 动作，接入主战场逻辑
+    try {
+        aiWorker = new Worker('js/ai/AIWorker.js', { type: 'module' });
+    } catch (error) {
+        console.error('AI Worker 初始化失败:', error);
+        aiWorker = null;
+    }
+}
+
+if (aiWorker) {
+    aiWorker.onerror = function(e) {
+        e.preventDefault();
+        failAITurn(e.message || 'Worker 加载或运行失败');
+    };
+
+    // 接收 AI 动作并复核后接入主战场逻辑
     aiWorker.onmessage = function(e) {
+        if (!e.data || e.data.requestId !== aiRequestId) {
+            console.log('【AI 响应丢弃】请求已失效:', e.data?.requestId);
+            return;
+        }
         // 1. 优先判断 AI 有没有抛出致命报错
         if (e.data.error) {
             console.error('❌ 收到 AI 内部报错:', e.data.error);
-            isAIThinking = false;
-            updateUI();
-            // 如果 AI 出错，只能自动让它跳过回合
-            performSkipTurn();
+            failAITurn(e.data.error);
             return;
         }
 
@@ -55,38 +80,60 @@ if (window.Worker) {
         const { parentNodeId, targetAreaId } = e.data;
         isAIThinking = false;
 
-        // 1. 如果 AI 有合法的动作，执行生长
-        if (parentNodeId && targetAreaId) {
-            const parentNode = game.getNode(parentNodeId);
-            const targetArea = mapAreas.find(a => a.id === targetAreaId);
-            if (parentNode && targetArea) {
-                const [x, y] = targetArea.center;
-                const newNode = game.addNode(parentNodeId, x, y, targetAreaId, 'blue');
-                
-                // 【关键复用】AI 落子后，调用通用的成长处理函数
-                if (newNode) {
-                    console.log(`【AI执行】父节点 ${parentNodeId} -> 新节点 ${newNode.id} (区域 ${targetAreaId})`);
-                    selectedNodeId = null;
-                    // 立刻复用人类点击成功后的完整流程（战斗、冻结、重置）
-                    processSuccessfulGrowth(newNode, 'blue');
-                    return;
-                }
-            }
-        } 
-        
-        // 2. 如果 AI 返回 Null（没有棋可走），自动执行“跳过回合”
-        console.log('【AI 判定】当前无合法落子点，自动跳过回合。');
-        performSkipTurn();
+        // Null/Null is the only valid representation of "no legal move".
+        if (parentNodeId === null && targetAreaId === null) {
+            console.log('【AI 判定】当前无合法落子点，自动跳过回合。');
+            performSkipTurn();
+            return;
+        }
+        if (!Number.isSafeInteger(parentNodeId) || parentNodeId < 1 ||
+            !Number.isSafeInteger(targetAreaId) || targetAreaId < 1) {
+            failAITurn('AI 返回了格式无效的落子结果');
+            return;
+        }
+
+        const parentNode = game.getNode(parentNodeId);
+        const targetArea = mapAreas.find(area => area.id === targetAreaId);
+        if (!parentNode || !targetArea) {
+            failAITurn('AI 返回的父节点或目标区域已不存在');
+            return;
+        }
+
+        const validation = ruleEngine.canGrow(game, parentNode, targetAreaId, {
+            ownBaseId: blueBaseId,
+            enemyBaseId: redBaseId
+        });
+        if (!validation.allowed) {
+            failAITurn(`AI 落子未通过主线程规则复核：${validation.reason}`);
+            return;
+        }
+
+        const [x, y] = targetArea.center;
+        const newNode = game.addNode(parentNodeId, x, y, targetAreaId, 'blue');
+        if (!newNode) {
+            failAITurn('AI 落子通过规则复核，但节点创建失败');
+            return;
+        }
+
+        console.log(`【AI执行】父节点 ${parentNodeId} -> 新节点 ${newNode.id} (区域 ${targetAreaId})`);
+        selectedNodeId = null;
+        processSuccessfulGrowth(newNode, 'blue');
     };
 } else {
     console.warn('浏览器不支持 Web Worker，AI 模式无法运行。');
 }
 
+const pveOption = modeSelect.querySelector('option[value="pve"]');
+if (!aiWorker && pveOption) {
+    pveOption.disabled = true;
+    difficultyGroup.style.display = 'none';
+}
+
 // --- 【核心提取】通用成长后处理函数（人类和 AI 共用） ---
 function processSuccessfulGrowth(newNode, owner) {
-    selectedNodeId = null; 
+    selectedNodeId = null;
 
-    // A. 检查突入敌方基地获胜
+    // Entering the enemy base wins immediately; no combat resolution is needed.
     const enemyBaseId = owner === 'red' ? blueBaseId : redBaseId;
     if (newNode.areaId === enemyBaseId) {
         const winner = owner === 'red' ? '🔴 红方' : '🔵 蓝方';
@@ -97,121 +144,91 @@ function processSuccessfulGrowth(newNode, owner) {
         return;
     }
 
-    // B. 检查战斗触发
-    const currentAlive = game.getAliveNodes();
-    const rivalNode = currentAlive.find(n => 
-        n.id !== newNode.id && 
-        n.owner !== newNode.owner && 
-        n.areaId === newNode.areaId
+    // Combat is triggered only when the new node occupies an enemy node's area.
+    const rivalNode = game.getAliveNodes().find(node =>
+        node.id !== newNode.id &&
+        node.owner !== owner &&
+        node.areaId === newNode.areaId
     );
 
-    if (rivalNode) {
-        let nodesToDelete = [];
-        let freezeTargetId = null;
-        console.log(`【战斗触发】玩家 ${newNode.owner} 进入了 ${rivalNode.owner} 的区域`);
-
-        let stopNode = null;
-        let cursor = rivalNode;
-        while (cursor) {
-            if (cursor.childrenIds.length >= 2) { stopNode = cursor; break; }
-            if (!cursor.parentId) break;
-            cursor = game.getNode(cursor.parentId);
-        }
-
-        if (rivalNode.childrenIds.length >= 2 && rivalNode.getDegree() <= 3) {
-            console.log(`-> 触发【直接摧毁分支点】ID ${rivalNode.id}`);
-            let queue = [rivalNode.id];
-            while (queue.length > 0) {
-                let cId = queue.shift();
-                nodesToDelete.push(cId);
-                let cNode = game.getNode(cId);
-                if (cNode) { for (let childId of cNode.childrenIds) queue.push(childId); }
-            }
-        } else if (rivalNode.getDegree() > 3) {
-            console.log(`-> 触发【免疫堡垒自动防御】ID ${rivalNode.id} 绝对安全。`);
-            nodesToDelete.push(newNode.id);
-        } else {
-            console.log(`-> 触发【连锁摧毁】向上回溯`);
-            let pathIds = [];
-            let delCursor = rivalNode;
-            while (delCursor) {
-                if (stopNode && delCursor.id === stopNode.id) break;
-                pathIds.push(delCursor.id);
-                if (!delCursor.parentId) break;
-                delCursor = game.getNode(delCursor.parentId);
-            }
-            let queue = [...pathIds];
-            while (queue.length > 0) {
-                let cId = queue.shift();
-                nodesToDelete.push(cId);
-                let cNode = game.getNode(cId);
-                if (cNode) { for (let childId of cNode.childrenIds) queue.push(childId); }
-            }
-            if (stopNode && !nodesToDelete.includes(stopNode.id) && !stopNode.isRoot) {
-                freezeTargetId = stopNode.id;
-                console.log(`-> 即将冻结起始分支点 ID: ${freezeTargetId}`);
-            }
-        }
-
-        // C. 执行战斗动画与清理
-        if (nodesToDelete.length > 0) {
-            nodesToDelete = [...new Set(nodesToDelete)];
-            isAnimating = true;
-            dyingNodes = nodesToDelete.map(id => game.getNode(id)).filter(Boolean);
-            renderGame();
-
-            setTimeout(() => {
-                game.deleteNodes(nodesToDelete);
-                dyingNodes = [];
-
-                if (freezeTargetId) {
-                    const targetNode = game.getNode(freezeTargetId);
-                    if (targetNode) {
-                        targetNode.isFrozen = true;
-                        console.log(`【冻结执行】节点 ${targetNode.id} (区域 ${targetNode.areaId}) 的分支被摧毁。`);
-                    }
-                }
-
-                isAnimating = false;
-                renderGame();
-
-                // D. 胜负判定与回合接力
-                const redRoots = game.getPlayerRootNodes('red');
-                const blueRoots = game.getPlayerRootNodes('blue');
-                if (redRoots.length === 0) {
-                    alert('🔴 红方所有根节点被摧毁！🔵 蓝方胜利！'); game.isGameOver = true;
-                } else if (blueRoots.length === 0) {
-                    alert('🔵 蓝方所有根节点被摧毁！🔴 红方胜利！'); game.isGameOver = true;
-                } else {
-                    performTurnSwitch(newNode.owner);
-                }
-                updateUI();
-                renderGame();
-            }, 500);
-            return;
-        }
+    if (!rivalNode) {
+        performTurnSwitch();
+        return;
     }
 
-    // E. 无战斗：直接切换回合
-    performTurnSwitch(owner);
+    const combat = resolveCombat(game, newNode, rivalNode);
+    const nodesToDelete = [...new Set(combat.nodesToDelete)];
+    const freezeTargetId = combat.freezeTargetId;
+    console.log(`-> 战斗结算：摧毁 ${nodesToDelete.length} 个节点${freezeTargetId ? `，冻结节点 ${freezeTargetId}` : ''}`);
+
+    if (nodesToDelete.length === 0) {
+        if (freezeTargetId) {
+            const targetNode = game.getNode(freezeTargetId);
+            if (targetNode) targetNode.isFrozen = true;
+        }
+        performTurnSwitch();
+        return;
+    }
+
+    isAnimating = true;
+    dyingNodes = nodesToDelete.map(id => game.getNode(id)).filter(Boolean);
+    renderGame();
+
+    combatTimeoutId = setTimeout(() => {
+        combatTimeoutId = null;
+        game.deleteNodes(nodesToDelete);
+        dyingNodes = [];
+
+        if (freezeTargetId) {
+            const targetNode = game.getNode(freezeTargetId);
+            if (targetNode) {
+                targetNode.isFrozen = true;
+                console.log(`【冻结执行】节点 ${targetNode.id} (区域 ${targetNode.areaId}) 的分支被摧毁。`);
+            }
+        }
+
+        isAnimating = false;
+
+        const redRoots = game.getPlayerRootNodes('red');
+        const blueRoots = game.getPlayerRootNodes('blue');
+        if (redRoots.length === 0) {
+            alert('🔴 红方所有根节点被摧毁！🔵 蓝方胜利！');
+            game.isGameOver = true;
+        } else if (blueRoots.length === 0) {
+            alert('🔵 蓝方所有根节点被摧毁！🔴 红方胜利！');
+            game.isGameOver = true;
+        } else {
+            performTurnSwitch();
+        }
+        updateUI();
+        renderGame();
+    }, 500);
 }
 
 // --- 切换回合（包含 AI 触发） ---
-function performTurnSwitch(currentOwner) {
-    console.log(`【AI 排查诊断】performTurnSwitch 已被调用。当前 isAIMode 值: ${isAIMode}, 回合属主: ${game.currentTurn}`);
-    // 先清理当前玩家的冻结（解冻）
-    const aliveOwnNodes = game.getAliveNodesByOwner(currentOwner);
+function performTurnSwitch() {
+    if (game.isGameOver || gamePhase !== 'playing' || isAnimating) return;
+
+    // 以 GameState.currentTurn 为唯一权威来源，避免调用方传错属主。
+    // 这里清理的是刚结束行动的玩家；防守方被冻结节点仍保留到其行动结束。
+    const endingOwner = game.currentTurn;
+    const aliveOwnNodes = game.getAliveNodesByOwner(endingOwner);
+    let unfrozenCount = 0;
     for (const node of aliveOwnNodes) {
-        if (node.isFrozen) node.isFrozen = false;
+        if (node.isFrozen) {
+            node.isFrozen = false;
+            unfrozenCount++;
+        }
+    }
+    if (unfrozenCount > 0) {
+        console.log(`【解冻】${endingOwner} 完成行动，解除 ${unfrozenCount} 个冻结节点。`);
     }
 
-    if (game.isGameOver) return;
-
-    game.switchTurn(); // 切换回合
+    game.switchTurn();
+    selectedNodeId = null;
     updateUI();
     renderGame();
 
-    // 【AI 触发】如果现在是 AI 的回合，且不是游戏结束状态
     if (isAIMode && game.currentTurn === 'blue' && !game.isGameOver && !isAIThinking) {
         triggerAITurn();
     }
@@ -219,48 +236,49 @@ function performTurnSwitch(currentOwner) {
 
 // --- 主动跳过回合（针对玩家或 AI 无棋可走） ---
 function performSkipTurn() {
-    if (game.isGameOver || gamePhase !== 'playing' || isAnimating) return;
-    const currentOwner = game.currentTurn;
+    // Skipping is a turn completion, not a separate state transition.
+    // Reuse the authoritative cleanup/switch/AI path so frozen nodes and
+    // AI scheduling cannot diverge from a normal completed action.
+    performTurnSwitch();
+}
 
-    // 清理冻结
-    const aliveOwnNodes = game.getAliveNodesByOwner(currentOwner);
-    for (const node of aliveOwnNodes) { if (node.isFrozen) node.isFrozen = false; }
-
-    game.switchTurn();
-    updateUI();
-    renderGame();
-
-    if (isAIMode && game.currentTurn === 'blue' && !game.isGameOver && !isAIThinking) {
-        triggerAITurn();
-    }
+function invalidateAIRequest() {
+    aiRequestId++;
+    isAIThinking = false;
 }
 
 // --- 触发 AI 运算 ---
 function triggerAITurn() {
     console.log('【AI 追踪 1】检测到 AI 回合，准备发送消息给 Worker');
     if (!isAIMode || game.currentTurn !== 'blue' || isAIThinking || game.isGameOver) return;
+    if (!aiWorker) {
+        failAITurn('当前环境不支持 AI Worker');
+        return;
+    }
     isAIThinking = true;
     updateUI();
 
-    const gameStateData = {
-        nodes: game.nodes,
-        currentTurn: game.currentTurn,
-        nodeIdCounter: game.nodeIdCounter
-    };
+    const gameStateData = game.toJSON();
 
     // 【核心改动】把地图拓扑结构和区域中心直接传过去！
     const adjacency = ruleEngine.adjacency;
     const areaCenters = mapAreas.map(area => area.center);
 
-    aiWorker.postMessage({
-        gameStateData: gameStateData,
-        adjacency: adjacency,
-        areaCenters: areaCenters,
-        difficulty: difficultySelect.value,
-        playerSide: 'blue',
-        redBaseId: redBaseId,
-        blueBaseId: blueBaseId
-    });
+    const requestId = ++aiRequestId;
+    try {
+        aiWorker.postMessage({
+            requestId,
+            gameStateData: gameStateData,
+            adjacency: adjacency,
+            areaCenters: areaCenters,
+            difficulty: difficultySelect.value,
+            playerSide: 'blue',
+            redBaseId: redBaseId,
+            blueBaseId: blueBaseId
+        });
+    } catch (error) {
+        failAITurn(error?.message || '无法向 AI Worker 发送请求');
+    }
 }
 
 // 界面更新函数
@@ -304,13 +322,18 @@ function generateRootNodesInArea(areaId, owner, count = 3) {
             }
         }
     }
-    while (nodes.length < count) {
-        const dx = (Math.random() - 0.5) * 40;
-        const dy = (Math.random() - 0.5) * 40;
-        const px = center[0] + dx;
-        const py = center[1] + dy;
-        const node = game.addNode(null, px, py, areaId, owner);
-        if (node) nodes.push(node);
+    // If random placement failed, scan deterministic offsets but still verify
+    // point-location. Never create a node whose coordinates belong to another cell.
+    for (let radius = 2; nodes.length < count && radius <= 40; radius += 2) {
+        for (let angle = 0; angle < 360 && nodes.length < count; angle += 15) {
+            const radians = angle * Math.PI / 180;
+            const px = center[0] + Math.cos(radians) * radius;
+            const py = center[1] + Math.sin(radians) * radius;
+            if (mapManager.getAreaAtPoint(px, py) !== areaId) continue;
+            if (nodes.some(n => Math.hypot(n.x - px, n.y - py) < 15)) continue;
+            const node = game.addNode(null, px, py, areaId, owner);
+            if (node) nodes.push(node);
+        }
     }
     console.log(`【开局】在区域 ${areaId} 为 ${owner} 生成了 ${nodes.length} 个根节点`);
     return nodes;
@@ -322,8 +345,12 @@ updateUI();
 
 // 存读档逻辑
 function getGameBlob() {
-    if (gamePhase === 'selectRed') {
-        alert('游戏还没正式开局（未选好基地），无法保存！');
+    if (isAnimating || isAIThinking) {
+        alert('当前战斗动画或 AI 运算尚未结束，请稍后再保存。');
+        return null;
+    }
+    if (gamePhase !== 'playing') {
+        alert('请先完成双方基地选择并正式开始游戏，再进行保存。');
         return null;
     }
     const data = {
@@ -331,7 +358,9 @@ function getGameBlob() {
         mapSeeds: mapManager.seeds,
         redBaseId: redBaseId,
         blueBaseId: blueBaseId,
-        gamePhase: gamePhase
+        gamePhase: gamePhase,
+        isAIMode: isAIMode,
+        difficulty: difficultySelect.value
     };
     return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
 }
@@ -408,25 +437,64 @@ async function loadGame() {
         const text = await file.text();
         const data = JSON.parse(text);
 
-        // 验证存档完整性
-        if (!data.mapSeeds || !data.gameState) {
-            alert('❌ 存档文件格式错误，无法读取！');
-            return;
+        // 先在临时对象中完整验证存档，失败时不触碰当前游戏。
+        if (!Array.isArray(data.mapSeeds) || data.mapSeeds.length !== 50 ||
+            !data.mapSeeds.every(seed => Array.isArray(seed) && seed.length === 2 &&
+                Number.isFinite(seed[0]) && Number.isFinite(seed[1])) ||
+            !['selectBlue', 'playing'].includes(data.gamePhase) ||
+            !Number.isInteger(data.redBaseId) || data.redBaseId < 1 ||
+            (data.gamePhase === 'playing' &&
+                (!Number.isInteger(data.blueBaseId) || data.blueBaseId < 1)) ||
+            (data.gamePhase === 'selectBlue' && data.blueBaseId !== null)) {
+            throw new TypeError('存档地图或阶段字段无效');
         }
 
-        // 1. 恢复地图
-        mapAreas = mapManager.loadMapFromSeeds(data.mapSeeds);
-        
-        // 2. 恢复游戏状态
-        game = GameState.fromJSON(data.gameState);
-        
-        // 3. 恢复变量
+        const restoredGame = GameState.fromJSON(data.gameState);
+        // Rebuild on a temporary manager so a bad save cannot mutate the active map.
+        const restoredMapManager = new MapManager(1800, 1200);
+        const restoredMapAreas = restoredMapManager.loadMapFromSeeds(data.mapSeeds);
+        const areaIds = new Set(restoredMapAreas.map(area => area.id));
+        if (!areaIds.has(data.redBaseId) ||
+            (data.blueBaseId !== null && (!areaIds.has(data.blueBaseId) || data.blueBaseId === data.redBaseId)) ||
+            restoredGame.nodes.some(node => !areaIds.has(node.areaId))) {
+            throw new TypeError('存档节点或基地引用了不存在的区域');
+        }
+
+        invalidateAIRequest();
+        if (combatTimeoutId !== null) {
+            clearTimeout(combatTimeoutId);
+            combatTimeoutId = null;
+        }
+        isAnimating = false;
+        dyingNodes = [];
+        mapManager.areas = restoredMapManager.areas;
+        mapManager.voronoi = restoredMapManager.voronoi;
+        mapManager.delaunay = restoredMapManager.delaunay;
+        mapManager.seeds = restoredMapManager.seeds;
+        mapManager.adjacency = restoredMapManager.adjacency;
+        mapManager.portals = restoredMapManager.portals;
+        mapManager.shortEdges = restoredMapManager.shortEdges;
+        mapAreas = restoredMapAreas;
+        game = restoredGame;
+
+        // Restore the match mode and difficulty saved with the game.
+        // Older saves do not contain these fields; retain the current UI choice for compatibility.
+        if (typeof data.isAIMode === 'boolean') {
+            isAIMode = data.isAIMode;
+            modeSelect.value = isAIMode ? 'pve' : 'pvp';
+        }
+        if (['easy', 'medium', 'hard'].includes(data.difficulty)) {
+            difficultySelect.value = data.difficulty;
+        }
+        difficultyGroup.style.display = isAIMode ? 'flex' : 'none';
+
+        // 恢复变量
         redBaseId = data.redBaseId;
         blueBaseId = data.blueBaseId;
         gamePhase = data.gamePhase;
         selectedNodeId = null;
 
-        // 4. 重建规则引擎
+        // 重建规则引擎
         ruleEngine = new RuleEngine(mapManager);
 
         // 5. 重新渲染并更新UI
@@ -457,6 +525,12 @@ modeSelect.addEventListener('change', (e) => {
 
 // 2. 监听“开始游戏”按钮
 startGameBtn.addEventListener('click', () => {
+    invalidateAIRequest();
+    if (combatTimeoutId !== null) {
+        clearTimeout(combatTimeoutId);
+        combatTimeoutId = null;
+    }
+
     // 重置整个游戏到开局状态
     game = new GameState();
     mapAreas = mapManager.generateMap(50);
@@ -538,6 +612,18 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
                 }
             }
             
+            if (!selectedArea) {
+                // 即使地图拓扑不连通，也允许 AI 从任意非红方基地的区域开局。
+                selectedArea = mapAreas.find(area => area.id !== redBaseId);
+            }
+            if (!selectedArea) {
+                gamePhase = 'selectRed';
+                blueBaseId = null;
+                updateUI();
+                alert('无法为 AI 选择基地，请重新开始游戏。');
+                return;
+            }
+
             setTimeout(() => {
                 blueBaseId = selectedArea.id;
                 // 直接进入开局
@@ -619,13 +705,12 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
     const parentNode = aliveNodes.find(n => n.id === selectedNodeId);
     if (!parentNode || parentNode.owner !== game.currentTurn) { selectedNodeId = null; renderGame(); return; }
 
-    const result = ruleEngine.canGrow(game, parentNode, clickedAreaId);
+    const currentBaseId = game.currentTurn === 'red' ? redBaseId : blueBaseId;
+    const enemyBaseId = game.currentTurn === 'red' ? blueBaseId : redBaseId;
+    const result = ruleEngine.canGrow(game, parentNode, clickedAreaId, { ownBaseId: currentBaseId, enemyBaseId });
     if (!result.allowed) { alert(`非法生长！原因：${result.reason}`); return; }
 
     // 除了己方基地，一个区域只能容纳一个节点
-    const currentBaseId = game.currentTurn === 'red' ? redBaseId : blueBaseId;
-    const enemyBaseId = game.currentTurn === 'red' ? blueBaseId : redBaseId;
-
     // 1. 绝对禁止向己方基地区域生长（防止绕回老巢）
     if (clickedAreaId === currentBaseId) {
         alert('规则限制：禁止向己方基地区域生长！');
@@ -648,185 +733,19 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
     const newNode = game.addNode(parentNode.id, x, y, clickedAreaId, game.currentTurn);
     if (newNode) {
         console.log(`【生长成功】父节点 ID: ${parentNode.id}，新节点 ID: ${newNode.id}，位于区域 ${clickedAreaId}`);
-        selectedNodeId = null; 
-
-        const enemyBaseId = newNode.owner === 'red' ? blueBaseId : redBaseId;
-        if (newNode.areaId === enemyBaseId) {
-            const winner = newNode.owner === 'red' ? '🔴 红方' : '🔵 蓝方';
-            alert(`${winner} 成功突入敌方基地！取得最终胜利！`);
-            game.isGameOver = true;
-            updateUI();
-            renderGame();
-            return;
-        }
-
-        const currentAlive = game.getAliveNodes();
-        const rivalNode = currentAlive.find(n => 
-            n.id !== newNode.id && 
-            n.owner !== newNode.owner && 
-            n.areaId === newNode.areaId
-        );
-
-        // ==========================================
-        // 战斗摧毁模块的重构
-        // ==========================================
-        if (rivalNode) {
-            let nodesToDelete = [];
-            let freezeTargetId = null; // 【关键修改】用于存储需要冻结的分支点ID
-            console.log(`【战斗触发】玩家 ${newNode.owner} 进入了 ${rivalNode.owner} 的区域`);
-
-            // --- 分支决策部分 ---
-            let stopNode = null; // 记录回溯停止的位置
-            let cursor = rivalNode;
-            while (cursor) {
-                if (cursor.childrenIds.length >= 2) { stopNode = cursor; break; }
-                if (!cursor.parentId) break;
-                cursor = game.getNode(cursor.parentId);
-            }
-
-            // 判定1：是否触发“直接摧毁分支点（≤3条连接）”
-            if (rivalNode.childrenIds.length >= 2 && rivalNode.getDegree() <= 3) {
-                console.log(`-> 触发【直接摧毁分支点】ID ${rivalNode.id}`);
-                let queue = [rivalNode.id];
-                while (queue.length > 0) {
-                    let cId = queue.shift();
-                    nodesToDelete.push(cId);
-                    let cNode = game.getNode(cId);
-                    if (cNode) { for (let childId of cNode.childrenIds) queue.push(childId); }
-                }
-            } 
-            // 判定2：是否触发“免疫堡垒（>3条连接）”
-            else if (rivalNode.getDegree() > 3) {
-                console.log(`-> 触发【免疫堡垒自动防御】ID ${rivalNode.id} 绝对安全。`);
-                nodesToDelete.push(newNode.id);
-            } 
-            // 判定3：普通连锁摧毁（向上回溯到分支点）
-            else {
-                console.log(`-> 触发【连锁摧毁】向上回溯`);
-                // 收集从被攻击节点到 stopNode 之间的路径（不包含 stopNode 本身）
-                let pathIds = [];
-                let delCursor = rivalNode;
-                while (delCursor) {
-                    if (stopNode && delCursor.id === stopNode.id) break;
-                    pathIds.push(delCursor.id);
-                    if (!delCursor.parentId) break;
-                    delCursor = game.getNode(delCursor.parentId);
-                }
-                // 收集这些路径及其下属全部子节点
-                let queue = [...pathIds];
-                while (queue.length > 0) {
-                    let cId = queue.shift();
-                    nodesToDelete.push(cId);
-                    let cNode = game.getNode(cId);
-                    if (cNode) { for (let childId of cNode.childrenIds) queue.push(childId); }
-                }
-
-                // 【核心修复】：确认需要冻结的起始点
-                // 只有当分支点（stopNode）存在，且它没有被列入这次的摧毁名单时，才冻结它
-                if (stopNode && !nodesToDelete.includes(stopNode.id)) {
-                    // 如果分支点不是根节点，则记录它的ID
-                    if (!stopNode.isRoot) {
-                        freezeTargetId = stopNode.id;
-                        console.log(`-> 即将冻结起始分支点 ID: ${freezeTargetId}`);
-                    }
-                }
-            }
-
-            // --- 执行动画与清理 ---
-            if (nodesToDelete.length > 0) {
-                nodesToDelete = [...new Set(nodesToDelete)];
-                isAnimating = true;
-                dyingNodes = nodesToDelete.map(id => game.getNode(id)).filter(Boolean);
-                renderGame(); // 显示红色闪烁特效
-
-                setTimeout(() => {
-                    // 1. 执行内存清理
-                    game.deleteNodes(nodesToDelete);
-                    dyingNodes = [];
-
-                    // 2. 【应用冻结】直接对记录下来的分支点进行标记
-                    if (freezeTargetId) {
-                        const targetNode = game.getNode(freezeTargetId);
-                        if (targetNode) {
-                            targetNode.isFrozen = true;
-                            console.log(`【冻结执行】节点 ${targetNode.id} (区域 ${targetNode.areaId}) 的分支被摧毁，本回合被封禁。`);
-                        }
-                    }
-
-                    // 3. 解除动画锁定，重绘
-                    isAnimating = false;
-                    renderGame();
-
-                    // 4. 胜利判定
-                    const redRoots = game.getPlayerRootNodes('red');
-                    const blueRoots = game.getPlayerRootNodes('blue');
-                    if (redRoots.length === 0) {
-                        alert('🔴 红方所有根节点被摧毁！🔵 蓝方胜利！');
-                        game.isGameOver = true; updateUI(); renderGame();
-                    } else if (blueRoots.length === 0) {
-                        alert('🔵 蓝方所有根节点被摧毁！🔴 红方胜利！');
-                        game.isGameOver = true; updateUI(); renderGame();
-                    } else {
-                        // 【规则修正】战斗结束后，当前攻击方完成一步，解除其冻结状态
-                        const aliveOwnNodes = game.getAliveNodesByOwner(game.currentTurn);
-                        for (const node of aliveOwnNodes) {
-                            if (node.isFrozen) node.isFrozen = false;
-                        }
-
-                        // 【关键修复】必须调用 performTurnSwitch，否则 AI 触发逻辑会被永久跳过
-                        performTurnSwitch(newNode.owner);
-                    }
-                }, 500); // 500ms 动画持续时长
-                return; // 跳出事件监听
-            }
-        }
-
-        // 如果没有发生战斗，正常渲染和切换回合
-        renderGame();
-        if (!game.isGameOver) {
-            // 【规则修正】防守方完成了一步，回合结束前解除当前玩家所有冻结
-            const aliveOwnNodes = game.getAliveNodesByOwner(game.currentTurn);
-            for (const node of aliveOwnNodes) {
-                if (node.isFrozen) node.isFrozen = false;
-            }
-
-            performTurnSwitch(game.currentTurn);
-        }
+        processSuccessfulGrowth(newNode, game.currentTurn);
     }
 });
 
 endTurnBtn.addEventListener('click', () => {
-    if (game.isGameOver || gamePhase !== 'playing' || isAnimating) return;
-    
-    // 清空当前玩家所有节点的冻结状态
-    const aliveOwnNodes = game.getAliveNodesByOwner(game.currentTurn);
-    let unfrozenCount = 0;
-    for (const node of aliveOwnNodes) {
-        if (node.isFrozen) {
-            node.isFrozen = false;
-            unfrozenCount++;
-        }
-    }
-    if (unfrozenCount > 0) {
-        console.log(`【解冻】当前玩家 ${game.currentTurn} 跳过回合，${unfrozenCount} 个被冻结的节点已解除休整。`);
-    }
-
+    if (game.isGameOver || gamePhase !== 'playing' || isAnimating || isAIThinking) return;
     selectedNodeId = null;
-    game.switchTurn();
-    updateUI();
-    renderGame();
-
-    // ==========================================
-    // 【核心修复】追加 AI 触发检测
-    // ==========================================
-    // 如果当前开启 AI 模式，且刚切换到的回合是 AI（蓝方），则直接触发 AI 思考
-    if (isAIMode && game.currentTurn === 'blue' && !game.isGameOver && !isAIThinking) {
-        triggerAITurn();
-    }
+    // 所有跳过回合入口统一处理解冻、切换回合及 AI 触发。
+    performSkipTurn();
 });
 
 function renderGame() {
     // 将 mapManager.shortEdges 传递给 CanvasDrawer
     drawer.renderMap(mapAreas, redBaseId, blueBaseId, mapManager.shortEdges || []);
-    drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes);
+    drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes, mapManager.portals);
 }
