@@ -23,7 +23,8 @@ let isAnimating = false;
 // --- AI 相关变量 ---
 let isAIMode = false;       
 let isAIThinking = false;   
-let aiWorker = null;        
+let aiWorker = null;
+let aiRequestId = 0;         
 
 // 3. 获取 UI 控件
 const turnIndicator = document.getElementById('turnIndicator');
@@ -41,6 +42,10 @@ if (window.Worker) {
     
     // 【第四阶段核心】接收 AI 动作，接入主战场逻辑
     aiWorker.onmessage = function(e) {
+        if (e.data.requestId !== aiRequestId) {
+            console.log('【AI 响应丢弃】请求已失效:', e.data.requestId);
+            return;
+        }
         // 1. 优先判断 AI 有没有抛出致命报错
         if (e.data.error) {
             console.error('❌ 收到 AI 内部报错:', e.data.error);
@@ -252,6 +257,11 @@ function performSkipTurn() {
     }
 }
 
+function invalidateAIRequest() {
+    aiRequestId++;
+    isAIThinking = false;
+}
+
 // --- 触发 AI 运算 ---
 function triggerAITurn() {
     console.log('【AI 追踪 1】检测到 AI 回合，准备发送消息给 Worker');
@@ -269,7 +279,9 @@ function triggerAITurn() {
     const adjacency = ruleEngine.adjacency;
     const areaCenters = mapAreas.map(area => area.center);
 
+    const requestId = ++aiRequestId;
     aiWorker.postMessage({
+        requestId,
         gameStateData: gameStateData,
         adjacency: adjacency,
         areaCenters: areaCenters,
@@ -436,6 +448,8 @@ async function loadGame() {
             return;
         }
 
+        invalidateAIRequest();
+
         // 1. 恢复地图
         mapAreas = mapManager.loadMapFromSeeds(data.mapSeeds);
         
@@ -479,6 +493,8 @@ modeSelect.addEventListener('change', (e) => {
 
 // 2. 监听“开始游戏”按钮
 startGameBtn.addEventListener('click', () => {
+    invalidateAIRequest();
+
     // 重置整个游戏到开局状态
     game = new GameState();
     mapAreas = mapManager.generateMap(50);

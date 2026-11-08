@@ -13,16 +13,24 @@ export class GameState {
 
     addNode(parentId, x, y, areaId, owner) {
         if (this.isGameOver) return null;
+        if (!['red', 'blue'].includes(owner) || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isInteger(areaId) || areaId < 1) {
+            console.warn('拒绝创建参数无效的节点。');
+            return null;
+        }
         if (parentId !== null && owner !== this.currentTurn) {
             console.warn(`现在是 ${this.currentTurn} 的回合，不能由 ${owner} 操作！`);
+            return null;
+        }
+        const parentNode = parentId === null ? null : this.nodes.find(n => n.id === parentId && !n.isDestroyed);
+        if (parentId !== null && (!parentNode || parentNode.owner !== owner)) {
+            console.warn('拒绝创建节点：父节点不存在、已摧毁或属于另一方。');
             return null;
         }
         const newNode = new Node(this.generateId(), x, y, owner, parentId);
         newNode.areaId = areaId;
         this.nodes.push(newNode);
         if (parentId !== null) {
-            const parentNode = this.nodes.find(n => n.id === parentId);
-            if (parentNode) parentNode.addChild(newNode.id);
+            parentNode.addChild(newNode.id);
         } else {
             newNode.isRoot = true;
         }
