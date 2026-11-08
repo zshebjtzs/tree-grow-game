@@ -53,13 +53,28 @@ export class GameState {
     }
 
     deleteNodes(nodeIds) {
-        const idSet = new Set(nodeIds);
-        for (let n of this.nodes) {
-            if (!idSet.has(n.id)) {
-                n.childrenIds = n.childrenIds.filter(childId => !idSet.has(childId));
+        // Deleting a node must also delete every descendant. Otherwise surviving
+        // children would retain parentIds that no longer exist in the state.
+        const byId = new Map(this.nodes.map(node => [node.id, node]));
+        const idSet = new Set();
+        const stack = [...nodeIds];
+
+        while (stack.length > 0) {
+            const id = stack.pop();
+            if (idSet.has(id)) continue;
+            const node = byId.get(id);
+            if (!node) continue;
+            idSet.add(id);
+            for (const childId of node.childrenIds) stack.push(childId);
+        }
+
+        for (const node of this.nodes) {
+            if (!idSet.has(node.id)) {
+                node.childrenIds = node.childrenIds.filter(childId => !idSet.has(childId));
             }
         }
-        this.nodes = this.nodes.filter(n => !idSet.has(n.id));
+        this.nodes = this.nodes.filter(node => !idSet.has(node.id));
+        return [...idSet];
     }
 
     // 【新增】保存当前状态的数据快照
@@ -125,7 +140,7 @@ export class GameState {
             }
             const childSet = new Set();
             for (const childId of raw.childrenIds) {
-                if (!Number.isInteger(childId) || childSet.has(childId)) {
+                if (!Number.isInteger(childId) || childId < 1 || childId === raw.id || childSet.has(childId)) {
                     throw new TypeError('存档子节点列表无效');
                 }
                 childSet.add(childId);
@@ -133,6 +148,9 @@ export class GameState {
                 if (!child || child.parentId !== raw.id || child.owner !== raw.owner) {
                     throw new TypeError('存档子节点引用无效');
                 }
+            }
+            if (raw.isFrozen && raw.isDestroyed) {
+                throw new TypeError('已摧毁节点不能处于冻结状态');
             }
         }
 

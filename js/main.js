@@ -130,9 +130,9 @@ if (!aiWorker && pveOption) {
 
 // --- 【核心提取】通用成长后处理函数（人类和 AI 共用） ---
 function processSuccessfulGrowth(newNode, owner) {
-    selectedNodeId = null; 
+    selectedNodeId = null;
 
-    // A. 检查突入敌方基地获胜
+    // Entering the enemy base wins immediately; no combat resolution is needed.
     const enemyBaseId = owner === 'red' ? blueBaseId : redBaseId;
     if (newNode.areaId === enemyBaseId) {
         const winner = owner === 'red' ? '🔴 红方' : '🔵 蓝方';
@@ -143,57 +143,64 @@ function processSuccessfulGrowth(newNode, owner) {
         return;
     }
 
-    // B. 检查战斗触发
-    const currentAlive = game.getAliveNodes();
-    const rivalNode = currentAlive.find(n => 
-        n.id !== newNode.id && 
-        n.owner !== newNode.owner && 
-               const combat = resolveCombat(game, newNode, rivalNode);
-        let nodesToDelete = combat.nodesToDelete;
-        const freezeTargetId = combat.freezeTargetId;
-        console.log(`-> 战斗结算：摧毁 ${nodesToDelete.length} 个节点${freezeTargetId ? `，冻结节点 ${freezeTargetId}` : ''}`);
+    // Combat is triggered only when the new node occupies an enemy node's area.
+    const rivalNode = game.getAliveNodes().find(node =>
+        node.id !== newNode.id &&
+        node.owner !== owner &&
+        node.areaId === newNode.areaId
+    );
 
-        // C. 执行战斗动画与清理
-        if (nodesToDelete.length > 0) {
-            nodesToDelete = [...new Set(nodesToDelete)];
-            isAnimating = true;
-            dyingNodes = nodesToDelete.map(id => game.getNode(id)).filter(Boolean);
-            renderGame();
-
-            setTimeout(() => {
-                game.deleteNodes(nodesToDelete);
-                dyingNodes = [];
-
-                if (freezeTargetId) {
-                    const targetNode = game.getNode(freezeTargetId);
-                    if (targetNode) {
-                        targetNode.isFrozen = true;
-                        console.log(`【冻结执行】节点 ${targetNode.id} (区域 ${targetNode.areaId}) 的分支被摧毁。`);
-                    }
-                }
-
-                isAnimating = false;
-                renderGame();
-
-                // D. 胜负判定与回合接力
-                const redRoots = game.getPlayerRootNodes('red');
-                const blueRoots = game.getPlayerRootNodes('blue');
-                if (redRoots.length === 0) {
-                    alert('🔴 红方所有根节点被摧毁！🔵 蓝方胜利！'); game.isGameOver = true;
-                } else if (blueRoots.length === 0) {
-                    alert('🔵 蓝方所有根节点被摧毁！🔴 红方胜利！'); game.isGameOver = true;
-                } else {
-                    performTurnSwitch();
-                }
-                updateUI();
-                renderGame();
-            }, 500);
-            return;
-        }
+    if (!rivalNode) {
+        performTurnSwitch();
+        return;
     }
 
-    // E. 无战斗：直接切换回合
-    performTurnSwitch();
+    const combat = resolveCombat(game, newNode, rivalNode);
+    const nodesToDelete = [...new Set(combat.nodesToDelete)];
+    const freezeTargetId = combat.freezeTargetId;
+    console.log(`-> 战斗结算：摧毁 ${nodesToDelete.length} 个节点${freezeTargetId ? `，冻结节点 ${freezeTargetId}` : ''}`);
+
+    if (nodesToDelete.length === 0) {
+        if (freezeTargetId) {
+            const targetNode = game.getNode(freezeTargetId);
+            if (targetNode) targetNode.isFrozen = true;
+        }
+        performTurnSwitch();
+        return;
+    }
+
+    isAnimating = true;
+    dyingNodes = nodesToDelete.map(id => game.getNode(id)).filter(Boolean);
+    renderGame();
+
+    setTimeout(() => {
+        game.deleteNodes(nodesToDelete);
+        dyingNodes = [];
+
+        if (freezeTargetId) {
+            const targetNode = game.getNode(freezeTargetId);
+            if (targetNode) {
+                targetNode.isFrozen = true;
+                console.log(`【冻结执行】节点 ${targetNode.id} (区域 ${targetNode.areaId}) 的分支被摧毁。`);
+            }
+        }
+
+        isAnimating = false;
+
+        const redRoots = game.getPlayerRootNodes('red');
+        const blueRoots = game.getPlayerRootNodes('blue');
+        if (redRoots.length === 0) {
+            alert('🔴 红方所有根节点被摧毁！🔵 蓝方胜利！');
+            game.isGameOver = true;
+        } else if (blueRoots.length === 0) {
+            alert('🔵 蓝方所有根节点被摧毁！🔴 红方胜利！');
+            game.isGameOver = true;
+        } else {
+            performTurnSwitch();
+        }
+        updateUI();
+        renderGame();
+    }, 500);
 }
 
 // --- 切换回合（包含 AI 触发） ---
