@@ -192,7 +192,7 @@ function processSuccessfulGrowth(newNode, owner) {
                 } else if (blueRoots.length === 0) {
                     alert('🔵 蓝方所有根节点被摧毁！🔴 红方胜利！'); game.isGameOver = true;
                 } else {
-                    performTurnSwitch(newNode.owner);
+                    performTurnSwitch();
                 }
                 updateUI();
                 renderGame();
@@ -202,25 +202,33 @@ function processSuccessfulGrowth(newNode, owner) {
     }
 
     // E. 无战斗：直接切换回合
-    performTurnSwitch(owner);
+    performTurnSwitch();
 }
 
 // --- 切换回合（包含 AI 触发） ---
-function performTurnSwitch(currentOwner) {
-    console.log(`【AI 排查诊断】performTurnSwitch 已被调用。当前 isAIMode 值: ${isAIMode}, 回合属主: ${game.currentTurn}`);
-    // 先清理当前玩家的冻结（解冻）
-    const aliveOwnNodes = game.getAliveNodesByOwner(currentOwner);
+function performTurnSwitch() {
+    if (game.isGameOver || gamePhase !== 'playing' || isAnimating) return;
+
+    // 以 GameState.currentTurn 为唯一权威来源，避免调用方传错属主。
+    // 这里清理的是刚结束行动的玩家；防守方被冻结节点仍保留到其行动结束。
+    const endingOwner = game.currentTurn;
+    const aliveOwnNodes = game.getAliveNodesByOwner(endingOwner);
+    let unfrozenCount = 0;
     for (const node of aliveOwnNodes) {
-        if (node.isFrozen) node.isFrozen = false;
+        if (node.isFrozen) {
+            node.isFrozen = false;
+            unfrozenCount++;
+        }
+    }
+    if (unfrozenCount > 0) {
+        console.log(`【解冻】${endingOwner} 完成行动，解除 ${unfrozenCount} 个冻结节点。`);
     }
 
-    if (game.isGameOver) return;
-
-    game.switchTurn(); // 切换回合
+    game.switchTurn();
+    selectedNodeId = null;
     updateUI();
     renderGame();
 
-    // 【AI 触发】如果现在是 AI 的回合，且不是游戏结束状态
     if (isAIMode && game.currentTurn === 'blue' && !game.isGameOver && !isAIThinking) {
         triggerAITurn();
     }
