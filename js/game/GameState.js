@@ -102,6 +102,17 @@ export class GameState {
 
         const byId = new Map(data.nodes.map(node => [node.id, node]));
         for (const raw of data.nodes) {
+            const visited = new Set([raw.id]);
+            let parentId = raw.parentId;
+            while (parentId !== null) {
+                if (visited.has(parentId)) throw new TypeError('存档节点存在循环父链');
+                visited.add(parentId);
+                const parent = byId.get(parentId);
+                if (!parent) break; // Missing parent is rejected by the relation check below.
+                parentId = parent.parentId;
+            }
+        }
+        for (const raw of data.nodes) {
             if (raw.isRoot !== (raw.parentId === null)) {
                 throw new TypeError('存档根节点与父节点关系不一致');
             }
