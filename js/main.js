@@ -50,7 +50,7 @@ function failAITurn(message) {
 
 if (window.Worker) {
     try {
-        aiWorker = new Worker('js/ai/AIWorker.js', { type: 'module' });
+        aiWorker = new Worker(new URL('./ai/AIWorker.js', import.meta.url), { type: 'module' });
     } catch (error) {
         console.error('AI Worker 初始化失败:', error);
         aiWorker = null;
