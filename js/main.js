@@ -37,10 +37,31 @@ const difficultyGroup = document.getElementById('difficulty-group');
 const startGameBtn = document.getElementById('start-game-btn');
 
 // --- AI Worker 初始化 ---
+function failAITurn(message) {
+    console.error('AI 对战不可继续:', message);
+    invalidateAIRequest();
+    game.isGameOver = true;
+    updateUI();
+    renderGame();
+    alert('AI 对战发生错误，已停止本局游戏。请重新开始或切换双人模式。');
+}
+
 if (window.Worker) {
-    aiWorker = new Worker('js/ai/AIWorker.js', { type: 'module' });
-    
-    // 【第四阶段核心】接收 AI 动作，接入主战场逻辑
+    try {
+        aiWorker = new Worker('js/ai/AIWorker.js', { type: 'module' });
+    } catch (error) {
+        console.error('AI Worker 初始化失败:', error);
+        aiWorker = null;
+    }
+}
+
+if (aiWorker) {
+    aiWorker.onerror = function(e) {
+        e.preventDefault();
+        failAITurn(e.message || 'Worker 加载或运行失败');
+    };
+
+    // 接收 AI 动作并复核后接入主战场逻辑
     aiWorker.onmessage = function(e) {
         if (e.data.requestId !== aiRequestId) {
             console.log('【AI 响应丢弃】请求已失效:', e.data.requestId);
@@ -49,10 +70,7 @@ if (window.Worker) {
         // 1. 优先判断 AI 有没有抛出致命报错
         if (e.data.error) {
             console.error('❌ 收到 AI 内部报错:', e.data.error);
-            isAIThinking = false;
-            updateUI();
-            // 如果 AI 出错，只能自动让它跳过回合
-            performSkipTurn();
+            failAITurn(e.data.error);
             return;
         }
 
@@ -94,6 +112,12 @@ if (window.Worker) {
     };
 } else {
     console.warn('浏览器不支持 Web Worker，AI 模式无法运行。');
+}
+
+const pveOption = modeSelect.querySelector('option[value="pve"]');
+if (!aiWorker && pveOption) {
+    pveOption.disabled = true;
+    difficultyGroup.style.display = 'none';
 }
 
 // --- 【核心提取】通用成长后处理函数（人类和 AI 共用） ---
@@ -256,6 +280,10 @@ function invalidateAIRequest() {
 function triggerAITurn() {
     console.log('【AI 追踪 1】检测到 AI 回合，准备发送消息给 Worker');
     if (!isAIMode || game.currentTurn !== 'blue' || isAIThinking || game.isGameOver) return;
+    if (!aiWorker) {
+        failAITurn('当前环境不支持 AI Worker');
+        return;
+    }
     isAIThinking = true;
     updateUI();
 
