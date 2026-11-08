@@ -11,6 +11,9 @@ export class AIController {
     }
 
     getBestMove(gameStateData, playerSide) {
+        if (!['red', 'blue'].includes(playerSide)) {
+            throw new TypeError('AI 玩家阵营无效');
+        }
         const game = GameState.fromJSON(gameStateData);
         game.currentTurn = playerSide;
         const enemySide = playerSide === 'blue' ? 'red' : 'blue';

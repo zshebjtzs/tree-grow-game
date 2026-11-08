@@ -50,3 +50,16 @@ test('AI root expansion considers map areas independently of direct-neighbor ent
     assert.equal(move.parentNodeId, blueRoot.id);
     assert.equal(move.targetAreaId, 3);
 });
+
+
+test('AI rejects an unsupported player side instead of returning an empty move', () => {
+    const game = new GameState();
+    const root = game.addNode(null, 0, 0, 1, 'red');
+    assert.ok(root);
+    const ai = new AIController('hard', { 1: [2], 2: [1] }, [[0, 0], [10, 0]]);
+    assert.throws(() => ai.getBestMove({
+        ...game.toJSON(),
+        redBaseId: 1,
+        blueBaseId: 2
+    }, 'green'), /玩家阵营无效/);
+});

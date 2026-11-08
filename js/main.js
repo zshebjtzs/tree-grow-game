@@ -64,8 +64,8 @@ if (aiWorker) {
 
     // 接收 AI 动作并复核后接入主战场逻辑
     aiWorker.onmessage = function(e) {
-        if (e.data.requestId !== aiRequestId) {
-            console.log('【AI 响应丢弃】请求已失效:', e.data.requestId);
+        if (!e.data || e.data.requestId !== aiRequestId) {
+            console.log('【AI 响应丢弃】请求已失效:', e.data?.requestId);
             return;
         }
         // 1. 优先判断 AI 有没有抛出致命报错
@@ -79,37 +79,44 @@ if (aiWorker) {
         const { parentNodeId, targetAreaId } = e.data;
         isAIThinking = false;
 
-        // 1. 如果 AI 有合法的动作，执行生长
-        if (parentNodeId && targetAreaId) {
-            const parentNode = game.getNode(parentNodeId);
-            const targetArea = mapAreas.find(a => a.id === targetAreaId);
-            if (parentNode && targetArea) {
-                const validation = ruleEngine.canGrow(game, parentNode, targetAreaId, {
-                    ownBaseId: blueBaseId,
-                    enemyBaseId: redBaseId
-                });
-                if (!validation.allowed) {
-                    console.warn('【AI 落子拒绝】主线程规则复核失败:', validation.reason);
-                    performSkipTurn();
-                    return;
-                }
-                const [x, y] = targetArea.center;
-                const newNode = game.addNode(parentNodeId, x, y, targetAreaId, 'blue');
-                
-                // 【关键复用】AI 落子后，调用通用的成长处理函数
-                if (newNode) {
-                    console.log(`【AI执行】父节点 ${parentNodeId} -> 新节点 ${newNode.id} (区域 ${targetAreaId})`);
-                    selectedNodeId = null;
-                    // 立刻复用人类点击成功后的完整流程（战斗、冻结、重置）
-                    processSuccessfulGrowth(newNode, 'blue');
-                    return;
-                }
-            }
-        } 
-        
-        // 2. 如果 AI 返回 Null（没有棋可走），自动执行“跳过回合”
-        console.log('【AI 判定】当前无合法落子点，自动跳过回合。');
-        performSkipTurn();
+        // Null/Null is the only valid representation of "no legal move".
+        if (parentNodeId === null && targetAreaId === null) {
+            console.log('【AI 判定】当前无合法落子点，自动跳过回合。');
+            performSkipTurn();
+            return;
+        }
+        if (!Number.isSafeInteger(parentNodeId) || parentNodeId < 1 ||
+            !Number.isSafeInteger(targetAreaId) || targetAreaId < 1) {
+            failAITurn('AI 返回了格式无效的落子结果');
+            return;
+        }
+
+        const parentNode = game.getNode(parentNodeId);
+        const targetArea = mapAreas.find(area => area.id === targetAreaId);
+        if (!parentNode || !targetArea) {
+            failAITurn('AI 返回的父节点或目标区域已不存在');
+            return;
+        }
+
+        const validation = ruleEngine.canGrow(game, parentNode, targetAreaId, {
+            ownBaseId: blueBaseId,
+            enemyBaseId: redBaseId
+        });
+        if (!validation.allowed) {
+            failAITurn(`AI 落子未通过主线程规则复核：${validation.reason}`);
+            return;
+        }
+
+        const [x, y] = targetArea.center;
+        const newNode = game.addNode(parentNodeId, x, y, targetAreaId, 'blue');
+        if (!newNode) {
+            failAITurn('AI 落子通过规则复核，但节点创建失败');
+            return;
+        }
+
+        console.log(`【AI执行】父节点 ${parentNodeId} -> 新节点 ${newNode.id} (区域 ${targetAreaId})`);
+        selectedNodeId = null;
+        processSuccessfulGrowth(newNode, 'blue');
     };
 } else {
     console.warn('浏览器不支持 Web Worker，AI 模式无法运行。');
