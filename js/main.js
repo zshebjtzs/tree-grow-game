@@ -60,6 +60,15 @@ if (window.Worker) {
             const parentNode = game.getNode(parentNodeId);
             const targetArea = mapAreas.find(a => a.id === targetAreaId);
             if (parentNode && targetArea) {
+                const validation = ruleEngine.canGrow(game, parentNode, targetAreaId, {
+                    ownBaseId: blueBaseId,
+                    enemyBaseId: redBaseId
+                });
+                if (!validation.allowed) {
+                    console.warn('【AI 落子拒绝】主线程规则复核失败:', validation.reason);
+                    performSkipTurn();
+                    return;
+                }
                 const [x, y] = targetArea.center;
                 const newNode = game.addNode(parentNodeId, x, y, targetAreaId, 'blue');
                 
