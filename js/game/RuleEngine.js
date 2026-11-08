@@ -73,11 +73,9 @@ export class RuleEngine {
             return { allowed: false, reason: '普通生长必须进入共享边界直接相邻的区域' };
         }
 
-        const enemyOwner = parentNode.owner === 'red' ? 'blue' : 'red';
-        const targetEnemy = gameState.getAliveNodesByOwner(enemyOwner).find(node => node.areaId === childAreaId);
-        if (targetEnemy && targetEnemy.getDegree() > 3) {
-            return { allowed: false, reason: '目标区域被敌方免疫堡垒占据' };
-        }
+        // Enemy fortresses are valid attack targets. Combat resolution handles
+        // their immunity by destroying the invading node; rejecting growth here
+        // made that battle branch unreachable.
         const targetOwn = gameState.getAliveNodesByOwner(parentNode.owner).some(node => node.areaId === childAreaId);
         if (targetOwn && childAreaId !== enemyBaseId) {
             return { allowed: false, reason: '己方普通区域只能有一个节点' };

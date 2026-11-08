@@ -445,9 +445,7 @@ async function loadGame() {
         }
 
         const restoredGame = GameState.fromJSON(data.gameState);
-        // Rebuild on a temporary manager so a bad save cannot mutate the active map.
-        const restoredMapManager = new MapManager(1800, 1200);
-        const restoredMapAreas = restoredMapManager.loadMapFromSeeds(data.mapSeeds);
+        const restoredMapAreas = mapManager.loadMapFromSeeds(data.mapSeeds);
         const areaIds = new Set(restoredMapAreas.map(area => area.id));
         if (!areaIds.has(data.redBaseId) ||
             (data.blueBaseId !== null && (!areaIds.has(data.blueBaseId) || data.blueBaseId === data.redBaseId)) ||
@@ -456,13 +454,6 @@ async function loadGame() {
         }
 
         invalidateAIRequest();
-        mapManager.areas = restoredMapManager.areas;
-        mapManager.voronoi = restoredMapManager.voronoi;
-        mapManager.delaunay = restoredMapManager.delaunay;
-        mapManager.seeds = restoredMapManager.seeds;
-        mapManager.adjacency = restoredMapManager.adjacency;
-        mapManager.portals = restoredMapManager.portals;
-        mapManager.shortEdges = restoredMapManager.shortEdges;
         mapAreas = restoredMapAreas;
         game = restoredGame;
 
