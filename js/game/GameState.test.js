@@ -74,3 +74,21 @@ test('save round-trip preserves frozen state and rejects inconsistent child refe
     invalid.nodes[0].childrenIds = [];
     assert.throws(() => GameState.fromJSON(invalid), /父子节点关系无效/);
 });
+
+
+test('toJSON returns a detached snapshot of nodes and child arrays', () => {
+    const game = new GameState();
+    const root = game.addNode(null, 0, 0, 1, 'red');
+    const child = game.addNode(root.id, 1, 1, 2, 'red');
+
+    const snapshot = game.toJSON();
+    snapshot.nodes[0].x = 999;
+    snapshot.nodes[0].childrenIds.push(999);
+    snapshot.nodes[1].isFrozen = true;
+    snapshot.nodes.pop();
+
+    assert.equal(game.getNode(root.id).x, 0);
+    assert.deepEqual(game.getNode(root.id).childrenIds, [child.id]);
+    assert.equal(game.getNode(child.id).isFrozen, false);
+    assert.equal(game.nodes.length, 2);
+});

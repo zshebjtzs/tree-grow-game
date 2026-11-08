@@ -46,15 +46,13 @@ export class GameState {
     getNode(id) { return this.nodes.find(n => n.id === id); }
     switchTurn() {
         if (this.isGameOver) return;
-        // 【核心修正】不要在切换回合时清空冻结状态！
-        // 冻结状态必须保留到防守方结束完自己的完整回合后，才能解除。
+        // Frozen nodes remain unavailable until their owner completes a full turn.
         this.currentTurn = this.currentTurn === 'red' ? 'blue' : 'red';
         return this.currentTurn;
     }
 
     deleteNodes(nodeIds) {
-        // Deleting a node must also delete every descendant. Otherwise surviving
-        // children would retain parentIds that no longer exist in the state.
+        // Deleting a node must also delete every descendant.
         const byId = new Map(this.nodes.map(node => [node.id, node]));
         const idSet = new Set();
         const stack = [...nodeIds];
@@ -77,17 +75,28 @@ export class GameState {
         return [...idSet];
     }
 
-    // 【新增】保存当前状态的数据快照
+    // Return a detached, JSON-safe snapshot. Callers may validate or modify it
+    // without gaining a mutable reference to the live game state.
     toJSON() {
         return {
-            nodes: this.nodes,
+            nodes: this.nodes.map(node => ({
+                id: node.id,
+                x: node.x,
+                y: node.y,
+                owner: node.owner,
+                parentId: node.parentId,
+                childrenIds: [...node.childrenIds],
+                isRoot: node.isRoot,
+                isDestroyed: node.isDestroyed,
+                isFrozen: node.isFrozen,
+                areaId: node.areaId
+            })),
             currentTurn: this.currentTurn,
             nodeIdCounter: this.nodeIdCounter,
             isGameOver: this.isGameOver
         };
     }
 
-    // 【新增】从快照恢复游戏状态
     static fromJSON(data) {
         if (!data || !Array.isArray(data.nodes) ||
             !['red', 'blue'].includes(data.currentTurn) ||
@@ -123,7 +132,7 @@ export class GameState {
                 if (visited.has(parentId)) throw new TypeError('存档节点存在循环父链');
                 visited.add(parentId);
                 const parent = byId.get(parentId);
-                if (!parent) break; // Missing parent is rejected by the relation check below.
+                if (!parent) break;
                 parentId = parent.parentId;
             }
         }
@@ -157,7 +166,7 @@ export class GameState {
         const state = new GameState();
         state.nodes = data.nodes.map(raw => {
             const node = new Node(raw.id, raw.x, raw.y, raw.owner, raw.parentId);
-            Object.assign(node, raw);
+            Object.assign(node, raw, { childrenIds: [...raw.childrenIds] });
             return node;
         });
         state.currentTurn = data.currentTurn;
