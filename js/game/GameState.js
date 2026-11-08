@@ -74,16 +74,66 @@ export class GameState {
 
     // 【新增】从快照恢复游戏状态
     static fromJSON(data) {
+        if (!data || !Array.isArray(data.nodes) ||
+            !['red', 'blue'].includes(data.currentTurn) ||
+            !Number.isInteger(data.nodeIdCounter) || data.nodeIdCounter < 0 ||
+            typeof data.isGameOver !== 'boolean') {
+            throw new TypeError('存档游戏状态字段无效');
+        }
+
+        const ids = new Set();
+        for (const raw of data.nodes) {
+            if (!raw || !Number.isInteger(raw.id) || raw.id < 1 || ids.has(raw.id) ||
+                !Number.isFinite(raw.x) || !Number.isFinite(raw.y) ||
+                !Number.isInteger(raw.areaId) || raw.areaId < 1 ||
+                !['red', 'blue'].includes(raw.owner) ||
+                !(raw.parentId === null || (Number.isInteger(raw.parentId) && raw.parentId > 0)) ||
+                !Array.isArray(raw.childrenIds) ||
+                typeof raw.isRoot !== 'boolean' || typeof raw.isDestroyed !== 'boolean' ||
+                typeof raw.isFrozen !== 'boolean') {
+                throw new TypeError('存档包含无效节点');
+            }
+            ids.add(raw.id);
+        }
+
+        if (data.nodes.some(node => node.id > data.nodeIdCounter)) {
+            throw new TypeError('存档节点编号超过计数器');
+        }
+
+        const byId = new Map(data.nodes.map(node => [node.id, node]));
+        for (const raw of data.nodes) {
+            if (raw.isRoot !== (raw.parentId === null)) {
+                throw new TypeError('存档根节点与父节点关系不一致');
+            }
+            if (raw.parentId !== null) {
+                const parent = byId.get(raw.parentId);
+                if (!parent || parent.owner !== raw.owner || parent.isDestroyed ||
+                    !parent.childrenIds.includes(raw.id)) {
+                    throw new TypeError('存档父子节点关系无效');
+                }
+            }
+            const childSet = new Set();
+            for (const childId of raw.childrenIds) {
+                if (!Number.isInteger(childId) || childSet.has(childId)) {
+                    throw new TypeError('存档子节点列表无效');
+                }
+                childSet.add(childId);
+                const child = byId.get(childId);
+                if (!child || child.parentId !== raw.id || child.owner !== raw.owner) {
+                    throw new TypeError('存档子节点引用无效');
+                }
+            }
+        }
+
         const state = new GameState();
-        // 恢复节点数组，且保留 Node 实例的属性
-        state.nodes = data.nodes.map(n => {
-            const node = new Node(n.id, n.x, n.y, n.owner, n.parentId);
-            Object.assign(node, n); // 把 isRoot, areaId, childrenIds 等全部拷过来
+        state.nodes = data.nodes.map(raw => {
+            const node = new Node(raw.id, raw.x, raw.y, raw.owner, raw.parentId);
+            Object.assign(node, raw);
             return node;
         });
         state.currentTurn = data.currentTurn;
         state.nodeIdCounter = data.nodeIdCounter;
-        state.isGameOver = data.isGameOver || false;
+        state.isGameOver = data.isGameOver;
         return state;
     }
 }

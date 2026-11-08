@@ -432,27 +432,38 @@ async function loadGame() {
         const text = await file.text();
         const data = JSON.parse(text);
 
-        // 验证存档完整性
-        if (!data.mapSeeds || !data.gameState) {
-            alert('❌ 存档文件格式错误，无法读取！');
-            return;
+        // 先在临时对象中完整验证存档，失败时不触碰当前游戏。
+        if (!Array.isArray(data.mapSeeds) || data.mapSeeds.length !== 50 ||
+            !data.mapSeeds.every(seed => Array.isArray(seed) && seed.length === 2 &&
+                Number.isFinite(seed[0]) && Number.isFinite(seed[1])) ||
+            !['selectBlue', 'playing'].includes(data.gamePhase) ||
+            !Number.isInteger(data.redBaseId) || data.redBaseId < 1 ||
+            (data.gamePhase === 'playing' &&
+                (!Number.isInteger(data.blueBaseId) || data.blueBaseId < 1)) ||
+            (data.gamePhase === 'selectBlue' && data.blueBaseId !== null)) {
+            throw new TypeError('存档地图或阶段字段无效');
+        }
+
+        const restoredGame = GameState.fromJSON(data.gameState);
+        const restoredMapAreas = mapManager.loadMapFromSeeds(data.mapSeeds);
+        const areaIds = new Set(restoredMapAreas.map(area => area.id));
+        if (!areaIds.has(data.redBaseId) ||
+            (data.blueBaseId !== null && (!areaIds.has(data.blueBaseId) || data.blueBaseId === data.redBaseId)) ||
+            restoredGame.nodes.some(node => !areaIds.has(node.areaId))) {
+            throw new TypeError('存档节点或基地引用了不存在的区域');
         }
 
         invalidateAIRequest();
+        mapAreas = restoredMapAreas;
+        game = restoredGame;
 
-        // 1. 恢复地图
-        mapAreas = mapManager.loadMapFromSeeds(data.mapSeeds);
-        
-        // 2. 恢复游戏状态
-        game = GameState.fromJSON(data.gameState);
-        
-        // 3. 恢复变量
+        // 恢复变量
         redBaseId = data.redBaseId;
         blueBaseId = data.blueBaseId;
         gamePhase = data.gamePhase;
         selectedNodeId = null;
 
-        // 4. 重建规则引擎
+        // 重建规则引擎
         ruleEngine = new RuleEngine(mapManager);
 
         // 5. 重新渲染并更新UI
