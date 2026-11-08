@@ -304,13 +304,18 @@ function generateRootNodesInArea(areaId, owner, count = 3) {
             }
         }
     }
-    while (nodes.length < count) {
-        const dx = (Math.random() - 0.5) * 40;
-        const dy = (Math.random() - 0.5) * 40;
-        const px = center[0] + dx;
-        const py = center[1] + dy;
-        const node = game.addNode(null, px, py, areaId, owner);
-        if (node) nodes.push(node);
+    // If random placement failed, scan deterministic offsets but still verify
+    // point-location. Never create a node whose coordinates belong to another cell.
+    for (let radius = 2; nodes.length < count && radius <= 40; radius += 2) {
+        for (let angle = 0; angle < 360 && nodes.length < count; angle += 15) {
+            const radians = angle * Math.PI / 180;
+            const px = center[0] + Math.cos(radians) * radius;
+            const py = center[1] + Math.sin(radians) * radius;
+            if (mapManager.getAreaAtPoint(px, py) !== areaId) continue;
+            if (nodes.some(n => Math.hypot(n.x - px, n.y - py) < 15)) continue;
+            const node = game.addNode(null, px, py, areaId, owner);
+            if (node) nodes.push(node);
+        }
     }
     console.log(`【开局】在区域 ${areaId} 为 ${owner} 生成了 ${nodes.length} 个根节点`);
     return nodes;
