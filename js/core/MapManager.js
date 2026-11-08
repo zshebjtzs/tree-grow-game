@@ -100,7 +100,10 @@ export class MapManager {
     }
 
     loadMapFromSeeds(seeds) {
-        if (!Array.isArray(seeds) || seeds.length < 2 || !seeds.every(seed =>
+        if (!Array.isArray(seeds) || seeds.length < 2) {
+            throw new TypeError('地图至少需要两个种子');
+        }
+        if (!seeds.every(seed =>
             Array.isArray(seed) && seed.length === 2 &&
             Number.isFinite(seed[0]) && Number.isFinite(seed[1]) &&
             seed[0] >= 0 && seed[0] <= this.width &&

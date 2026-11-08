@@ -17,8 +17,8 @@ test('ordinary growth must use one adjacent area and cannot cross occupied areas
 test('root first branch can reach at most two edges and cannot pass occupied intermediates', () => {
     const game = new GameState();
     const root = game.addNode(null, 0, 0, 1, 'red');
-    game.addNode(null, 1, 1, 2, 'red');
-    game.addNode(null, 2, 2, 3, 'red');
+    game.addNode(null, 1, 1, 4, 'red');
+    game.addNode(null, 2, 2, 5, 'red');
     assert.equal(engine.canGrow(game, root, 3).allowed, true);
     assert.equal(engine.canGrow(game, root, 5).allowed, false);
 });

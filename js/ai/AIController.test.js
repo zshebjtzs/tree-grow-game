@@ -34,7 +34,7 @@ test('AI can reconstruct a complete game snapshot and return a legal move', () =
 test('AI root expansion considers map areas independently of direct-neighbor entries', () => {
     const game = new GameState();
     game.currentTurn = 'blue';
-    game.addNode(null, 0, 0, 4, 'red');
+    game.addNode(null, 0, 0, 3, 'red');
     const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
     assert.ok(blueRoot);
 
@@ -42,7 +42,7 @@ test('AI root expansion considers map areas independently of direct-neighbor ent
     const ai = new AIController('hard', { 1: [2, 3], 2: [1] }, [[0, 0], [10, 0], [20, 0]]);
     const move = ai.getBestMove({
         ...game.toJSON(),
-        redBaseId: 4,
+        redBaseId: 3,
         blueBaseId: 1
     }, 'blue');
 
