@@ -71,7 +71,7 @@ export class MapManager {
 
     generateMap(areaCount = 50, iterations = 6) {
         let seeds = [];
-        const minDistance = Math.min(120, Math.min(this.width, this.height) / Math.sqrt(areaCount) * 0.8;
+        const minDistance = Math.min(120, Math.min(this.width, this.height) / Math.sqrt(areaCount) * 0.8);
         let attempts = 0;
         while (seeds.length < areaCount && attempts < areaCount * 100) {
             attempts++;
