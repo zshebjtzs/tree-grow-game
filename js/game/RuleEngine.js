@@ -7,7 +7,7 @@ export class RuleEngine {
 
     getAreaPath(startAreaId, endAreaId, blockedAreas = null) {
         if (startAreaId === endAreaId) return [startAreaId];
-        if (!this.adjacency[startAreaId] || !this.adjacency[endAreaId]) return null;
+        if (!this.adjacency[startAreaId]) return null;
         const queue = [startAreaId];
         const previous = new Map([[startAreaId, null]]);
         for (let head = 0; head < queue.length; head++) {
@@ -46,7 +46,7 @@ export class RuleEngine {
         if (parentNode.isRoot && parentNode.childrenIds.length > 0) {
             return { allowed: false, reason: '根节点只能生长第一根枝条，不能再次分叉' };
         }
-        if (!Number.isInteger(childAreaId) || !this.adjacency[childAreaId]) {
+        if (!Number.isInteger(childAreaId) || childAreaId < 1) {
             return { allowed: false, reason: '目标区域无效' };
         }
         if (ownBaseId !== null && childAreaId === ownBaseId) {

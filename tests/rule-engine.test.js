@@ -53,3 +53,13 @@ test('root first branch can use an alternate short route when the shortest route
     assert.equal(result.allowed, true);
     assert.deepEqual(result.path, [1, 3, 4]);
 });
+
+
+test('growth accepts a valid neighbor even when the target has no adjacency entry', () => {
+    const engine = new RuleEngine({ adjacency: { 1: [2] } });
+    const game = new GameState();
+    const root = game.addNode(null, 0, 0, 1, 'red');
+    const result = engine.canGrow(game, root, 2);
+    assert.equal(result.allowed, true);
+    assert.deepEqual(result.path, [1, 2]);
+});

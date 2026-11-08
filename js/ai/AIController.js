@@ -22,17 +22,16 @@ export class AIController {
 
         for (const parentNode of game.getAliveNodesByOwner(playerSide)) {
             if (parentNode.isFrozen) continue;
-            for (const targetAreaId of this.adjacency[parentNode.areaId] || []) {
-                // The root first-branch privilege may span two edges, so evaluate
-                // all map areas rather than only direct Delaunay neighbors.
-                const isFirstRootBranch = parentNode.isRoot && parentNode.childrenIds.length === 0;
-                if (isFirstRootBranch) {
-                    for (let areaId = 1; areaId <= this.areaCenters.length; areaId++) {
-                        if (areaId === targetAreaId) continue;
-                        this._addIfLegal(moves, game, parentNode, areaId, playerSide, ownBaseId, enemyBaseId, occupied, aliveNodes);
-                    }
-                    break;
+            // The root's first branch can span up to two edges. Enumerate the
+            // map independently of the root area's direct-neighbor list.
+            const isFirstRootBranch = parentNode.isRoot && parentNode.childrenIds.length === 0;
+            if (isFirstRootBranch) {
+                for (let areaId = 1; areaId <= this.areaCenters.length; areaId++) {
+                    this._addIfLegal(moves, game, parentNode, areaId, playerSide, ownBaseId, enemyBaseId, occupied, aliveNodes);
                 }
+                continue;
+            }
+            for (const targetAreaId of this.adjacency[parentNode.areaId] || []) {
                 this._addIfLegal(moves, game, parentNode, targetAreaId, playerSide, ownBaseId, enemyBaseId, occupied, aliveNodes);
             }
         }

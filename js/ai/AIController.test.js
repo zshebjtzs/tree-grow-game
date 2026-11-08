@@ -29,3 +29,24 @@ test('AI can reconstruct a complete game snapshot and return a legal move', () =
     assert.equal(move.parentNodeId, blueRoot.id);
     assert.ok([2, 4].includes(move.targetAreaId));
 });
+
+
+test('AI root expansion considers map areas independently of direct-neighbor entries', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 4, 'red');
+    const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
+    assert.ok(blueRoot);
+
+    // Area 3 is referenced as a neighbor but has no own adjacency entry.
+    const ai = new AIController('hard', { 1: [2, 3], 2: [1] }, [[0, 0], [10, 0], [20, 0]]);
+    const move = ai.getBestMove({
+        ...game.toJSON(),
+        redBaseId: 4,
+        blueBaseId: 1
+    }, 'blue');
+
+    assert.ok(move);
+    assert.equal(move.parentNodeId, blueRoot.id);
+    assert.equal(move.targetAreaId, 3);
+});
