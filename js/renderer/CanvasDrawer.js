@@ -77,8 +77,39 @@ export class CanvasDrawer {
         });
     }
     
+    _getPortalRoute(startAreaId, endAreaId, portals) {
+        if (startAreaId === endAreaId) return [];
+        const adjacency = {};
+        for (const portal of Object.values(portals || {})) {
+            if (!portal || !Number.isInteger(portal.a1) || !Number.isInteger(portal.a2)) continue;
+            (adjacency[portal.a1] ||= []).push({ areaId: portal.a2, portal });
+            (adjacency[portal.a2] ||= []).push({ areaId: portal.a1, portal });
+        }
+        const queue = [startAreaId];
+        const previous = new Map([[startAreaId, null]]);
+        for (let head = 0; head < queue.length; head++) {
+            const current = queue[head];
+            for (const next of adjacency[current] || []) {
+                if (previous.has(next.areaId)) continue;
+                previous.set(next.areaId, { areaId: current, portal: next.portal });
+                if (next.areaId === endAreaId) {
+                    const route = [];
+                    let cursor = endAreaId;
+                    while (cursor !== startAreaId) {
+                        const step = previous.get(cursor);
+                        route.push(step.portal);
+                        cursor = step.areaId;
+                    }
+                    return route.reverse();
+                }
+                queue.push(next.areaId);
+            }
+        }
+        return null;
+    }
+
     // 第三个参数：dyingNodes（即将被摧毁的节点列表）
-    renderNodes(nodes, selectedNodeId = null, dyingNodes = []) {
+    renderNodes(nodes, selectedNodeId = null, dyingNodes = [], portals = {}) {
         const ctx = this.ctx;
         const alive = nodes.filter(n => !n.isDestroyed);
 
@@ -126,8 +157,17 @@ export class CanvasDrawer {
             if (node.parentId !== null) {
                 const parent = alive.find(n => n.id === node.parentId);
                 if (parent) {
+                    const route = this._getPortalRoute(parent.areaId, node.areaId, portals);
                     ctx.beginPath();
                     ctx.moveTo(parent.x, parent.y);
+                    if (route && route.length) {
+                        const first = route[0];
+                        ctx.lineTo((first.p1[0] + first.p2[0]) / 2, (first.p1[1] + first.p2[1]) / 2);
+                        for (let i = 1; i < route.length; i++) {
+                            const edge = route[i];
+                            ctx.lineTo((edge.p1[0] + edge.p2[0]) / 2, (edge.p1[1] + edge.p2[1]) / 2);
+                        }
+                    }
                     ctx.lineTo(node.x, node.y);
                     ctx.strokeStyle = node.owner === 'red' ? '#ff9999' : '#99bbff';
                     ctx.lineWidth = 3;
