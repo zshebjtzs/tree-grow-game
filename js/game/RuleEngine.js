@@ -5,7 +5,7 @@ export class RuleEngine {
         this.adjacency = mapManager.adjacency || {};
     }
 
-    getAreaPath(startAreaId, endAreaId) {
+    getAreaPath(startAreaId, endAreaId, blockedAreas = null) {
         if (startAreaId === endAreaId) return [startAreaId];
         if (!this.adjacency[startAreaId] || !this.adjacency[endAreaId]) return null;
         const queue = [startAreaId];
@@ -14,6 +14,7 @@ export class RuleEngine {
             const current = queue[head];
             for (const neighbor of this.adjacency[current] || []) {
                 if (previous.has(neighbor)) continue;
+                if (blockedAreas?.has(neighbor) && neighbor !== endAreaId) continue;
                 previous.set(neighbor, current);
                 if (neighbor === endAreaId) {
                     const path = [];
@@ -53,14 +54,15 @@ export class RuleEngine {
         }
         if (parentNode.areaId === childAreaId) return { allowed: false, reason: '不能在同一区域生长' };
 
-        const path = this.getAreaPath(parentNode.areaId, childAreaId);
-        if (!path) return { allowed: false, reason: '目标区域与父节点不连通' };
-        const distance = path.length - 1;
         const occupied = new Set(gameState.getAliveNodes().map(node => node.areaId));
-        const intermediate = path.slice(1, -1);
-        if (intermediate.some(areaId => occupied.has(areaId))) {
-            return { allowed: false, reason: '路径经过已被节点占据的区域' };
-        }
+        // Find a legal route, not merely the graph's first shortest route:
+        // another equally short route may avoid occupied intermediate cells.
+        const blockedIntermediates = new Set(occupied);
+        blockedIntermediates.delete(parentNode.areaId);
+        blockedIntermediates.delete(childAreaId);
+        const path = this.getAreaPath(parentNode.areaId, childAreaId, blockedIntermediates);
+        if (!path) return { allowed: false, reason: '目标区域与父节点不连通，或所有可用路径均经过已占据区域' };
+        const distance = path.length - 1;
 
         const isFirstRootBranch = parentNode.isRoot && parentNode.childrenIds.length === 0;
         if (isFirstRootBranch) {

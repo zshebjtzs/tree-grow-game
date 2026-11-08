@@ -40,3 +40,16 @@ test('frozen and enemy-owned parents are rejected', () => {
     root.owner = 'blue';
     assert.equal(engine.canGrow(game, root, 2).allowed, false);
 });
+
+test('root first branch can use an alternate short route when the shortest route is occupied', () => {
+    const alternateEngine = new RuleEngine({
+        adjacency: { 1: [2, 3], 2: [1, 4], 3: [1, 4], 4: [2, 3], 5: [] }
+    });
+    const game = new GameState();
+    const root = game.addNode(null, 0, 0, 1, 'red');
+    game.addNode(null, 0, 0, 5, 'red'); // Enables the two-edge first-branch privilege.
+    game.addNode(null, 0, 0, 2, 'blue'); // Blocks one route, not every route.
+    const result = alternateEngine.canGrow(game, root, 4);
+    assert.equal(result.allowed, true);
+    assert.deepEqual(result.path, [1, 3, 4]);
+});
