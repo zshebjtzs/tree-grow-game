@@ -349,8 +349,8 @@ function getGameBlob() {
         alert('当前战斗动画或 AI 运算尚未结束，请稍后再保存。');
         return null;
     }
-    if (gamePhase === 'selectRed') {
-        alert('游戏还没正式开局（未选好基地），无法保存！');
+    if (gamePhase !== 'playing') {
+        alert('请先完成双方基地选择并正式开始游戏，再进行保存。');
         return null;
     }
     const data = {
@@ -358,7 +358,9 @@ function getGameBlob() {
         mapSeeds: mapManager.seeds,
         redBaseId: redBaseId,
         blueBaseId: blueBaseId,
-        gamePhase: gamePhase
+        gamePhase: gamePhase,
+        isAIMode: isAIMode,
+        difficulty: difficultySelect.value
     };
     return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
 }
@@ -474,6 +476,17 @@ async function loadGame() {
         mapManager.shortEdges = restoredMapManager.shortEdges;
         mapAreas = restoredMapAreas;
         game = restoredGame;
+
+        // Restore the match mode and difficulty saved with the game.
+        // Older saves do not contain these fields; retain the current UI choice for compatibility.
+        if (typeof data.isAIMode === 'boolean') {
+            isAIMode = data.isAIMode;
+            modeSelect.value = isAIMode ? 'pve' : 'pvp';
+        }
+        if (['easy', 'medium', 'hard'].includes(data.difficulty)) {
+            difficultySelect.value = data.difficulty;
+        }
+        difficultyGroup.style.display = isAIMode ? 'flex' : 'none';
 
         // 恢复变量
         redBaseId = data.redBaseId;
