@@ -666,33 +666,10 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
 });
 
 endTurnBtn.addEventListener('click', () => {
-    if (game.isGameOver || gamePhase !== 'playing' || isAnimating) return;
-    
-    // 清空当前玩家所有节点的冻结状态
-    const aliveOwnNodes = game.getAliveNodesByOwner(game.currentTurn);
-    let unfrozenCount = 0;
-    for (const node of aliveOwnNodes) {
-        if (node.isFrozen) {
-            node.isFrozen = false;
-            unfrozenCount++;
-        }
-    }
-    if (unfrozenCount > 0) {
-        console.log(`【解冻】当前玩家 ${game.currentTurn} 跳过回合，${unfrozenCount} 个被冻结的节点已解除休整。`);
-    }
-
+    if (game.isGameOver || gamePhase !== 'playing' || isAnimating || isAIThinking) return;
     selectedNodeId = null;
-    game.switchTurn();
-    updateUI();
-    renderGame();
-
-    // ==========================================
-    // 【核心修复】追加 AI 触发检测
-    // ==========================================
-    // 如果当前开启 AI 模式，且刚切换到的回合是 AI（蓝方），则直接触发 AI 思考
-    if (isAIMode && game.currentTurn === 'blue' && !game.isGameOver && !isAIThinking) {
-        triggerAITurn();
-    }
+    // 所有跳过回合入口统一处理解冻、切换回合及 AI 触发。
+    performSkipTurn();
 });
 
 function renderGame() {
