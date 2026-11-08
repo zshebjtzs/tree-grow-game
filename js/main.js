@@ -3,6 +3,7 @@ import { GameState } from './game/GameState.js';
 import { MapManager } from './core/MapManager.js';
 import { CanvasDrawer } from './renderer/CanvasDrawer.js';
 import { RuleEngine } from './game/RuleEngine.js';
+import { resolveCombat } from './game/CombatResolver.js';
 
 // 1. 初始化各模块
 let game = new GameState();
@@ -140,56 +141,10 @@ function processSuccessfulGrowth(newNode, owner) {
     const rivalNode = currentAlive.find(n => 
         n.id !== newNode.id && 
         n.owner !== newNode.owner && 
-        n.areaId === newNode.areaId
-    );
-
-    if (rivalNode) {
-        let nodesToDelete = [];
-        let freezeTargetId = null;
-        console.log(`【战斗触发】玩家 ${newNode.owner} 进入了 ${rivalNode.owner} 的区域`);
-
-        let stopNode = null;
-        let cursor = rivalNode;
-        while (cursor) {
-            if (cursor.childrenIds.length >= 2) { stopNode = cursor; break; }
-            if (!cursor.parentId) break;
-            cursor = game.getNode(cursor.parentId);
-        }
-
-        if (rivalNode.childrenIds.length >= 2 && rivalNode.getDegree() <= 3) {
-            console.log(`-> 触发【直接摧毁分支点】ID ${rivalNode.id}`);
-            let queue = [rivalNode.id];
-            while (queue.length > 0) {
-                let cId = queue.shift();
-                nodesToDelete.push(cId);
-                let cNode = game.getNode(cId);
-                if (cNode) { for (let childId of cNode.childrenIds) queue.push(childId); }
-            }
-        } else if (rivalNode.getDegree() > 3) {
-            console.log(`-> 触发【免疫堡垒自动防御】ID ${rivalNode.id} 绝对安全。`);
-            nodesToDelete.push(newNode.id);
-        } else {
-            console.log(`-> 触发【连锁摧毁】向上回溯`);
-            let pathIds = [];
-            let delCursor = rivalNode;
-            while (delCursor) {
-                if (stopNode && delCursor.id === stopNode.id) break;
-                pathIds.push(delCursor.id);
-                if (!delCursor.parentId) break;
-                delCursor = game.getNode(delCursor.parentId);
-            }
-            let queue = [...pathIds];
-            while (queue.length > 0) {
-                let cId = queue.shift();
-                nodesToDelete.push(cId);
-                let cNode = game.getNode(cId);
-                if (cNode) { for (let childId of cNode.childrenIds) queue.push(childId); }
-            }
-            if (stopNode && !nodesToDelete.includes(stopNode.id) && !stopNode.isRoot) {
-                freezeTargetId = stopNode.id;
-                console.log(`-> 即将冻结起始分支点 ID: ${freezeTargetId}`);
-            }
-        }
+               const combat = resolveCombat(game, newNode, rivalNode);
+        const nodesToDelete = combat.nodesToDelete;
+        const freezeTargetId = combat.freezeTargetId;
+        console.log(`-> 战斗结算：摧毁 ${nodesToDelete.length} 个节点${freezeTargetId ? `，冻结节点 ${freezeTargetId}` : ''}`);
 
         // C. 执行战斗动画与清理
         if (nodesToDelete.length > 0) {
