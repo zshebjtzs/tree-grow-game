@@ -20,6 +20,7 @@ let selectedNodeId = null;
 
 let dyingNodes = [];
 let isAnimating = false;
+let combatTimeoutId = null;
 
 // --- AI 相关变量 ---
 let isAIMode = false;       
@@ -173,7 +174,8 @@ function processSuccessfulGrowth(newNode, owner) {
     dyingNodes = nodesToDelete.map(id => game.getNode(id)).filter(Boolean);
     renderGame();
 
-    setTimeout(() => {
+    combatTimeoutId = setTimeout(() => {
+        combatTimeoutId = null;
         game.deleteNodes(nodesToDelete);
         dyingNodes = [];
 
@@ -343,6 +345,10 @@ updateUI();
 
 // 存读档逻辑
 function getGameBlob() {
+    if (isAnimating || isAIThinking) {
+        alert('当前战斗动画或 AI 运算尚未结束，请稍后再保存。');
+        return null;
+    }
     if (gamePhase === 'selectRed') {
         alert('游戏还没正式开局（未选好基地），无法保存！');
         return null;
@@ -453,6 +459,12 @@ async function loadGame() {
         }
 
         invalidateAIRequest();
+        if (combatTimeoutId !== null) {
+            clearTimeout(combatTimeoutId);
+            combatTimeoutId = null;
+        }
+        isAnimating = false;
+        dyingNodes = [];
         mapManager.areas = restoredMapManager.areas;
         mapManager.voronoi = restoredMapManager.voronoi;
         mapManager.delaunay = restoredMapManager.delaunay;
@@ -501,6 +513,10 @@ modeSelect.addEventListener('change', (e) => {
 // 2. 监听“开始游戏”按钮
 startGameBtn.addEventListener('click', () => {
     invalidateAIRequest();
+    if (combatTimeoutId !== null) {
+        clearTimeout(combatTimeoutId);
+        combatTimeoutId = null;
+    }
 
     // 重置整个游戏到开局状态
     game = new GameState();

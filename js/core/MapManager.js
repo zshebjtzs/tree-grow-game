@@ -100,6 +100,21 @@ export class MapManager {
     }
 
     loadMapFromSeeds(seeds) {
+        if (!Array.isArray(seeds) || seeds.length < 2 || !seeds.every(seed =>
+            Array.isArray(seed) && seed.length === 2 &&
+            Number.isFinite(seed[0]) && Number.isFinite(seed[1]) &&
+            seed[0] >= 0 && seed[0] <= this.width &&
+            seed[1] >= 0 && seed[1] <= this.height
+        )) {
+            throw new TypeError('地图种子必须是画布范围内的有限坐标');
+        }
+        for (let i = 0; i < seeds.length; i++) {
+            for (let j = i + 1; j < seeds.length; j++) {
+                if (Math.hypot(seeds[i][0] - seeds[j][0], seeds[i][1] - seeds[j][1]) <= EPSILON) {
+                    throw new TypeError('地图种子不能重复');
+                }
+            }
+        }
         this.seeds = seeds.map(seed => [...seed]);
         return this.buildMapFromSeeds(this.seeds);
     }
