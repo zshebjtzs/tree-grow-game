@@ -259,11 +259,7 @@ function triggerAITurn() {
     isAIThinking = true;
     updateUI();
 
-    const gameStateData = {
-        nodes: game.nodes,
-        currentTurn: game.currentTurn,
-        nodeIdCounter: game.nodeIdCounter
-    };
+    const gameStateData = game.toJSON();
 
     // 【核心改动】把地图拓扑结构和区域中心直接传过去！
     const adjacency = ruleEngine.adjacency;
