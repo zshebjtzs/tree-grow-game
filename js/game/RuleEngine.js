@@ -2,97 +2,86 @@
 export class RuleEngine {
     constructor(mapManager) {
         this.mapManager = mapManager;
-        // 直接使用经过 MapManager 阻断处理过的邻接表，确保规则绝对对齐
-        this.adjacency = mapManager.adjacency || this._buildFallbackAdjacency();
+        this.adjacency = mapManager.adjacency || {};
     }
 
-    // 原有的构建方法作为兜底
-    _buildFallbackAdjacency() {
-        const adj = {};
-        const areas = this.mapManager.areas;
-        const delaunay = this.mapManager.delaunay;
-        areas.forEach((area, index) => {
-            const id = area.id;
-            adj[id] = [];
-            const neighborIndices = delaunay.neighbors(index);
-            for (const nIdx of neighborIndices) {
-                if (areas[nIdx]) adj[id].push(areas[nIdx].id);
-            }
-        });
-        return adj;
-    }
-
-    // 其他寻路、距离计算、canGrow 等方法完全保持原样，没有变化！
     getAreaPath(startAreaId, endAreaId) {
         if (startAreaId === endAreaId) return [startAreaId];
-        const queue = [[startAreaId]];
-        const visited = new Set([startAreaId]);
-
-        while (queue.length > 0) {
-            const path = queue.shift();
-            const current = path[path.length - 1];
-            const neighbors = this.adjacency[current] || [];
-            for (const neighbor of neighbors) {
-                if (!visited.has(neighbor)) {
-                    visited.add(neighbor);
-                    const newPath = [...path, neighbor];
-                    if (neighbor === endAreaId) return newPath;
-                    queue.push(newPath);
+        if (!this.adjacency[startAreaId] || !this.adjacency[endAreaId]) return null;
+        const queue = [startAreaId];
+        const previous = new Map([[startAreaId, null]]);
+        for (let head = 0; head < queue.length; head++) {
+            const current = queue[head];
+            for (const neighbor of this.adjacency[current] || []) {
+                if (previous.has(neighbor)) continue;
+                previous.set(neighbor, current);
+                if (neighbor === endAreaId) {
+                    const path = [];
+                    let cursor = endAreaId;
+                    while (cursor !== null) {
+                        path.push(cursor);
+                        cursor = previous.get(cursor);
+                    }
+                    return path.reverse();
                 }
+                queue.push(neighbor);
             }
         }
         return null;
     }
 
     getPlayerOccupiedAreasCount(gameState, owner) {
-        const nodes = gameState.getAliveNodesByOwner(owner);
-        const areaSet = new Set();
-        nodes.forEach(n => areaSet.add(n.areaId));
-        return areaSet.size;
+        return new Set(gameState.getAliveNodesByOwner(owner).map(node => node.areaId)).size;
     }
 
-    canGrow(gameState, parentNode, childAreaId) {
-        // ... 保持你已有的原版逻辑不变，因为内部调用了 getAreaPath 和 adjacency ...
+    canGrow(gameState, parentNode, childAreaId, options = {}) {
+        const { ownBaseId = null, enemyBaseId = null } = options;
         if (gameState.isGameOver) return { allowed: false, reason: '游戏已结束' };
-        if (!parentNode) return { allowed: false, reason: '请先选中一个父节点' };
+        if (!parentNode || gameState.getNode(parentNode.id) !== parentNode || parentNode.isDestroyed) {
+            return { allowed: false, reason: '父节点不存在或已被摧毁' };
+        }
         if (parentNode.owner !== gameState.currentTurn) return { allowed: false, reason: '不能操作对方的节点' };
+        if (parentNode.isFrozen) return { allowed: false, reason: '该节点本回合被冻结' };
+        if (parentNode.isRoot && parentNode.childrenIds.length > 0) {
+            return { allowed: false, reason: '根节点只能生长第一根枝条，不能再次分叉' };
+        }
+        if (!Number.isInteger(childAreaId) || !this.adjacency[childAreaId]) {
+            return { allowed: false, reason: '目标区域无效' };
+        }
+        if (ownBaseId !== null && childAreaId === ownBaseId) {
+            return { allowed: false, reason: '禁止向己方基地生长' };
+        }
+        if (parentNode.areaId === childAreaId) return { allowed: false, reason: '不能在同一区域生长' };
 
-        const startAreaId = parentNode.areaId;
-        if (startAreaId === childAreaId) return { allowed: true };
-
-        const path = this.getAreaPath(startAreaId, childAreaId);
-        if (path === null) return { allowed: false, reason: '目标区域被地形隔绝，无法连通' };
-
+        const path = this.getAreaPath(parentNode.areaId, childAreaId);
+        if (!path) return { allowed: false, reason: '目标区域与父节点不连通' };
         const distance = path.length - 1;
-        const intermediateAreas = path.slice(1, -1);
+        const occupied = new Set(gameState.getAliveNodes().map(node => node.areaId));
+        const intermediate = path.slice(1, -1);
+        if (intermediate.some(areaId => occupied.has(areaId))) {
+            return { allowed: false, reason: '路径经过已被节点占据的区域' };
+        }
 
-        if (parentNode.isRoot && parentNode.childrenIds.length === 0) {
+        const isFirstRootBranch = parentNode.isRoot && parentNode.childrenIds.length === 0;
+        if (isFirstRootBranch) {
             const ownedCount = this.getPlayerOccupiedAreasCount(gameState, parentNode.owner);
-            const maxAllowedDistance = Math.min(ownedCount, 2);
-            if (distance <= maxAllowedDistance) return { allowed: true };
-            return { allowed: false, reason: `根节点初生限制：当前最多只能跨越 ${maxAllowedDistance} 条黑线` };
-        }
-
-        if (distance > 1) {
-            return { allowed: false, reason: `非法生长！只能穿过一条黑线到达下一个相邻区域，不能连穿两条线（试图穿越 ${distance} 条黑线）。` };
-        }
-
-        const allAliveNodes = gameState.getAliveNodes();
-        const occupiedAreaSet = new Set();
-        allAliveNodes.forEach(n => occupiedAreaSet.add(n.areaId));
-        for (const areaId of intermediateAreas) {
-            if (occupiedAreaSet.has(areaId)) {
-                return { allowed: false, reason: `路径被己方或敌方的节点阻挡（区域 ${areaId} 已被占据），无法跨越！` };
+            const maxDistance = Math.min(ownedCount, 2);
+            if (distance > maxDistance) {
+                return { allowed: false, reason: `根节点第一枝最多跨越 ${maxDistance} 条边` };
             }
+        } else if (distance !== 1) {
+            return { allowed: false, reason: '普通生长必须进入共享边界直接相邻的区域' };
         }
 
-        const rivalOwner = gameState.currentTurn === 'red' ? 'blue' : 'red';
-        const rivalNodes = gameState.getAliveNodesByOwner(rivalOwner);
-        for (const rNode of rivalNodes) {
-            if (rNode.areaId === childAreaId && rNode.getDegree() > 3) {
-                return { allowed: false, reason: `目标区域被敌方免疫堡垒（>3条连接）占据，不可进入！` };
-            }
+        const enemyOwner = parentNode.owner === 'red' ? 'blue' : 'red';
+        const targetEnemy = gameState.getAliveNodesByOwner(enemyOwner).find(node => node.areaId === childAreaId);
+        if (targetEnemy && targetEnemy.getDegree() > 3) {
+            return { allowed: false, reason: '目标区域被敌方免疫堡垒占据' };
         }
-        return { allowed: true };
+        const targetOwn = gameState.getAliveNodesByOwner(parentNode.owner).some(node => node.areaId === childAreaId);
+        if (targetOwn && childAreaId !== enemyBaseId) {
+            return { allowed: false, reason: '己方普通区域只能有一个节点' };
+        }
+        return { allowed: true, path };
     }
 }
