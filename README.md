@@ -53,7 +53,7 @@
 | **图论战斗核心** | 生长受限于“单步穿线”；战斗时支持**直接摧毁分支点**、**连锁摧毁向上回溯**、**免疫堡垒**（>3条连接）绝对防御。 |
 | **战略冻结机制** | 当敌方切断你的某条树枝时，幸存的上游分支点将在**下一回合被冻结**，无法生长，有效防止双方陷入局部“绞肉机”拉锯战。 |
 | **本地单文件存档** | 基于浏览器 `File System Access API`，支持自由保存和读取 `*.sav` 文件到本地电脑。 |
-| **纯前端免环境** | 所有代码打包为一个 `bundle.js`，配合 `index.html` 和 `style.css`，**无需安装 Node.js 或数据库**，双击即可运行。 |
+| **纯前端免环境** | 开发时由 Vite 提供本地模块服务；生产构建将依赖打包到 `dist/`。直接打开源 `index.html`（`file://`）不再作为支持的运行方式。 |
 
 ---
 
@@ -128,7 +128,7 @@ tree-grow-game/
 
 2.  **运行开发模式**
 
-   本项目采用原生 ES Modules 开发，打开 VS Code 后，安装 **[Live Server](https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer)** 插件。在 `index.html` 上右键点击 **"Open with Live Server"**，即可在浏览器中实时调试。
+   本项目采用 Vite 管理原生 ES Modules，并将 `d3-delaunay` 作为 npm 依赖。请安装 Node.js 20 或更高版本，然后在仓库根目录执行：\n\n   ```bash\n   npm install\n   npm run dev\n   ```\n\n   Vite 会输出本地开发地址（通常为 `http://127.0.0.1:5173`）。使用该地址打开游戏。不要直接双击 `index.html`：浏览器的 `file://` origin 会限制模块、Worker 与第三方依赖加载。
 
 3.  **重新打包（生成 bundle.js）**
    当你修改了 `js/main.js` 及各个模块文件后，为了让你或者朋友可以 `双击 index.html` 直接运行，需要重新打包：
