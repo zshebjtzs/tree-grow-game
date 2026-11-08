@@ -18,57 +18,47 @@ export class CanvasDrawer {
         for (let i = 0; i < this.canvas.height; i += 50) {
             ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(this.canvas.width, i); ctx.stroke();
         }
-        
+
         areas.forEach(area => {
             const pts = area.vertices;
             if (pts.length < 3) return;
             ctx.beginPath();
             ctx.moveTo(pts[0][0], pts[0][1]);
-            for (let i = 1; i < pts.length; i++) {
-                ctx.lineTo(pts[i][0], pts[i][1]);
-            }
+            for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
             ctx.closePath();
-            
-            // 基地高亮填充色
-            if (area.id === redBaseId) ctx.fillStyle = 'rgba(255, 0, 0, 0.25)'; // 红基地淡红
-            else if (area.id === blueBaseId) ctx.fillStyle = 'rgba(0, 0, 255, 0.25)'; // 蓝基地淡蓝
-            else ctx.fillStyle = '#f8f9fa'; // 普通区域底色
+
+            if (area.id === redBaseId) ctx.fillStyle = 'rgba(255, 0, 0, 0.25)';
+            else if (area.id === blueBaseId) ctx.fillStyle = 'rgba(0, 0, 255, 0.25)';
+            else ctx.fillStyle = '#f8f9fa';
             ctx.fill();
-            
+
             ctx.strokeStyle = '#333';
             ctx.lineWidth = 2;
             ctx.stroke();
         });
 
-        // ==========================================
-        // 【新增】在填充完所有区域后，绘制极短边阻断红线
-        // ==========================================
         ctx.save();
-        ctx.strokeStyle = '#ff0000'; // 醒目的警告红
-        ctx.lineWidth = 4;           // 加粗线条，形成视觉上的阻断感
-        for (let edge of shortEdges) {
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 4;
+        for (const edge of shortEdges) {
             ctx.beginPath();
             ctx.moveTo(edge.p1[0], edge.p1[1]);
             ctx.lineTo(edge.p2[0], edge.p2[1]);
             ctx.stroke();
         }
         ctx.restore();
-        // ==========================================
 
-        // 根据区域大小动态调整字号并标记区域ID
         areas.forEach(area => {
             const pts = area.vertices;
             if (pts.length < 3) return;
-            
             let maxDist = 0;
             const cx = area.center[0];
             const cy = area.center[1];
-            for (let p of pts) {
+            for (const p of pts) {
                 const dist = Math.hypot(p[0] - cx, p[1] - cy);
                 if (dist > maxDist) maxDist = dist;
             }
             const fontSize = Math.min(16, Math.max(10, maxDist * 0.6));
-            
             ctx.fillStyle = '#333';
             ctx.font = `${fontSize}px Arial`;
             ctx.textAlign = 'center';
@@ -76,7 +66,7 @@ export class CanvasDrawer {
             ctx.fillText(`区域 ${area.id}`, area.center[0], area.center[1]);
         });
     }
-    
+
     _getPortalRoute(startAreaId, endAreaId, portals) {
         if (startAreaId === endAreaId) return [];
         const adjacency = {};
@@ -108,20 +98,66 @@ export class CanvasDrawer {
         return null;
     }
 
+    _drawFrozenEffect(node) {
+        const ctx = this.ctx;
+        ctx.save();
+
+        // Frost halo: translucent fill keeps the original red/blue owner color visible.
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 18, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(128, 223, 255, 0.22)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(128, 223, 255, 0.98)';
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = '#80dfff';
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+
+        // Small vector snowflake badge, independent of platform emoji fonts.
+        const bx = node.x + 14;
+        const by = node.y - 14;
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(bx, by, 7, 0, Math.PI * 2);
+        ctx.fillStyle = '#eafaff';
+        ctx.fill();
+        ctx.strokeStyle = '#299ac5';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        ctx.strokeStyle = '#168bb8';
+        ctx.lineWidth = 1.25;
+        ctx.lineCap = 'round';
+        for (let i = 0; i < 3; i++) {
+            const angle = i * Math.PI / 3;
+            const dx = Math.cos(angle) * 4.2;
+            const dy = Math.sin(angle) * 4.2;
+            ctx.beginPath();
+            ctx.moveTo(bx - dx, by - dy);
+            ctx.lineTo(bx + dx, by + dy);
+            ctx.stroke();
+            for (const direction of [-1, 1]) {
+                const ex = bx + dx * direction;
+                const ey = by + dy * direction;
+                const branchAngle = angle * 2 + Math.PI / 2;
+                ctx.beginPath();
+                ctx.moveTo(ex, ey);
+                ctx.lineTo(ex - Math.cos(branchAngle) * 1.8 * direction, ey - Math.sin(branchAngle) * 1.8 * direction);
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
+    }
+
     // 第三个参数：dyingNodes（即将被摧毁的节点列表）
     renderNodes(nodes, selectedNodeId = null, dyingNodes = [], portals = {}) {
         const ctx = this.ctx;
         const alive = nodes.filter(n => !n.isDestroyed);
 
-        // ==========================================
-        // 1. 优先绘制【死亡特效】
-        // ==========================================
         if (dyingNodes && dyingNodes.length > 0) {
             ctx.save();
             ctx.shadowColor = '#ff0000';
             ctx.shadowBlur = 25;
-
-            // 绘制红色的死亡连线
             dyingNodes.forEach(node => {
                 if (node.parentId !== null) {
                     const parent = alive.find(n => n.id === node.parentId);
@@ -135,9 +171,7 @@ export class CanvasDrawer {
                     }
                 }
             });
-
-            // 绘制闪烁发光的死亡节点
-            const pulse = 1 + 0.3 * Math.sin(Date.now() / 150); // 脉动效果
+            const pulse = 1 + 0.3 * Math.sin(Date.now() / 150);
             dyingNodes.forEach(node => {
                 ctx.beginPath();
                 ctx.arc(node.x, node.y, 16 * pulse, 0, Math.PI * 2);
@@ -150,9 +184,6 @@ export class CanvasDrawer {
             ctx.restore();
         }
 
-        // ==========================================
-        // 2. 绘制正常存活的节点和连线
-        // ==========================================
         alive.forEach(node => {
             if (node.parentId !== null) {
                 const parent = alive.find(n => n.id === node.parentId);
@@ -192,6 +223,8 @@ export class CanvasDrawer {
             ctx.strokeStyle = '#000';
             ctx.lineWidth = 1.5;
             ctx.stroke();
+
+            if (node.isFrozen) this._drawFrozenEffect(node);
         });
     }
 }
