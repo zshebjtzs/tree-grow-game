@@ -241,20 +241,10 @@ function performTurnSwitch() {
 
 // --- 主动跳过回合（针对玩家或 AI 无棋可走） ---
 function performSkipTurn() {
-    if (game.isGameOver || gamePhase !== 'playing' || isAnimating) return;
-    const currentOwner = game.currentTurn;
-
-    // 清理冻结
-    const aliveOwnNodes = game.getAliveNodesByOwner(currentOwner);
-    for (const node of aliveOwnNodes) { if (node.isFrozen) node.isFrozen = false; }
-
-    game.switchTurn();
-    updateUI();
-    renderGame();
-
-    if (isAIMode && game.currentTurn === 'blue' && !game.isGameOver && !isAIThinking) {
-        triggerAITurn();
-    }
+    // Skipping is a turn completion, not a separate state transition.
+    // Reuse the authoritative cleanup/switch/AI path so frozen nodes and
+    // AI scheduling cannot diverge from a normal completed action.
+    performTurnSwitch();
 }
 
 function invalidateAIRequest() {
