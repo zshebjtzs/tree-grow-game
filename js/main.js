@@ -833,5 +833,5 @@ endTurnBtn.addEventListener('click', () => {
 function renderGame() {
     // 将 mapManager.shortEdges 传递给 CanvasDrawer
     drawer.renderMap(mapAreas, redBaseId, blueBaseId, mapManager.shortEdges || []);
-    drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes);
+    drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes, mapManager.portals);
 }
