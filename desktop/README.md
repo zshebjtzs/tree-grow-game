@@ -2,19 +2,51 @@
 
 This directory contains the native Windows WebView2 host for Tree Grow Game.
 
-## Current stage
+## Architecture
 
-Stage 1 is a minimal host proof of concept. It opens the built frontend from the sibling `www/` directory through WebView2 virtual-host mapping:
+- Native window: Win32 + C++17.
+- Web runtime: Microsoft Edge WebView2 Evergreen Runtime.
+- Frontend: the existing Vite production build copied into the sibling `www/` directory.
+- Virtual origin: `https://treegrow.local/`, mapped directly to `www/` with WebView2 virtual-host mapping.
+- No local HTTP server, Node.js, or Python process is required at runtime.
+- The existing ES modules, Canvas renderer, and module AI Web Worker are retained.
 
-- Virtual origin: `https://treegrow.local/`
-- Local resource directory: `www/`
-- No local HTTP server is started.
-- The Evergreen WebView2 Runtime must be installed on the target Windows system.
+The virtual HTTPS origin is intentional: module workers require a secure context, and the virtual-host mapping allows the local frontend to use one without starting a server.
 
-The host intentionally does not modify the game's JavaScript, rendering, or AI modules.
+## Portable package
 
-## Build
+The GitHub Actions workflow assembles this layout:
 
-The GitHub Actions workflow installs the Microsoft.Web.WebView2 NuGet package, builds the frontend, compiles this project with CMake/MSVC x64, and uploads a ZIP artifact.
+```text
+TreeGrow/
+├── TreeGrow.exe
+└── www/
+    ├── index.html
+    └── assets/
+```
 
-For a local build, configure CMake with `WEBVIEW2_SDK_DIR` pointing to the NuGet package's `build/native` directory.
+Keep the `www/` directory beside `TreeGrow.exe`. Do not move the executable by itself.
+
+## Runtime requirement
+
+The target Windows machine must have the **Microsoft Edge WebView2 Evergreen Runtime** installed. The runtime is a system prerequisite and is not bundled into this portable ZIP.
+
+Target: Windows 10/11 x64.
+
+## Build and validation
+
+The `windows-desktop.yml` workflow:
+
+1. Installs frontend dependencies and runs the existing Node test suite.
+2. Builds the frontend with a root-relative base path for the virtual HTTPS origin.
+3. Verifies entry-point asset references and confirms that the AI Worker bundle exists.
+4. Installs the WebView2 SDK and compiles the native host with CMake/MSVC x64.
+5. Assembles and uploads the portable ZIP artifact.
+
+The native host retains the WebView2 environment across asynchronous controller creation, ignores callbacks after the window has closed, checks key initialization/navigation results, and reports navigation or browser-process failures.
+
+A successful CI build verifies packaging and compilation. It does **not** by itself prove that the application has been exercised interactively on a physical Windows desktop. Final runtime checks still include first launch, page rendering, AI Worker startup, an AI match, and operation with the network disconnected.
+
+## Local native build
+
+Configure CMake with `WEBVIEW2_SDK_DIR` pointing to the NuGet package's `build/native` directory, then build the `Release` configuration for x64.
