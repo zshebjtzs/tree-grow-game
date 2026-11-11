@@ -14,9 +14,26 @@ constexpr wchar_t kVirtualHost[] = L"treegrow.local";
 ComPtr<ICoreWebView2Controller> g_controller;
 ComPtr<ICoreWebView2> g_webview;
 std::filesystem::path g_app_dir;
+EventRegistrationToken g_navigation_token{};
+EventRegistrationToken g_process_failed_token{};
+bool g_navigation_handler_registered = false;
+bool g_process_failed_handler_registered = false;
 
 void ShowStartupError(const wchar_t* message) {
     MessageBoxW(nullptr, message, L"Tree Grow Game", MB_OK | MB_ICONERROR);
+}
+
+void RemoveWebViewEventHandlers() {
+    if (g_webview) {
+        if (g_navigation_handler_registered) {
+            g_webview->remove_NavigationCompleted(g_navigation_token);
+            g_navigation_handler_registered = false;
+        }
+        if (g_process_failed_handler_registered) {
+            g_webview->remove_ProcessFailed(g_process_failed_token);
+            g_process_failed_handler_registered = false;
+        }
+    }
 }
 
 void ResizeWebView(HWND hwnd) {
@@ -24,7 +41,10 @@ void ResizeWebView(HWND hwnd) {
 
     RECT bounds{};
     if (GetClientRect(hwnd, &bounds)) {
-        g_controller->put_Bounds(bounds);
+        const HRESULT hr = g_controller->put_Bounds(bounds);
+        if (FAILED(hr)) {
+            OutputDebugStringW(L"TreeGrow: WebView2 bounds update failed.\n");
+        }
     }
 }
 
@@ -39,7 +59,6 @@ void InitializeWebView(HWND hwnd) {
         nullptr, nullptr, nullptr,
         Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
             [hwnd, web_dir](HRESULT result, ICoreWebView2Environment* environment) -> HRESULT {
-                // The window may have been closed while WebView2 initialized.
                 if (!IsWindow(hwnd)) return S_OK;
 
                 if (FAILED(result) || environment == nullptr) {
@@ -47,8 +66,6 @@ void InitializeWebView(HWND hwnd) {
                     return S_OK;
                 }
 
-                // Keep the COM environment alive until the asynchronous controller
-                // creation callback has completed.
                 ComPtr<ICoreWebView2Environment> environment_ref = environment;
                 const HRESULT controller_hr = environment_ref->CreateCoreWebView2Controller(
                     hwnd,
@@ -72,6 +89,9 @@ void InitializeWebView(HWND hwnd) {
                             ComPtr<ICoreWebView2_3> webview3;
                             const HRESULT query_result = g_webview.As(&webview3);
                             if (FAILED(query_result) || !webview3) {
+                                RemoveWebViewEventHandlers();
+                                g_webview.Reset();
+                                g_controller.Reset();
                                 ShowStartupError(L"This WebView2 Runtime does not support virtual host mapping.");
                                 return S_OK;
                             }
@@ -81,13 +101,13 @@ void InitializeWebView(HWND hwnd) {
                                 kVirtualHost, folder.c_str(),
                                 COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW);
                             if (FAILED(mapping_result)) {
+                                g_webview.Reset();
+                                g_controller.Reset();
                                 ShowStartupError(L"Failed to map the local game resources.");
                                 return S_OK;
                             }
 
-                            // Surface navigation and renderer failures instead of leaving
-                            // the user with an unexplained blank window.
-                            g_webview->add_NavigationCompleted(
+                            const HRESULT navigation_event_hr = g_webview->add_NavigationCompleted(
                                 Callback<ICoreWebView2NavigationCompletedEventHandler>(
                                     [hwnd](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT {
                                         if (!IsWindow(hwnd) || args == nullptr) return S_OK;
@@ -97,20 +117,38 @@ void InitializeWebView(HWND hwnd) {
                                             ShowStartupError(L"Game page navigation failed. Check that the www folder is complete.");
                                         }
                                         return S_OK;
-                                    }).Get(), nullptr);
+                                    }).Get(), &g_navigation_token);
+                            if (FAILED(navigation_event_hr)) {
+                                g_webview.Reset();
+                                g_controller.Reset();
+                                ShowStartupError(L"Failed to register the page-load diagnostic handler.");
+                                return S_OK;
+                            }
+                            g_navigation_handler_registered = true;
 
-                            g_webview->add_ProcessFailed(
+                            const HRESULT process_event_hr = g_webview->add_ProcessFailed(
                                 Callback<ICoreWebView2ProcessFailedEventHandler>(
                                     [hwnd](ICoreWebView2*, ICoreWebView2ProcessFailedEventArgs*) -> HRESULT {
                                         if (IsWindow(hwnd)) {
                                             ShowStartupError(L"The WebView2 browser process failed. Please restart Tree Grow Game.");
                                         }
                                         return S_OK;
-                                    }).Get(), nullptr);
+                                    }).Get(), &g_process_failed_token);
+                            if (FAILED(process_event_hr)) {
+                                RemoveWebViewEventHandlers();
+                                g_webview.Reset();
+                                g_controller.Reset();
+                                ShowStartupError(L"Failed to register the browser-process diagnostic handler.");
+                                return S_OK;
+                            }
+                            g_process_failed_handler_registered = true;
 
                             ResizeWebView(hwnd);
                             const HRESULT navigate_result = g_webview->Navigate(L"https://treegrow.local/index.html");
                             if (FAILED(navigate_result)) {
+                                RemoveWebViewEventHandlers();
+                                g_webview.Reset();
+                                g_controller.Reset();
                                 ShowStartupError(L"Failed to open the local game page.");
                             }
                             return S_OK;
@@ -133,6 +171,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
         ResizeWebView(hwnd);
         return 0;
     case WM_DESTROY:
+        RemoveWebViewEventHandlers();
         g_webview.Reset();
         g_controller.Reset();
         PostQuitMessage(0);
