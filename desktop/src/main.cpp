@@ -149,7 +149,7 @@ std::filesystem::path GetWebViewUserDataDirectory() {
     const DWORD required = GetEnvironmentVariableW(L"LOCALAPPDATA", nullptr, 0);
     if (required == 0) return {};
 
-    std::wstring local_app_data(required, L'\\0');
+    std::wstring local_app_data(required, L'\0');
     const DWORD written = GetEnvironmentVariableW(
         L"LOCALAPPDATA", local_app_data.data(), required);
     if (written == 0 || written >= required) return {};
