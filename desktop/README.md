@@ -43,7 +43,7 @@ The `windows-desktop.yml` workflow:
 4. Installs the WebView2 SDK and compiles the native host with CMake/MSVC x64.
 5. Assembles and uploads the portable ZIP artifact.
 
-The native host retains the WebView2 environment across asynchronous controller creation, ignores callbacks after the window has closed, tracks and removes event handlers, checks key initialization/navigation results, and reports navigation or browser-process failures. CI also launches the packaged executable in hidden `--smoke-test` mode: it loads the actual local game page, checks the game canvas, starts the generated AI Worker as a module, and verifies that the worker responds to a deliberately invalid request with its structured validation error.
+The native host retains the WebView2 environment across asynchronous controller creation, ignores callbacks after the window has closed, tracks and removes event handlers, checks key initialization/navigation results, and reports navigation or browser-process failures. CI also launches the packaged executable in hidden `--smoke-test` mode: it loads the actual local game page, checks the game canvas, starts the generated AI Worker as a module, sends it a valid tactical position with an immediate winning move, and verifies the returned parent-node and target-area IDs.
 
 A successful CI run now verifies compilation, packaging, WebView2 page loading, and module Worker execution on the hosted Windows runner. It does **not** replace interactive acceptance on a physical Windows desktop. Final checks still include normal visible launch, a complete AI match, save/load behavior, and operation with the network disconnected.
 
