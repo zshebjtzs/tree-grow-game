@@ -99,10 +99,9 @@ void StartRuntimeSmokeTest(HWND hwnd) {
     const std::wstring worker_url =
         L"https://treegrow.local/assets/" + worker_filename;
 
-    // This deliberately sends an incomplete request. The worker must load as a
-    // module, execute its message handler, and return its structured validation
-    // error. That proves the real bundled worker executes in the virtual HTTPS
-    // origin without needing to construct a full game state.
+    // Send a minimal valid tactical position with a forced immediate win. The
+    // expected move proves the worker loaded its AI modules, reconstructed the
+    // game state, ran move generation/scoring, and returned a real decision.
     const std::wstring script =
         L"(function(){"
         L"if(document.readyState!=='complete'||!document.getElementById('gameCanvas')){"
@@ -115,9 +114,15 @@ void StartRuntimeSmokeTest(HWND hwnd) {
         L"worker.onerror=function(){if(!finished){finished=true;clearTimeout(timer);"
         L"worker.terminate();window.chrome.webview.postMessage('TG_SMOKE_FAIL');}};"
         L"worker.onmessage=function(event){if(!finished){finished=true;clearTimeout(timer);"
-        L"var data=event.data;var ok=!!data&&data.requestId===1&&typeof data.error==='string';"
+        L"var data=event.data;var ok=!!data&&data.requestId===1&&!data.error&&data.parentNodeId===2&&data.targetAreaId===6;"
         L"worker.terminate();window.chrome.webview.postMessage(ok?'TG_SMOKE_OK':'TG_SMOKE_FAIL');}};"
-        L"worker.postMessage({requestId:1});return 'worker-started';"
+        L"worker.postMessage({requestId:1,gameStateData:{nodes:["
+        L"{id:1,x:50,y:0,owner:'red',parentId:null,childrenIds:[],isRoot:true,isDestroyed:false,isFrozen:false,areaId:6},"
+        L"{id:2,x:40,y:0,owner:'blue',parentId:null,childrenIds:[],isRoot:true,isDestroyed:false,isFrozen:false,areaId:5}],"
+        L"currentTurn:'blue',nodeIdCounter:2,isGameOver:false},"
+        L"adjacency:{1:[2],2:[1,3],3:[2,4],4:[3,5],5:[4,6],6:[5]},"
+        L"areaCenters:[[0,0],[10,0],[20,0],[30,0],[40,0],[50,0]],"
+        L"difficulty:'hard',playerSide:'blue',redBaseId:6,blueBaseId:1});return 'worker-started';"
         L"}catch(error){window.chrome.webview.postMessage('TG_SMOKE_FAIL');return String(error);}"
         L"})();";
 
