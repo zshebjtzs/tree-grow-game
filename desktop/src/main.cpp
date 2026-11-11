@@ -319,6 +319,24 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
     case WM_SIZE:
         ResizeWebView(hwnd);
         return 0;
+    case WM_DPICHANGED: {
+        // Windows supplies the correctly scaled outer-window rectangle for the
+        // monitor we are entering. Applying it avoids bitmap virtualization and
+        // keeps the native window and WebView2 client area in physical pixels.
+        const auto* suggested_bounds = reinterpret_cast<const RECT*>(lparam);
+        if (suggested_bounds != nullptr) {
+            SetWindowPos(
+                hwnd,
+                nullptr,
+                suggested_bounds->left,
+                suggested_bounds->top,
+                suggested_bounds->right - suggested_bounds->left,
+                suggested_bounds->bottom - suggested_bounds->top,
+                SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        ResizeWebView(hwnd);
+        return 0;
+    }
     case kSmokeTestFinishedMessage:
         if (g_smoke_test) {
             KillTimer(hwnd, kSmokeTestTimeoutTimer);
@@ -376,10 +394,17 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int show_
         return 1;
     }
 
+    // Keep the original logical window size while scaling its physical
+    // dimensions for the system DPI. Per-monitor changes are handled in WM_DPICHANGED.
+    const UINT system_dpi = GetDpiForSystem();
+    const int initial_dpi = static_cast<int>(system_dpi == 0 ? 96 : system_dpi);
+    const int window_width = MulDiv(1280, initial_dpi, 96);
+    const int window_height = MulDiv(860, initial_dpi, 96);
+
     HWND hwnd = CreateWindowExW(
         0, kWindowClass, L"Tree Grow Game",
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 1280, 860,
+        CW_USEDEFAULT, CW_USEDEFAULT, window_width, window_height,
         nullptr, nullptr, instance, nullptr);
 
     if (!hwnd) {
