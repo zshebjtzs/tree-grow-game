@@ -749,3 +749,8 @@ function renderGame() {
     drawer.renderMap(mapAreas, redBaseId, blueBaseId, mapManager.shortEdges || []);
     drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes, mapManager.portals);
 }
+// Expose a lightweight startup diagnostic after the game module and UI event
+// handlers have initialized. The desktop smoke test uses this without touching
+// gameplay state or requiring a test-only code path.
+document.documentElement.dataset.treeGrowAppReady = 'true';
+document.documentElement.dataset.treeGrowAiWorkerAvailable = String(!!aiWorker);
