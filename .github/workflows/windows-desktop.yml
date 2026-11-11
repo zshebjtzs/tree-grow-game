@@ -94,6 +94,20 @@ jobs:
           Copy-Item build/desktop/out/TreeGrow.exe release/TreeGrow/TreeGrow.exe -Force
           Compress-Archive -Path release/TreeGrow -DestinationPath release/TreeGrow-Windows-x64.zip -Force
 
+      - name: Run WebView2 page and module Worker smoke test
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:GITHUB_WORKSPACE "release/TreeGrow/TreeGrow.exe"
+          $process = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -PassThru -WindowStyle Hidden
+          if (-not $process.WaitForExit(60000)) {
+            Stop-Process -Id $process.Id -Force
+            throw "WebView2 runtime smoke test timed out after 60 seconds."
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "WebView2 page/AI Worker smoke test failed with exit code $($process.ExitCode)."
+          }
+          Write-Host "WebView2 loaded the game page and executed the bundled module AI Worker."
+
       - name: Upload Windows build artifact
         uses: actions/upload-artifact@v4
         with:
