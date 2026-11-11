@@ -20,3 +20,12 @@ set_target_properties(TreeGrow PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/out"
   RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/out"
 )
+
+# Embed a Per-Monitor DPI V2 manifest. The legacy dpiAware element provides
+# a Per-Monitor V1 fallback on older Windows 10 releases.
+if(MSVC)
+  target_link_options(TreeGrow PRIVATE
+    "/MANIFEST:EMBED"
+    "/MANIFESTINPUT:${CMAKE_CURRENT_SOURCE_DIR}/TreeGrow.manifest"
+  )
+endif()
