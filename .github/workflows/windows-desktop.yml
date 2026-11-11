@@ -58,7 +58,20 @@ jobs:
           if (-not $worker) {
             throw "Bundled AI Worker was not found."
           }
-          Write-Host "Frontend entry assets and AI Worker bundle verified."
+          $mainBundles = Get-ChildItem dist/assets -Filter "*.js" | Where-Object { $_.Name -ne $worker.Name }
+          $workerReference = $mainBundles | Where-Object {
+            (Get-Content $_.FullName -Raw).Contains($worker.Name)
+          }
+          if (-not $workerReference) {
+            throw "No application bundle references the generated AI Worker asset."
+          }
+          $moduleWorkerReference = $workerReference | Where-Object {
+            (Get-Content $_.FullName -Raw) -match 'type:"module"'
+          }
+          if (-not $moduleWorkerReference) {
+            throw "The application bundle does not configure the AI Worker as a module worker."
+          }
+          Write-Host "Frontend entry assets, AI Worker asset reference, and module-worker configuration verified."
           
       - name: Install WebView2 SDK
         shell: pwsh
