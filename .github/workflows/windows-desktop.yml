@@ -36,6 +36,30 @@ jobs:
           $env:VITE_BASE_PATH = "/"
           npm run build
 
+      - name: Verify desktop frontend bundle
+        shell: pwsh
+        run: |
+          $html = Get-Content dist/index.html -Raw
+          if ($html -match '/tree-grow-game/') {
+            throw "Desktop bundle contains a GitHub Pages base path."
+          }
+          $refs = [regex]::Matches($html, '(?:src|href)="([^"]+)"') | ForEach-Object { $_.Groups[1].Value }
+          foreach ($ref in $refs) {
+            if ($ref.StartsWith('/')) {
+              $asset = Join-Path "dist" $ref.TrimStart('/')
+            } else {
+              $asset = Join-Path "dist" $ref
+            }
+            if (-not (Test-Path $asset)) {
+              throw "Missing frontend asset: $asset"
+            }
+          }
+          $worker = Get-ChildItem dist/assets -Filter "AIWorker-*.js"
+          if (-not $worker) {
+            throw "Bundled AI Worker was not found."
+          }
+          Write-Host "Frontend entry assets and AI Worker bundle verified."
+          
       - name: Install WebView2 SDK
         shell: pwsh
         run: nuget install Microsoft.Web.WebView2 -Version 1.0.2903.40 -NonInteractive -OutputDirectory packages
