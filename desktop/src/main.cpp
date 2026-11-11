@@ -145,15 +145,41 @@ void StartRuntimeSmokeTest(HWND hwnd) {
     }
 }
 
+std::filesystem::path GetWebViewUserDataDirectory() {
+    const DWORD required = GetEnvironmentVariableW(L"LOCALAPPDATA", nullptr, 0);
+    if (required == 0) return {};
+
+    std::wstring local_app_data(required, L'\\0');
+    const DWORD written = GetEnvironmentVariableW(
+        L"LOCALAPPDATA", local_app_data.data(), required);
+    if (written == 0 || written >= required) return {};
+
+    local_app_data.resize(written);
+    return std::filesystem::path(local_app_data) / L"TreeGrowGame" / L"WebView2";
+}
+
 void InitializeWebView(HWND hwnd) {
     const auto web_dir = g_app_dir / L"www";
+    const auto user_data_dir = GetWebViewUserDataDirectory();
+    if (user_data_dir.empty()) {
+        ReportError(hwnd, L"Could not locate the Windows Local AppData directory.");
+        return;
+    }
+
+    std::error_code directory_error;
+    std::filesystem::create_directories(user_data_dir, directory_error);
+    if (directory_error) {
+        ReportError(hwnd, L"Could not create the WebView2 user data directory.");
+        return;
+    }
     if (!std::filesystem::exists(web_dir / L"index.html")) {
         ReportError(hwnd, L"Missing www/index.html. Please keep the www folder beside TreeGrow.exe.");
         return;
     }
 
+    const std::wstring user_data_path = user_data_dir.wstring();
     const HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(
-        nullptr, nullptr, nullptr,
+        nullptr, user_data_path.c_str(), nullptr,
         Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
             [hwnd, web_dir](HRESULT result, ICoreWebView2Environment* environment) -> HRESULT {
                 if (!IsWindow(hwnd)) return S_OK;
