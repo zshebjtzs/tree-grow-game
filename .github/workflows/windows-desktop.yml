@@ -1,0 +1,63 @@
+name: Windows Desktop Build
+
+on:
+  push:
+    branches:
+      - feat/windows-offline-desktop
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-desktop:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Install WebView2 SDK
+        shell: pwsh
+        run: nuget install Microsoft.Web.WebView2 -Version 1.0.2903.40 -NonInteractive -OutputDirectory packages
+
+      - name: Configure native host
+        shell: pwsh
+        run: |
+          $sdk = Join-Path $env:GITHUB_WORKSPACE "packages/Microsoft.Web.WebView2.1.0.2903.40/build/native"
+          cmake -S desktop -B build/desktop -A x64 "-DWEBVIEW2_SDK_DIR=$sdk"
+
+      - name: Compile native host
+        run: cmake --build build/desktop --config Release
+
+      - name: Assemble portable folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release/TreeGrow/www | Out-Null
+          Copy-Item dist/* release/TreeGrow/www/ -Recurse -Force
+          Copy-Item build/desktop/out/TreeGrow.exe release/TreeGrow/TreeGrow.exe -Force
+          Compress-Archive -Path release/TreeGrow -DestinationPath release/TreeGrow-Windows-x64.zip -Force
+
+      - name: Upload Windows build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TreeGrow-Windows-x64
+          path: release/TreeGrow-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
