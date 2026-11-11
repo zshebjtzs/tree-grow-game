@@ -30,8 +30,11 @@ jobs:
       - name: Run frontend tests
         run: npm test
 
-      - name: Build frontend
-        run: npm run build
+      - name: Build frontend for local virtual HTTPS origin
+        shell: pwsh
+        run: |
+          $env:VITE_BASE_PATH = "/"
+          npm run build
 
       - name: Install WebView2 SDK
         shell: pwsh
