@@ -2,6 +2,7 @@
 #include <wrl.h>
 #include <WebView2.h>
 
+#include <cwchar>
 #include <filesystem>
 #include <string>
 
