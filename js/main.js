@@ -427,7 +427,12 @@ async function loadGame() {
             input.type = 'file';
             input.accept = '.sav,.json';
             const filePromise = new Promise((resolve) => {
-                input.onchange = (e) => resolve(e.target.files[0]);
+                // The file input's cancel event must settle the promise too;
+                // otherwise closing the picker leaves loadGame() pending forever.
+                input.addEventListener('change', (event) => {
+                    resolve(event.target.files?.[0] ?? null);
+                }, { once: true });
+                input.addEventListener('cancel', () => resolve(null), { once: true });
             });
             input.click();
             file = await filePromise;
