@@ -11,7 +11,7 @@ endif()
 
 add_executable(TreeGrow WIN32 src/main.cpp)
 target_compile_features(TreeGrow PRIVATE cxx_std_17)
-target_compile_definitions(TreeGrow PRIVATE UNICODE _UNICODE NOMINMAX)
+target_compile_definitions(TreeGrow PRIVATE UNICODE _UNICODE NOMINMAX WINVER=0x0A00 _WIN32_WINNT=0x0A00)
 target_include_directories(TreeGrow PRIVATE "${WEBVIEW2_SDK_DIR}/include")
 target_link_directories(TreeGrow PRIVATE "${WEBVIEW2_SDK_DIR}/x64")
 target_link_libraries(TreeGrow PRIVATE WebView2LoaderStatic ole32 shlwapi)
