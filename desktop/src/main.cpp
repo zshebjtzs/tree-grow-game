@@ -104,7 +104,9 @@ void StartRuntimeSmokeTest(HWND hwnd) {
     // game state, ran move generation/scoring, and returned a real decision.
     const std::wstring script =
         L"(function(){"
-        L"if(document.readyState!=='complete'||!document.getElementById('gameCanvas')){"
+        L"if(document.readyState!=='complete'||!document.getElementById('gameCanvas')||"
+        L"document.documentElement.dataset.treeGrowAppReady!=='true'||"
+        L"document.documentElement.dataset.treeGrowAiWorkerAvailable!=='true'){"
         L"window.chrome.webview.postMessage('TG_SMOKE_FAIL');return 'no-game-dom';}"
         L"try{"
         L"var worker=new Worker('" + worker_url + L"',{type:'module'});"
