@@ -4,7 +4,7 @@ This directory contains the native Windows WebView2 host for Tree Grow Game.
 
 ## Architecture
 
-- Native window: Win32 + C++17.
+- Native window: Win32 + C++17, with an embedded Per-Monitor DPI V2 manifest, DPI-scaled initial dimensions, and `WM_DPICHANGED` handling for mixed-DPI monitor transitions.
 - Web runtime: Microsoft Edge WebView2 Evergreen Runtime.
 - Frontend: the existing Vite production build copied into the sibling `www/` directory.
 - Virtual origin: `https://treegrow.local/`, mapped directly to `www/` with WebView2 virtual-host mapping.
@@ -29,7 +29,7 @@ Keep the `www/` directory beside `TreeGrow.exe`. Do not move the executable by i
 
 ## Runtime requirement
 
-The target Windows machine must have the **Microsoft Edge WebView2 Evergreen Runtime** installed. The runtime is a system prerequisite and is not bundled into this portable ZIP. The host explicitly creates its WebView2 user-data directory under the current Windows user's Local AppData folder; it does not store browser profile data beside the executable.
+The host declares Per-Monitor DPI V2 awareness so Windows does not bitmap-scale the entire window on high-density displays. It applies the recommended window bounds when moving between monitors with different DPI settings; WebView2 is resized to the resulting client area. The target Windows machine must have the **Microsoft Edge WebView2 Evergreen Runtime** installed. The runtime is a system prerequisite and is not bundled into this portable ZIP. The host explicitly creates its WebView2 user-data directory under the current Windows user's Local AppData folder; it does not store browser profile data beside the executable.
 
 Target: Windows 10/11 x64.
 
