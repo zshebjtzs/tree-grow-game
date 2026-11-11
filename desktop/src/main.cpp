@@ -55,8 +55,15 @@ void InitializeWebView(HWND hwnd) {
                             g_controller = controller;
                             g_controller->get_CoreWebView2(&g_webview);
 
+                            ComPtr<ICoreWebView2_3> webview3;
+                            const HRESULT query_result = g_webview.As(&webview3);
+                            if (FAILED(query_result) || !webview3) {
+                                ShowStartupError(L"This WebView2 Runtime does not support virtual host mapping.");
+                                return S_OK;
+                            }
+
                             const auto folder = web_dir.wstring();
-                            const HRESULT mapping_result = g_webview->SetVirtualHostNameToFolderMapping(
+                            const HRESULT mapping_result = webview3->SetVirtualHostNameToFolderMapping(
                                 kVirtualHost, folder.c_str(),
                                 COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW);
                             if (FAILED(mapping_result)) {
