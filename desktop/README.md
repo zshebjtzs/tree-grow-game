@@ -25,11 +25,11 @@ TreeGrow/
     └── assets/
 ```
 
-Keep the `www/` directory beside `TreeGrow.exe`. Do not move the executable by itself.
+Keep the `www/` directory beside `TreeGrow.exe`. Do not move the executable by itself. WebView2 browser profile data (including origin storage) is kept separately under `%LOCALAPPDATA%\\TreeGrowGame\\WebView2`, so the portable application does not need write access to its installation/extraction directory and profile data survives application restarts.
 
 ## Runtime requirement
 
-The target Windows machine must have the **Microsoft Edge WebView2 Evergreen Runtime** installed. The runtime is a system prerequisite and is not bundled into this portable ZIP.
+The target Windows machine must have the **Microsoft Edge WebView2 Evergreen Runtime** installed. The runtime is a system prerequisite and is not bundled into this portable ZIP. The host explicitly creates its WebView2 user-data directory under the current Windows user's Local AppData folder; it does not store browser profile data beside the executable.
 
 Target: Windows 10/11 x64.
 
