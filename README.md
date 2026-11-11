@@ -113,11 +113,26 @@ npm run build
 
 ### Windows 离线发行
 
-推送形如 `v1.0.0` 的版本标签会触发离线发行工作流。工作流会运行测试和构建，并将生产文件、启动脚本及离线说明打包为 GitHub Release 资产。
+项目提供两种 Windows 离线运行方式，均可在下载并解压后使用：
 
-使用者解压发行包后运行 `Start-Game.ps1`。脚本会启动仅监听本机回环地址的静态 HTTP 服务，并打开浏览器。游戏运行时不需要 Node.js、Python 或互联网连接。
+**方式一：浏览器离线版**
 
-不要直接双击 `dist/index.html` 启动游戏：浏览器对 `file://` 页面中的 ES Modules 和 Web Worker 有加载限制，应通过启动脚本提供的本地 HTTP 地址访问。
+1. 打开仓库的 [Releases 页面](https://github.com/zshebjtzs/tree-grow-game/releases/latest)。
+2. 在最新版本的 Assets 中下载 `tree-grow-game-windows-offline.zip`。
+3. 解压后运行 `Start-Game.ps1`。脚本会启动仅监听本机回环地址的静态 HTTP 服务，并打开浏览器。
+
+该方式不需要安装 Node.js 或 Python，游戏运行时也不需要互联网连接。不要直接双击 `dist/index.html`：浏览器对 `file://` 页面中的 ES Modules 和 Web Worker 有加载限制，应通过启动脚本提供的本地 HTTP 地址访问。
+
+**方式二：原生 Windows 桌面版**
+
+1. 打开仓库的 [Actions 页面](https://github.com/zshebjtzs/tree-grow-game/actions/workflows/windows-desktop.yml)，进入最近一次成功的 **Windows Desktop Build** 工作流运行记录。
+2. 在该运行记录页面底部的 **Artifacts** 区域，下载 `TreeGrow-Windows-x64`。
+3. 解压后运行 `TreeGrow.exe`。必须保持 `www/` 文件夹与 `TreeGrow.exe` 位于同一目录。
+4. 目标电脑需要预先安装 **Microsoft Edge WebView2 Evergreen Runtime**。该系统运行时不包含在 ZIP 中。
+
+桌面版不需要 Node.js、Python 或本地 HTTP 服务；完成启动后，游戏可离线运行。工作流产物有保留期限，若无法下载，请查看更新的成功构建记录或等待对应版本的桌面版资产发布到 Releases。
+
+版本发行在功能分支合并到 `main` 后进行。推送形如 `v1.1.0` 的版本标签会触发离线发行工作流，自动测试、构建并将浏览器离线版 ZIP 发布到 GitHub Release。桌面版 ZIP 由 Windows Desktop Build 工作流生成；在对应版本发行时，应将成功构建得到的 `TreeGrow-Windows-x64.zip` 一并附加到该 GitHub Release。
 
 ## 项目结构
 

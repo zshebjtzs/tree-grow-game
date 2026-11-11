@@ -427,7 +427,12 @@ async function loadGame() {
             input.type = 'file';
             input.accept = '.sav,.json';
             const filePromise = new Promise((resolve) => {
-                input.onchange = (e) => resolve(e.target.files[0]);
+                // The file input's cancel event must settle the promise too;
+                // otherwise closing the picker leaves loadGame() pending forever.
+                input.addEventListener('change', (event) => {
+                    resolve(event.target.files?.[0] ?? null);
+                }, { once: true });
+                input.addEventListener('cancel', () => resolve(null), { once: true });
             });
             input.click();
             file = await filePromise;
@@ -749,3 +754,8 @@ function renderGame() {
     drawer.renderMap(mapAreas, redBaseId, blueBaseId, mapManager.shortEdges || []);
     drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes, mapManager.portals);
 }
+// Expose a lightweight startup diagnostic after the game module and UI event
+// handlers have initialized. The desktop smoke test uses this without touching
+// gameplay state or requiring a test-only code path.
+document.documentElement.dataset.treeGrowAppReady = 'true';
+document.documentElement.dataset.treeGrowAiWorkerAvailable = String(!!aiWorker);
