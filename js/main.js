@@ -47,6 +47,10 @@ const menuBtn = document.getElementById('menuBtn');
 const redNodeCount = document.getElementById('red-node-count');
 const blueNodeCount = document.getElementById('blue-node-count');
 const modeIndicator = document.getElementById('mode-indicator');
+const zoomOutBtn = document.getElementById('zoom-out-btn');
+const zoomInBtn = document.getElementById('zoom-in-btn');
+const fitMapBtn = document.getElementById('fit-map-btn');
+const zoomLevel = document.getElementById('zoom-level');
 const modeSelect = document.getElementById('mode-select');
 const difficultySelect = document.getElementById('difficulty-select');
 const difficultyGroup = document.getElementById('difficulty-group');
@@ -929,10 +933,19 @@ function renderGame() {
 // handlers have initialized. The desktop smoke test uses this without touching
 // gameplay state or requiring a test-only code path.
 const canvasContainer = document.getElementById('canvas-container');
+function updateZoomUI() {
+    if (zoomLevel) zoomLevel.textContent = `${Math.round(drawer.zoom * 100)}%`;
+    if (zoomOutBtn) zoomOutBtn.disabled = drawer.zoom <= 0.5;
+    if (zoomInBtn) zoomInBtn.disabled = drawer.zoom >= 2;
+}
 function fitGameCanvas() {
     if (!canvasContainer || gameScreen.hidden) return;
     drawer.fitToContainer(canvasContainer);
+    updateZoomUI();
 }
+zoomOutBtn.addEventListener('click', () => { drawer.setZoom(drawer.zoom - 0.1); updateZoomUI(); });
+zoomInBtn.addEventListener('click', () => { drawer.setZoom(drawer.zoom + 0.1); updateZoomUI(); });
+fitMapBtn.addEventListener('click', () => { drawer.setZoom(1); fitGameCanvas(); });
 if ('ResizeObserver' in window && canvasContainer) {
     const canvasResizeObserver = new ResizeObserver(() => {
         fitGameCanvas();

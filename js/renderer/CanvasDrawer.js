@@ -7,14 +7,31 @@ export class CanvasDrawer {
         this.ctx = this.canvas.getContext('2d');
         this.logicalWidth = this.canvas.width;
         this.logicalHeight = this.canvas.height;
+        this.zoom = 1;
+        this.fitSize = null;
+    }
+
+    _applyDisplaySize() {
+        if (!this.fitSize || !this.fitSize.width || !this.fitSize.height) return;
+        this.canvas.style.width = `${Math.round(this.fitSize.width * this.zoom)}px`;
+        this.canvas.style.height = `${Math.round(this.fitSize.height * this.zoom)}px`;
+        this.canvas.style.maxWidth = 'none';
+        this.canvas.style.maxHeight = 'none';
+    }
+
+    setZoom(value) {
+        if (!Number.isFinite(value)) throw new TypeError('Zoom must be finite');
+        this.zoom = Math.max(0.5, Math.min(2, value));
+        this._applyDisplaySize();
+        return this.zoom;
     }
 
     fitToContainer(container) {
         if (!container || !this.canvas) return null;
         const fit = calculateCanvasFit(container.clientWidth, container.clientHeight, this.logicalWidth, this.logicalHeight);
         if (fit.width && fit.height) {
-            this.canvas.style.width = `${fit.width}px`;
-            this.canvas.style.height = `${fit.height}px`;
+            this.fitSize = fit;
+            this._applyDisplaySize();
         }
         return fit;
     }
