@@ -12,7 +12,7 @@ let activeMatchConfig = null;
 const LAST_MATCH_KEY = 'treeGrow:lastMatch:v1';
 let game = new GameState();
 const mapManager = new MapManager(1800, 1200);
-let mapAreas = mapManager.generateMap(50);
+let mapAreas = [];
 const drawer = new CanvasDrawer('gameCanvas');
 let ruleEngine = new RuleEngine(mapManager);
 
@@ -35,6 +35,8 @@ let aiRequestId = 0;
 
 // 3. 获取 UI 控件
 const turnIndicator = document.getElementById('turnIndicator');
+const gameHint = document.getElementById('game-hint');
+const stageCaption = document.getElementById('stage-caption-text');
 const endTurnBtn = document.getElementById('endTurn');
 const saveBtn = document.getElementById('saveBtn');
 const loadBtn = document.getElementById('loadBtn');
@@ -313,6 +315,22 @@ function updateUI() {
         endTurnBtn.textContent = '⏭️ 跳过回合';
         endTurnBtn.disabled = game.isGameOver;
     }
+
+    if (stageCaption && gameHint) {
+        if (game.isGameOver) {
+            stageCaption.textContent = '对局结束';
+            gameHint.textContent = '本局已结束。';
+        } else if (gamePhase === 'selectRed') {
+            stageCaption.textContent = '基地部署';
+            gameHint.textContent = '点击地图区域，为红方选择基地。';
+        } else if (gamePhase === 'selectBlue') {
+            stageCaption.textContent = '基地部署';
+            gameHint.textContent = isAIMode ? 'AI 正在选择蓝方基地…' : '点击地图区域，为蓝方选择基地。';
+        } else {
+            stageCaption.textContent = '对局进行中';
+            gameHint.textContent = isAIThinking ? 'AI 对手正在思考…' : '选择己方可生长节点，查看合法目标区域。';
+        }
+    }
 }
 
 
@@ -522,6 +540,9 @@ function applyLoadedGameData(data, sourceName = '存档') {
         renderGame();
         updateUI();
         showAppScreen('game');
+        if (isAIMode && gamePhase === 'playing' && game.currentTurn === 'blue' && !game.isGameOver) {
+            triggerAITurn();
+        }
         console.log('【读档成功】已恢复之前进度！');
         if (sourceName !== '最近一次对局') alert(`✅ 读档成功！读取到文件：${sourceName}`);
 }
