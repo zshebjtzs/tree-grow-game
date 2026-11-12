@@ -1,48 +1,49 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>生长树：图论</title>
-    <link rel="stylesheet" href="./css/style.css">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#101722"><title>生长树：图论</title>
+<link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
-    <div id="app">
-        <div id="ui-header">
-            <h1>🌳 生长树：图论</h1>
-            
-            <!-- 【第二阶段新增】模式选择与参数配置 -->
-            <div id="game-config-panel">
-                <div class="config-group">
-                    <label>模式：</label>
-                    <select id="mode-select">
-                        <option value="pvp">🟢 双人对战 (PVP)</option>
-                        <option value="pve">🤖 人机对战 (PVE)</option>
-                    </select>
-                </div>
-                <div class="config-group" id="difficulty-group" style="display: none;">
-                    <label>难度：</label>
-                    <select id="difficulty-select">
-                        <option value="easy">简单</option>
-                        <option value="medium" selected>普通</option>
-                        <option value="hard">困难</option>
-                    </select>
-                </div>
-                <button id="start-game-btn" class="primary-btn">开始游戏</button>
-            </div>
-
-            <div id="game-status-area">
-                <div id="turnIndicator">准备开局</div>
-                <button id="saveBtn">💾 保存</button>
-                <button id="loadBtn">📂 读档</button>
-                <button id="endTurn">⏭️ 跳过回合</button>
-            </div>
-        </div>
-        <div id="canvas-container">
-            <canvas id="gameCanvas" width="1800" height="1200"></canvas>
-        </div>
-    </div>
-    
-    <script type="module" src="./js/main.js"></script>
-</body>
-</html>
+<main id="app">
+<section id="menu-screen" class="app-screen menu-screen">
+<div class="menu-orbit menu-orbit-one" aria-hidden="true"></div><div class="menu-orbit menu-orbit-two" aria-hidden="true"></div>
+<div class="menu-content">
+<div class="game-mark" aria-hidden="true"><span></span><span></span><span></span><i></i></div>
+<p class="eyebrow">A GRAPH-BASED TERRITORY STRATEGY GAME</p>
+<h1>生长树<span>：图论</span></h1>
+<p class="menu-subtitle">生长你的树，连接你的领地，寻找对手结构中的弱点。</p>
+<nav class="menu-actions" aria-label="主菜单">
+<button id="new-game-btn" class="button button-primary">开始新游戏 <span>→</span></button>
+<button id="continue-game-btn" class="button button-secondary" disabled>继续游戏</button>
+<button id="load-menu-btn" class="button button-secondary">读取存档</button>
+<button id="rules-menu-btn" class="button button-text">游戏说明</button>
+</nav>
+<section id="rules-panel" class="rules-panel" hidden>
+<div class="rules-panel-heading"><h2>游戏目标</h2><button id="close-rules-btn" class="icon-button" aria-label="关闭游戏说明">×</button></div>
+<p>通过生长节点扩展树状结构，争夺地图区域，并利用图结构攻击对手。</p>
+<ul><li>进入敌方基地，或摧毁对方全部根节点即可获胜。</li><li>选择己方可生长节点，地图会标出合法目标区域。</li><li>不同节点结构受到攻击时会产生不同战斗结果。</li></ul>
+<p class="rules-note">完整规则请查看仓库中的 GAME-RULES.md。</p>
+</section>
+<p class="menu-footer">TREE GROW · STRATEGY / GRAPH THEORY</p>
+</div></section>
+<section id="setup-screen" class="app-screen setup-screen" hidden>
+<div class="setup-card">
+<button id="back-to-menu-btn" class="back-link">← 返回主菜单</button>
+<p class="eyebrow">NEW MATCH</p><h1>对局配置</h1><p class="setup-description">选择对战方式，配置完成后进入地图。</p>
+<div class="setup-field"><label for="mode-select">对战模式</label><select id="mode-select"><option value="pvp">双人对战 · PVP</option><option value="pve">人机对战 · PVE</option></select></div>
+<div class="setup-field" id="difficulty-group" hidden><label for="difficulty-select">AI 难度</label><select id="difficulty-select"><option value="easy">简单</option><option value="medium" selected>普通</option><option value="hard">困难</option></select></div>
+<div class="setup-note"><span class="status-dot"></span> 红方先手。双方基地将在地图上依次确定。</div>
+<button id="start-game-btn" class="button button-primary setup-start">创建对局 <span>→</span></button>
+</div></section>
+<section id="game-screen" class="game-screen" hidden>
+<header id="ui-header" class="game-header">
+<div class="game-brand"><span class="brand-symbol">枝</span><div><strong>生长树：图论</strong><small>STRATEGY MATCH</small></div></div>
+<div id="game-status-area"><div id="turnIndicator">准备开局</div><button id="saveBtn" class="toolbar-button">保存</button><button id="loadBtn" class="toolbar-button">读档</button><button id="endTurn" class="toolbar-button toolbar-primary" disabled>跳过回合</button></div>
+</header>
+<div class="game-stage"><div class="stage-caption"><span class="stage-indicator"></span> 对局进行中</div><div id="canvas-container"><canvas id="gameCanvas" width="1800" height="1200"></canvas></div><p class="game-hint">选择己方节点查看合法生长区域 · 点击高亮区域完成生长</p></div>
+</section>
+</main>
+<script type="module" src="./js/main.js"></script>
+</body></html>
