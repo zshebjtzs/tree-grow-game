@@ -5,7 +5,7 @@ export class CanvasDrawer {
         this.ctx = this.canvas.getContext('2d');
     }
 
-    renderMap(areas, redBaseId = null, blueBaseId = null, shortEdges = []) {
+    renderMap(areas, redBaseId = null, blueBaseId = null, shortEdges = [], legalAreaIds = new Set()) {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -31,6 +31,13 @@ export class CanvasDrawer {
             else if (area.id === blueBaseId) ctx.fillStyle = 'rgba(0, 0, 255, 0.25)';
             else ctx.fillStyle = '#f8f9fa';
             ctx.fill();
+
+            // Legal destinations receive a translucent teal overlay. Because it is
+            // composited over the base fill, red/blue base identity remains visible.
+            if (legalAreaIds?.has(area.id)) {
+                ctx.fillStyle = 'rgba(25, 178, 145, 0.30)';
+                ctx.fill();
+            }
 
             ctx.strokeStyle = '#333';
             ctx.lineWidth = 2;
