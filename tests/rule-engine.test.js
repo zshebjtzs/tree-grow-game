@@ -63,3 +63,31 @@ test('growth accepts a valid neighbor even when the target has no adjacency entr
     assert.equal(result.allowed, true);
     assert.deepEqual(result.path, [1, 2]);
 });
+
+
+test('legal growth preview returns exactly the areas accepted by canGrow', () => {
+    const { game, engine, root } = setup();
+    const areaIds = [1, 2, 3, 4, 5];
+    assert.deepEqual(
+        engine.getLegalGrowthAreas(game, root, areaIds),
+        [2, 3]
+    );
+});
+
+test('legal growth preview respects occupied intermediate areas and alternate routes', () => {
+    const engine = new RuleEngine({
+        adjacency: { 1: [2, 3], 2: [1, 4], 3: [1, 4], 4: [2, 3], 5: [] }
+    });
+    const game = new GameState();
+    const root = game.addNode(null, 0, 0, 1, 'red');
+    game.addNode(null, 0, 0, 5, 'red'); // Enables the two-edge root privilege.
+    game.addNode(null, 0, 0, 2, 'blue'); // Blocks only one route to area 4.
+    assert.deepEqual(engine.getLegalGrowthAreas(game, root, [2, 3, 4]), [3, 4]);
+});
+
+test('legal growth preview rejects invalid parent states and invalid area lists', () => {
+    const { game, engine, root } = setup();
+    root.isFrozen = true;
+    assert.deepEqual(engine.getLegalGrowthAreas(game, root, [2, 3]), []);
+    assert.throws(() => engine.getLegalGrowthAreas(game, root, null), TypeError);
+});
