@@ -524,12 +524,6 @@ function applyLoadedGameData(data, sourceName = '存档') {
         showAppScreen('game');
         console.log('【读档成功】已恢复之前进度！');
         if (sourceName !== '最近一次对局') alert(`✅ 读档成功！读取到文件：${sourceName}`);
-    } catch (err) {
-        if (err.name !== 'AbortError') {
-            console.error('读档出错：', err);
-            alert('❌ 读取存档失败，请检查文件或控制台报错。');
-        }
-    }
 }
 
 saveBtn.addEventListener('click', saveGame);
