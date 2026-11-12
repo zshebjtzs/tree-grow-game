@@ -82,7 +82,8 @@ test('legal growth preview respects occupied intermediate areas and alternate ro
     const root = game.addNode(null, 0, 0, 1, 'red');
     game.addNode(null, 0, 0, 5, 'red'); // Enables the two-edge root privilege.
     game.addNode(null, 0, 0, 2, 'blue'); // Blocks only one route to area 4.
-    assert.deepEqual(engine.getLegalGrowthAreas(game, root, [2, 3, 4]), [3, 4]);
+    assert.deepEqual(engine.getLegalGrowthAreas(game, root, [2, 3, 4]), [2, 3, 4]);
+    assert.deepEqual(engine.canGrow(game, root, 4).path, [1, 3, 4]);
 });
 
 test('legal growth preview rejects invalid parent states and invalid area lists', () => {
