@@ -95,3 +95,68 @@ test('zoom is clamped to the supported range', () => {
     assert.equal(drawer.setZoom(3), 2);
     assert.throws(() => drawer.setZoom(NaN), TypeError);
 });
+
+
+function createViewportDrawer() {
+    const drawer = Object.create(CanvasDrawer.prototype);
+    const classes = new Set();
+    const canvas = {
+        width: 1800, height: 1200, style: {},
+        classList: { toggle(name, enabled) { enabled ? classes.add(name) : classes.delete(name); } },
+        getBoundingClientRect() { return { left: 100, top: 50, width: 900, height: 600 }; }
+    };
+    Object.assign(drawer, {
+        canvas, logicalWidth: 1800, logicalHeight: 1200, zoom: 1,
+        fitSize: null, container: null, offsetX: 0, offsetY: 0, mode: 'locked'
+    });
+    return { drawer, canvas, classes };
+}
+
+test('viewport pan is bounded and reflected in the canvas transform', () => {
+    const { drawer, canvas } = createViewportDrawer();
+    drawer.fitToContainer({ clientWidth: 1000, clientHeight: 500 });
+    drawer.setZoom(2);
+    const pan = drawer.setPan(10000, -10000);
+    assert.deepEqual(pan, { x: 322, y: -322 });
+    assert.equal(canvas.style.transform, 'translate3d(322px, -322px, 0px)');
+});
+
+test('resetViewport restores default zoom and centered position', () => {
+    const { drawer, canvas } = createViewportDrawer();
+    drawer.fitToContainer({ clientWidth: 1000, clientHeight: 500 });
+    drawer.setZoom(1.6);
+    drawer.setPan(100, -80);
+    drawer.resetViewport();
+    assert.equal(drawer.zoom, 1);
+    assert.equal(drawer.offsetX, 0);
+    assert.equal(drawer.offsetY, 0);
+    assert.equal(canvas.style.transform, 'translate3d(0px, 0px, 0px)');
+});
+
+test('screen coordinates map back to the unchanged logical canvas coordinates', () => {
+    const { drawer } = createViewportDrawer();
+    const point = drawer.getLogicalPoint(550, 350);
+    assert.deepEqual(point, { x: 900, y: 600 });
+});
+
+test('viewport mode toggles the pan cursor state without changing game data', () => {
+    const { drawer, classes } = createViewportDrawer();
+    assert.equal(drawer.isLocked, true);
+    drawer.setMode('unlocked');
+    assert.equal(drawer.isLocked, false);
+    assert.ok(classes.has('is-pan-mode'));
+    drawer.setMode('locked');
+    assert.equal(drawer.isLocked, true);
+    assert.ok(!classes.has('is-pan-mode'));
+    assert.throws(() => drawer.setMode('dragging'), TypeError);
+});
+
+test('resizing the viewport recalculates fit while preserving the current zoom level', () => {
+    const { drawer, canvas } = createViewportDrawer();
+    drawer.fitToContainer({ clientWidth: 1000, clientHeight: 500 });
+    drawer.setZoom(1.2);
+    drawer.fitToContainer({ clientWidth: 800, clientHeight: 600 });
+    assert.equal(drawer.zoom, 1.2);
+    assert.equal(canvas.style.width, '720px');
+    assert.equal(canvas.style.height, '480px');
+});
