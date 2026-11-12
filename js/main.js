@@ -671,6 +671,13 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
         if ((dx * dx + dy * dy) <= 256) { clickedNode = node; break; }
     }
 
+    // A highlighted enemy-occupied area is a valid attack destination.
+    // Clicking the enemy node itself must therefore fall through to target-area handling.
+    if (clickedNode && clickedNode.owner !== game.currentTurn &&
+        selectedNodeId !== null && legalAreaIds.has(clickedNode.areaId)) {
+        clickedNode = null;
+    }
+
     if (clickedNode) {
         // 1. 所有拦截判断：利用卫语句提前阻断非法操作
 
