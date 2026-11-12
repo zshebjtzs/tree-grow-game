@@ -35,6 +35,15 @@ export class RuleEngine {
         return new Set(gameState.getAliveNodesByOwner(owner).map(node => node.areaId)).size;
     }
 
+    getLegalGrowthAreas(gameState, parentNode, areaIds, options = {}) {
+        if (!Array.isArray(areaIds)) {
+            throw new TypeError('areaIds 必须是区域 ID 数组');
+        }
+        return areaIds.filter(areaId =>
+            this.canGrow(gameState, parentNode, areaId, options).allowed
+        );
+    }
+
     canGrow(gameState, parentNode, childAreaId, options = {}) {
         const { ownBaseId = null, enemyBaseId = null } = options;
         if (gameState.isGameOver) return { allowed: false, reason: '游戏已结束' };
