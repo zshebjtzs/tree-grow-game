@@ -51,6 +51,8 @@ const zoomOutBtn = document.getElementById('zoom-out-btn');
 const zoomInBtn = document.getElementById('zoom-in-btn');
 const fitMapBtn = document.getElementById('fit-map-btn');
 const zoomLevel = document.getElementById('zoom-level');
+const viewportModeBtn = document.getElementById('viewport-mode-btn');
+const resetViewportBtn = document.getElementById('reset-viewport-btn');
 const modeSelect = document.getElementById('mode-select');
 const difficultySelect = document.getElementById('difficulty-select');
 const difficultyGroup = document.getElementById('difficulty-group');
@@ -677,12 +679,11 @@ startGameBtn.addEventListener('click', beginNewMatch);
 // 画布点击事件
 // ==========================================
 document.getElementById('gameCanvas').addEventListener('click', (e) => {
+    if (!drawer.isLocked) return;
     if (isPaused || isAnimating || isAIThinking) return; 
-    const rect = e.target.getBoundingClientRect();
-    const scaleX = e.target.width / rect.width;
-    const scaleY = e.target.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const point = drawer.getLogicalPoint(e.clientX, e.clientY);
+    if (!point) return;
+    const { x, y } = point;
 
     const clickedAreaId = mapManager.getAreaAtPoint(x, y);
     if (clickedAreaId === null) return;
@@ -933,19 +934,101 @@ function renderGame() {
 // handlers have initialized. The desktop smoke test uses this without touching
 // gameplay state or requiring a test-only code path.
 const canvasContainer = document.getElementById('canvas-container');
+const gameCanvas = document.getElementById('gameCanvas');
+let panGesture = null;
+let suppressNextCanvasClick = false;
+
 function updateZoomUI() {
     if (zoomLevel) zoomLevel.textContent = `${Math.round(drawer.zoom * 100)}%`;
     if (zoomOutBtn) zoomOutBtn.disabled = drawer.zoom <= 0.5;
     if (zoomInBtn) zoomInBtn.disabled = drawer.zoom >= 2;
+}
+function updateViewportModeUI() {
+    if (!viewportModeBtn) return;
+    viewportModeBtn.textContent = drawer.isLocked ? '解锁地图' : '锁定地图';
+    viewportModeBtn.setAttribute('aria-pressed', String(!drawer.isLocked));
+    viewportModeBtn.setAttribute('aria-label', drawer.isLocked ? '解锁地图并启用拖动浏览' : '锁定地图并恢复游戏操作');
+    if (canvasContainer) {
+        canvasContainer.dataset.viewportMode = drawer.mode;
+        canvasContainer.setAttribute('aria-describedby', 'viewport-mode-hint');
+    }
+    if (gameScreen) gameScreen.dataset.viewportMode = drawer.mode;
 }
 function fitGameCanvas() {
     if (!canvasContainer || gameScreen.hidden) return;
     drawer.fitToContainer(canvasContainer);
     updateZoomUI();
 }
+function resetMapViewport(recalculateFit = false) {
+    if (recalculateFit) fitGameCanvas();
+    drawer.resetViewport();
+    updateZoomUI();
+}
+function setViewportMode(mode) {
+    drawer.setMode(mode);
+    panGesture = null;
+    updateViewportModeUI();
+    gameCanvas.classList.remove('is-panning');
+}
 zoomOutBtn.addEventListener('click', () => { drawer.setZoom(drawer.zoom - 0.1); updateZoomUI(); });
 zoomInBtn.addEventListener('click', () => { drawer.setZoom(drawer.zoom + 0.1); updateZoomUI(); });
-fitMapBtn.addEventListener('click', () => { drawer.setZoom(1); fitGameCanvas(); });
+fitMapBtn.addEventListener('click', () => resetMapViewport(true));
+resetViewportBtn.addEventListener('click', () => resetMapViewport(false));
+viewportModeBtn.addEventListener('click', () => setViewportMode(drawer.isLocked ? 'unlocked' : 'locked'));
+
+for (const control of [pauseBtn, saveBtn, loadBtn, restartBtn, menuBtn, endTurnBtn]) {
+    control?.addEventListener('click', event => {
+        if (!drawer.isLocked) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        }
+    }, true);
+}
+
+gameCanvas.addEventListener('pointerdown', event => {
+    if (drawer.isLocked || event.button !== 0 || !canvasContainer) return;
+    event.preventDefault();
+    panGesture = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: drawer.offsetX,
+        originY: drawer.offsetY,
+        moved: false
+    };
+    gameCanvas.setPointerCapture?.(event.pointerId);
+    gameCanvas.classList.add('is-panning');
+});
+gameCanvas.addEventListener('pointermove', event => {
+    if (!panGesture || panGesture.pointerId !== event.pointerId) return;
+    const dx = event.clientX - panGesture.startX;
+    const dy = event.clientY - panGesture.startY;
+    if (Math.hypot(dx, dy) > 3) panGesture.moved = true;
+    if (panGesture.moved) {
+        event.preventDefault();
+        drawer.setPan(panGesture.originX + dx, panGesture.originY + dy);
+    }
+});
+function finishPanGesture(event) {
+    if (!panGesture || (event && panGesture.pointerId !== event.pointerId)) return;
+    const moved = panGesture.moved;
+    panGesture = null;
+    gameCanvas.classList.remove('is-panning');
+    if (moved) {
+        suppressNextCanvasClick = true;
+        window.setTimeout(() => { suppressNextCanvasClick = false; }, 0);
+    }
+}
+gameCanvas.addEventListener('pointerup', finishPanGesture);
+gameCanvas.addEventListener('pointercancel', finishPanGesture);
+gameCanvas.addEventListener('lostpointercapture', finishPanGesture);
+gameCanvas.addEventListener('click', event => {
+    if (!drawer.isLocked || suppressNextCanvasClick) {
+        event.stopImmediatePropagation();
+        event.preventDefault();
+    }
+}, true);
+
 if ('ResizeObserver' in window && canvasContainer) {
     const canvasResizeObserver = new ResizeObserver(() => {
         fitGameCanvas();
@@ -955,5 +1038,7 @@ if ('ResizeObserver' in window && canvasContainer) {
 } else {
     window.addEventListener('resize', () => { fitGameCanvas(); if (!gameScreen.hidden && mapAreas.length) renderGame(); });
 }
+updateViewportModeUI();
+updateZoomUI();
 document.documentElement.dataset.treeGrowAppReady = 'true';
 document.documentElement.dataset.treeGrowAiWorkerAvailable = String(!!aiWorker);
