@@ -106,10 +106,12 @@ test('AI combat simulation preserves defender freeze until the defender complete
     const game = new GameState();
     game.currentTurn = 'red';
     const redRoot = game.addNode(null, 0, 0, 1, 'red');
+    game.currentTurn = 'blue';
     const blueRoot = game.addNode(null, 0, 0, 4, 'blue');
     const branch = game.addNode(blueRoot.id, 0, 0, 5, 'blue');
     game.addNode(branch.id, 0, 0, 7, 'blue');
     game.addNode(branch.id, 0, 0, 6, 'blue');
+    game.currentTurn = 'red';
     const ai = new AIController('hard', adjacency, centers);
     const next = ai._simulateMove(game, {
         parentNodeId: redRoot.id, targetAreaId: 6, x: 50, y: 0, attacks: true
