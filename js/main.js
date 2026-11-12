@@ -17,6 +17,7 @@ let gamePhase = 'selectRed';
 let redBaseId = null;
 let blueBaseId = null;
 let selectedNodeId = null;
+let legalAreaIds = new Set();
 
 let dyingNodes = [];
 let isAnimating = false;
@@ -498,6 +499,7 @@ async function loadGame() {
         blueBaseId = data.blueBaseId;
         gamePhase = data.gamePhase;
         selectedNodeId = null;
+        legalAreaIds = new Set();
 
         // 重建规则引擎
         ruleEngine = new RuleEngine(mapManager);
@@ -545,6 +547,7 @@ startGameBtn.addEventListener('click', () => {
     redBaseId = null;
     blueBaseId = null;
     selectedNodeId = null;
+    legalAreaIds = new Set();
     dyingNodes = [];
     isAnimating = false;
     isAIThinking = false;
@@ -668,6 +671,13 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
         if ((dx * dx + dy * dy) <= 256) { clickedNode = node; break; }
     }
 
+    // A highlighted enemy-occupied area is a valid attack destination.
+    // Clicking the enemy node itself must therefore fall through to target-area handling.
+    if (clickedNode && clickedNode.owner !== game.currentTurn &&
+        selectedNodeId !== null && legalAreaIds.has(clickedNode.areaId)) {
+        clickedNode = null;
+    }
+
     if (clickedNode) {
         // 1. 所有拦截判断：利用卫语句提前阻断非法操作
 
@@ -749,9 +759,42 @@ endTurnBtn.addEventListener('click', () => {
     performSkipTurn();
 });
 
+function refreshLegalAreaHighlights() {
+    legalAreaIds = new Set();
+
+    // The preview is for the human player's current action only. In PVE,
+    // never expose the AI's legal destinations while it is thinking or acting.
+    if (gamePhase !== 'playing' || game.isGameOver || isAnimating || isAIThinking ||
+        (isAIMode && game.currentTurn === 'blue') || selectedNodeId === null) {
+        return;
+    }
+
+    const parentNode = game.getNode(selectedNodeId);
+    if (!parentNode || parentNode.isDestroyed || parentNode.owner !== game.currentTurn) {
+        return;
+    }
+
+    const ownBaseId = game.currentTurn === 'red' ? redBaseId : blueBaseId;
+    const enemyBaseId = game.currentTurn === 'red' ? blueBaseId : redBaseId;
+    const areaIds = mapAreas.map(area => area.id);
+    legalAreaIds = new Set(ruleEngine.getLegalGrowthAreas(
+        game,
+        parentNode,
+        areaIds,
+        { ownBaseId, enemyBaseId }
+    ));
+}
+
 function renderGame() {
-    // 将 mapManager.shortEdges 传递给 CanvasDrawer
-    drawer.renderMap(mapAreas, redBaseId, blueBaseId, mapManager.shortEdges || []);
+    refreshLegalAreaHighlights();
+    // 将地图拓扑与合法目标区域交给绘制层；规则仍由 RuleEngine 独占。
+    drawer.renderMap(
+        mapAreas,
+        redBaseId,
+        blueBaseId,
+        mapManager.shortEdges || [],
+        legalAreaIds
+    );
     drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes, mapManager.portals);
 }
 // Expose a lightweight startup diagnostic after the game module and UI event
