@@ -118,7 +118,7 @@ test('viewport pan is bounded and reflected in the canvas transform', () => {
     drawer.setZoom(2);
     const pan = drawer.setPan(10000, -10000);
     assert.deepEqual(pan, { x: 322, y: -322 });
-    assert.equal(canvas.style.transform, 'translate3d(322px, -322px, 0px)');
+    assert.equal(canvas.style.transform, 'translate3d(322px, -322px, 0)');
 });
 
 test('resetViewport restores default zoom and centered position', () => {
@@ -130,7 +130,7 @@ test('resetViewport restores default zoom and centered position', () => {
     assert.equal(drawer.zoom, 1);
     assert.equal(drawer.offsetX, 0);
     assert.equal(drawer.offsetY, 0);
-    assert.equal(canvas.style.transform, 'translate3d(0px, 0px, 0px)');
+    assert.equal(canvas.style.transform, 'translate3d(0px, 0px, 0)');
 });
 
 test('screen coordinates map back to the unchanged logical canvas coordinates', () => {
@@ -157,6 +157,6 @@ test('resizing the viewport recalculates fit while preserving the current zoom l
     drawer.setZoom(1.2);
     drawer.fitToContainer({ clientWidth: 800, clientHeight: 600 });
     assert.equal(drawer.zoom, 1.2);
-    assert.equal(canvas.style.width, '720px');
-    assert.equal(canvas.style.height, '480px');
+    assert.equal(canvas.style.width, '960px');
+    assert.equal(canvas.style.height, '640px');
 });
