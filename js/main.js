@@ -25,6 +25,7 @@ let legalAreaIds = new Set();
 
 let dyingNodes = [];
 let isAnimating = false;
+let isPaused = false;
 let combatTimeoutId = null;
 
 // --- AI 相关变量 ---
@@ -40,6 +41,12 @@ const stageCaption = document.getElementById('stage-caption-text');
 const endTurnBtn = document.getElementById('endTurn');
 const saveBtn = document.getElementById('saveBtn');
 const loadBtn = document.getElementById('loadBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const restartBtn = document.getElementById('restartBtn');
+const menuBtn = document.getElementById('menuBtn');
+const redNodeCount = document.getElementById('red-node-count');
+const blueNodeCount = document.getElementById('blue-node-count');
+const modeIndicator = document.getElementById('mode-indicator');
 const modeSelect = document.getElementById('mode-select');
 const difficultySelect = document.getElementById('difficulty-select');
 const difficultyGroup = document.getElementById('difficulty-group');
@@ -267,7 +274,7 @@ function invalidateAIRequest() {
 // --- 触发 AI 运算 ---
 function triggerAITurn() {
     console.log('【AI 追踪 1】检测到 AI 回合，准备发送消息给 Worker');
-    if (!isAIMode || game.currentTurn !== 'blue' || isAIThinking || game.isGameOver) return;
+    if (isPaused || !isAIMode || game.currentTurn !== 'blue' || isAIThinking || game.isGameOver) return;
     if (!aiWorker) {
         failAITurn('当前环境不支持 AI Worker');
         return;
@@ -300,7 +307,14 @@ function triggerAITurn() {
 
 // 界面更新函数
 function updateUI() {
-    if (gamePhase === 'selectRed') {
+    if (pauseBtn) { pauseBtn.textContent = isPaused ? '继续' : '暂停'; pauseBtn.disabled = gamePhase !== 'playing' || game.isGameOver || isAnimating || isAIThinking; }
+    if (restartBtn) restartBtn.disabled = isAnimating || isAIThinking;
+    if (menuBtn) menuBtn.disabled = isAnimating || isAIThinking;
+    if (redNodeCount) redNodeCount.textContent = String(game.getAliveNodesByOwner('red').length);
+    if (blueNodeCount) blueNodeCount.textContent = String(game.getAliveNodesByOwner('blue').length);
+    if (modeIndicator) modeIndicator.textContent = isAIMode ? `人机 · ${difficultySelect.value === 'easy' ? '简单' : difficultySelect.value === 'hard' ? '困难' : '普通'}` : '双人对战';
+    if (isPaused) { turnIndicator.textContent = '对局已暂停'; endTurnBtn.disabled = true; }
+    else if (gamePhase === 'selectRed') {
         turnIndicator.innerHTML = '🔴 <strong>红方玩家</strong>，请点击地图上的区域作为你的基地！';
         endTurnBtn.disabled = true;
     } else if (gamePhase === 'selectBlue') {
@@ -317,7 +331,10 @@ function updateUI() {
     }
 
     if (stageCaption && gameHint) {
-        if (game.isGameOver) {
+        if (isPaused) {
+            stageCaption.textContent = '已暂停';
+            gameHint.textContent = '对局已暂停。点击“继续”恢复操作。';
+        } else if (game.isGameOver) {
             stageCaption.textContent = '对局结束';
             gameHint.textContent = '本局已结束。';
         } else if (gamePhase === 'selectRed') {
@@ -503,6 +520,7 @@ function applyLoadedGameData(data, sourceName = '存档') {
             combatTimeoutId = null;
         }
         isAnimating = false;
+        isPaused = false;
         dyingNodes = [];
         mapManager.areas = restoredMapManager.areas;
         mapManager.voronoi = restoredMapManager.voronoi;
@@ -559,6 +577,7 @@ function showAppScreen(screen) {
     setupScreen.hidden = screen !== 'setup';
     gameScreen.hidden = screen !== 'game';
     document.body.dataset.screen = screen;
+    if (screen === 'game') requestAnimationFrame(() => fitGameCanvas());
     if (screen === 'menu') updateMenuUI();
 }
 
@@ -615,6 +634,7 @@ function beginNewMatch() {
     dyingNodes = [];
     isAnimating = false;
     isAIThinking = false;
+    isPaused = false;
     
     // 重新渲染地图
     drawer.renderMap(mapAreas);
@@ -653,8 +673,7 @@ startGameBtn.addEventListener('click', beginNewMatch);
 // 画布点击事件
 // ==========================================
 document.getElementById('gameCanvas').addEventListener('click', (e) => {
-    // 增加 AI 思考打断
-    if (isAnimating || isAIThinking) return; 
+    if (isPaused || isAnimating || isAIThinking) return; 
     const rect = e.target.getBoundingClientRect();
     const scaleX = e.target.width / rect.width;
     const scaleY = e.target.height / rect.height;
@@ -844,8 +863,24 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
     }
 });
 
+pauseBtn.addEventListener('click', () => {
+    if (gamePhase !== 'playing' || game.isGameOver || isAnimating || isAIThinking) return;
+    isPaused = !isPaused; selectedNodeId = null; updateUI(); renderGame();
+});
+restartBtn.addEventListener('click', () => {
+    if (isAnimating || isAIThinking || !confirm('重新开始将结束当前对局并生成新地图，是否继续？')) return;
+    beginNewMatch();
+});
+menuBtn.addEventListener('click', () => {
+    if (isAnimating || isAIThinking || !confirm('返回主菜单？当前对局会自动保存，可从主菜单继续。')) return;
+    isPaused = false; selectedNodeId = null; showAppScreen('menu');
+});
+document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !gameScreen.hidden && pauseBtn && !pauseBtn.disabled) pauseBtn.click();
+});
+
 endTurnBtn.addEventListener('click', () => {
-    if (game.isGameOver || gamePhase !== 'playing' || isAnimating || isAIThinking) return;
+    if (isPaused || game.isGameOver || gamePhase !== 'playing' || isAnimating || isAIThinking) return;
     selectedNodeId = null;
     // 所有跳过回合入口统一处理解冻、切换回合及 AI 触发。
     performSkipTurn();
@@ -893,5 +928,19 @@ function renderGame() {
 // Expose a lightweight startup diagnostic after the game module and UI event
 // handlers have initialized. The desktop smoke test uses this without touching
 // gameplay state or requiring a test-only code path.
+const canvasContainer = document.getElementById('canvas-container');
+function fitGameCanvas() {
+    if (!canvasContainer || gameScreen.hidden) return;
+    drawer.fitToContainer(canvasContainer);
+}
+if ('ResizeObserver' in window && canvasContainer) {
+    const canvasResizeObserver = new ResizeObserver(() => {
+        fitGameCanvas();
+        if (!gameScreen.hidden && mapAreas.length) renderGame();
+    });
+    canvasResizeObserver.observe(canvasContainer);
+} else {
+    window.addEventListener('resize', () => { fitGameCanvas(); if (!gameScreen.hidden && mapAreas.length) renderGame(); });
+}
 document.documentElement.dataset.treeGrowAppReady = 'true';
 document.documentElement.dataset.treeGrowAiWorkerAvailable = String(!!aiWorker);
