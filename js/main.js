@@ -1,11 +1,15 @@
 // js/main.js
 import { GameState } from './game/GameState.js';
+import { AppState } from './app/AppState.js';
 import { MapManager } from './core/MapManager.js';
 import { CanvasDrawer } from './renderer/CanvasDrawer.js';
 import { RuleEngine } from './game/RuleEngine.js';
 import { resolveCombat } from './game/CombatResolver.js';
 
 // 1. 初始化各模块
+const appState = new AppState();
+let activeMatchConfig = null;
+const LAST_MATCH_KEY = 'treeGrow:lastMatch:v1';
 let game = new GameState();
 const mapManager = new MapManager(1800, 1200);
 let mapAreas = mapManager.generateMap(50);
@@ -38,6 +42,16 @@ const modeSelect = document.getElementById('mode-select');
 const difficultySelect = document.getElementById('difficulty-select');
 const difficultyGroup = document.getElementById('difficulty-group');
 const startGameBtn = document.getElementById('start-game-btn');
+const menuScreen = document.getElementById('menu-screen');
+const setupScreen = document.getElementById('setup-screen');
+const gameScreen = document.getElementById('game-screen');
+const newGameBtn = document.getElementById('new-game-btn');
+const continueGameBtn = document.getElementById('continue-game-btn');
+const loadMenuBtn = document.getElementById('load-menu-btn');
+const backToMenuBtn = document.getElementById('back-to-menu-btn');
+const rulesMenuBtn = document.getElementById('rules-menu-btn');
+const rulesPanel = document.getElementById('rules-panel');
+const closeRulesBtn = document.getElementById('close-rules-btn');
 
 // --- AI Worker 初始化 ---
 function failAITurn(message) {
@@ -343,6 +357,7 @@ function generateRootNodesInArea(areaId, owner, count = 3) {
 drawer.renderMap(mapAreas);
 drawer.renderNodes(game.getAliveNodes(), selectedNodeId);
 updateUI();
+showAppScreen('menu');
 
 // 存读档逻辑
 function getGameBlob() {
@@ -355,13 +370,14 @@ function getGameBlob() {
         return null;
     }
     const data = {
+        schemaVersion: 1,
         gameState: game.toJSON(),
         mapSeeds: mapManager.seeds,
         redBaseId: redBaseId,
         blueBaseId: blueBaseId,
         gamePhase: gamePhase,
         isAIMode: isAIMode,
-        difficulty: difficultySelect.value
+        difficulty: activeMatchConfig?.difficulty || difficultySelect.value
     };
     return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
 }
@@ -412,37 +428,34 @@ function fallbackDownload(blob) {
 async function loadGame() {
     try {
         let file;
-        // 方案一：调用系统原生的“打开文件”选择框
         if ('showOpenFilePicker' in window) {
             const [handle] = await window.showOpenFilePicker({
-                types: [{
-                    description: '生长树存档文件',
-                    accept: { 'application/json': ['.sav', '.json'] }
-                }],
+                types: [{ description: '生长树存档文件', accept: { 'application/json': ['.sav', '.json'] } }],
                 multiple: false
             });
             file = await handle.getFile();
         } else {
-            // 方案二：兼容不支持 API 的浏览器，通过隐藏的 input 元素选取文件
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = '.sav,.json';
-            const filePromise = new Promise((resolve) => {
-                // The file input's cancel event must settle the promise too;
-                // otherwise closing the picker leaves loadGame() pending forever.
-                input.addEventListener('change', (event) => {
-                    resolve(event.target.files?.[0] ?? null);
-                }, { once: true });
+            const filePromise = new Promise(resolve => {
+                input.addEventListener('change', event => resolve(event.target.files?.[0] ?? null), { once: true });
                 input.addEventListener('cancel', () => resolve(null), { once: true });
             });
             input.click();
             file = await filePromise;
             if (!file) return;
         }
+        applyLoadedGameData(JSON.parse(await file.text()), file.name);
+    } catch (err) {
+        if (err.name !== 'AbortError') {
+            console.error('读档出错：', err);
+            alert('❌ 读取存档失败，请检查文件或控制台报错。');
+        }
+    }
+}
 
-        const text = await file.text();
-        const data = JSON.parse(text);
-
+function applyLoadedGameData(data, sourceName = '存档') {
         // 先在临时对象中完整验证存档，失败时不触碰当前游戏。
         if (!Array.isArray(data.mapSeeds) || data.mapSeeds.length !== 50 ||
             !data.mapSeeds.every(seed => Array.isArray(seed) && seed.length === 2 &&
@@ -492,7 +505,7 @@ async function loadGame() {
         if (['easy', 'medium', 'hard'].includes(data.difficulty)) {
             difficultySelect.value = data.difficulty;
         }
-        difficultyGroup.style.display = isAIMode ? 'flex' : 'none';
+        difficultyGroup.hidden = !isAIMode;
 
         // 恢复变量
         redBaseId = data.redBaseId;
@@ -504,11 +517,13 @@ async function loadGame() {
         // 重建规则引擎
         ruleEngine = new RuleEngine(mapManager);
 
-        // 5. 重新渲染并更新UI
+        activeMatchConfig = Object.freeze({ mode: isAIMode ? 'pve' : 'pvp', difficulty: difficultySelect.value, playerSide: 'red' });
+        appState.startMatch(activeMatchConfig);
         renderGame();
         updateUI();
+        showAppScreen('game');
         console.log('【读档成功】已恢复之前进度！');
-        alert(`✅ 读档成功！读取到文件：${file.name}`);
+        if (sourceName !== '最近一次对局') alert(`✅ 读档成功！读取到文件：${sourceName}`);
     } catch (err) {
         if (err.name !== 'AbortError') {
             console.error('读档出错：', err);
@@ -519,19 +534,53 @@ async function loadGame() {
 
 saveBtn.addEventListener('click', saveGame);
 loadBtn.addEventListener('click', loadGame);
-// 1. 监听模式切换
-modeSelect.addEventListener('change', (e) => {
-    const val = e.target.value;
-    isAIMode = (val === 'pve'); // true 为 PVE，false 为 PVP
-    // 切换模式时，显示或隐藏难度选择框
-    difficultyGroup.style.display = isAIMode ? 'flex' : 'none';
-    // 并重置 UI 状态，防止上一次游戏遗留信息
-    turnIndicator.innerHTML = '准备开局';
-    endTurnBtn.disabled = true;
+modeSelect.addEventListener('change', () => {
+    difficultyGroup.hidden = modeSelect.value !== 'pve';
 });
 
-// 2. 监听“开始游戏”按钮
-startGameBtn.addEventListener('click', () => {
+function showAppScreen(screen) {
+    appState.navigate(screen);
+    menuScreen.hidden = screen !== 'menu';
+    setupScreen.hidden = screen !== 'setup';
+    gameScreen.hidden = screen !== 'game';
+    document.body.dataset.screen = screen;
+    if (screen === 'menu') updateMenuUI();
+}
+
+function hasRecoverableMatch() {
+    try {
+        const data = JSON.parse(localStorage.getItem(LAST_MATCH_KEY) || 'null');
+        return !!data && Array.isArray(data.mapSeeds) &&
+            ['selectBlue', 'playing'].includes(data.gamePhase) && Number.isInteger(data.redBaseId);
+    } catch { return false; }
+}
+
+function updateMenuUI() {
+    continueGameBtn.disabled = !hasRecoverableMatch();
+}
+
+function persistLastMatch() {
+    if (game.isGameOver || !['selectBlue', 'playing'].includes(gamePhase) || !redBaseId) return;
+    if (isAIMode && gamePhase === 'selectBlue' && blueBaseId === null) return;
+    if (isAnimating || isAIThinking) return;
+    try {
+        localStorage.setItem(LAST_MATCH_KEY, JSON.stringify({
+            schemaVersion: 1, gameState: game.toJSON(), mapSeeds: mapManager.seeds,
+            redBaseId, blueBaseId, gamePhase, isAIMode,
+            difficulty: activeMatchConfig?.difficulty || difficultySelect.value
+        }));
+    } catch (error) { console.warn('最近对局自动保存失败：', error); }
+}
+
+function beginNewMatch() {
+    const config = Object.freeze({
+        mode: modeSelect.value === 'pve' ? 'pve' : 'pvp',
+        difficulty: difficultySelect.value,
+        playerSide: 'red'
+    });
+    activeMatchConfig = config;
+    appState.startMatch(config);
+    isAIMode = config.mode === 'pve';
     invalidateAIRequest();
     if (combatTimeoutId !== null) {
         clearTimeout(combatTimeoutId);
@@ -556,9 +605,34 @@ startGameBtn.addEventListener('click', () => {
     drawer.renderMap(mapAreas);
     drawer.renderNodes(game.getAliveNodes(), selectedNodeId);
     updateUI();
+    showAppScreen('game');
     console.log('【新游戏】已重置，等待红方选择基地。');
-    difficultyGroup.style.display = isAIMode ? 'flex' : 'none';
+}
+
+newGameBtn.addEventListener('click', () => {
+    rulesPanel.hidden = true;
+    modeSelect.value = 'pvp';
+    difficultySelect.value = 'medium';
+    difficultyGroup.hidden = true;
+    appState.openSetup();
+    showAppScreen('setup');
 });
+backToMenuBtn.addEventListener('click', () => showAppScreen('menu'));
+rulesMenuBtn.addEventListener('click', () => { rulesPanel.hidden = !rulesPanel.hidden; });
+closeRulesBtn.addEventListener('click', () => { rulesPanel.hidden = true; });
+continueGameBtn.addEventListener('click', () => {
+    try {
+        const data = JSON.parse(localStorage.getItem(LAST_MATCH_KEY) || 'null');
+        if (!data) throw new Error('没有可继续的对局');
+        applyLoadedGameData(data, '最近一次对局');
+    } catch (error) {
+        console.error('恢复最近对局失败：', error);
+        alert('无法恢复最近一次对局，请重新开始或读取存档。');
+        updateMenuUI();
+    }
+});
+loadMenuBtn.addEventListener('click', loadGame);
+startGameBtn.addEventListener('click', beginNewMatch);
 
 // ==========================================
 // 画布点击事件
@@ -582,6 +656,7 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
         drawer.renderMap(mapAreas, redBaseId, null); 
         drawer.renderNodes(game.getAliveNodes(), selectedNodeId);
         updateUI();
+        persistLastMatch();
 
         // 如果开启了人机模式，蓝方基地自动由 AI 选址
         if (isAIMode) {
@@ -642,6 +717,7 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
                 drawer.renderMap(mapAreas, redBaseId, blueBaseId);
                 drawer.renderNodes(game.getAliveNodes(), selectedNodeId);
                 updateUI();
+                persistLastMatch();
                 // 如果玩家是红方，AI 是蓝方，轮到玩家先手。
             }, 600); // 模拟 AI 思考 0.6 秒
         }
@@ -658,6 +734,7 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
         drawer.renderMap(mapAreas, redBaseId, blueBaseId);
         drawer.renderNodes(game.getAliveNodes(), selectedNodeId);
         updateUI();
+        persistLastMatch();
         return;
     }
 
@@ -796,6 +873,7 @@ function renderGame() {
         legalAreaIds
     );
     drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes, mapManager.portals);
+    persistLastMatch();
 }
 // Expose a lightweight startup diagnostic after the game module and UI event
 // handlers have initialized. The desktop smoke test uses this without touching
