@@ -28,13 +28,13 @@ if (!html.includes(`href="${base}`) || !html.includes(`src="${base}`)) {
 const files = await walk(root);
 const relativeFiles = files.map(file => path.relative(root, file).split(path.sep).join('/'));
 const assetFiles = relativeFiles.filter(file => file.startsWith('assets/'));
-if (!assetFiles.some(file => /\\.js$/.test(file))) {
+if (!assetFiles.some(file => file.endsWith('.js'))) {
     throw new Error('Pages build is missing the JavaScript application bundle');
 }
-if (!assetFiles.some(file => /AIWorker.*\\.js$/.test(file))) {
+if (!assetFiles.some(file => file.includes('AIWorker') && file.endsWith('.js'))) {
     throw new Error('Pages build is missing the bundled AI Worker');
 }
-if (!assetFiles.some(file => /\\.css$/.test(file))) {
+if (!assetFiles.some(file => file.endsWith('.css'))) {
     throw new Error('Pages build is missing the stylesheet bundle');
 }
 for (const reference of [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map(match => match[1])) {
