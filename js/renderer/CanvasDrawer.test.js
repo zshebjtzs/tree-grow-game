@@ -62,3 +62,36 @@ test('legal destination areas receive a translucent teal polygon overlay', () =>
     assert.equal(calls.filter(call => call.name === 'fill').length, 2,
         'the base fill and legal overlay are composited separately');
 });
+
+test('canvas display size fits the available viewport without changing logical resolution', () => {
+    const canvas = { width: 1800, height: 1200, style: {} };
+    const drawer = Object.create(CanvasDrawer.prototype);
+    Object.assign(drawer, { canvas, logicalWidth: 1800, logicalHeight: 1200, zoom: 1, fitSize: null });
+    const fit = drawer.fitToContainer({ clientWidth: 1000, clientHeight: 500 });
+    assert.equal(fit.width, 750);
+    assert.equal(fit.height, 500);
+    assert.equal(canvas.width, 1800);
+    assert.equal(canvas.height, 1200);
+    assert.equal(canvas.style.width, '750px');
+    assert.equal(canvas.style.height, '500px');
+});
+
+test('manual zoom scales display dimensions while preserving logical canvas dimensions', () => {
+    const canvas = { width: 1800, height: 1200, style: {} };
+    const drawer = Object.create(CanvasDrawer.prototype);
+    Object.assign(drawer, { canvas, logicalWidth: 1800, logicalHeight: 1200, zoom: 1, fitSize: null });
+    drawer.fitToContainer({ clientWidth: 1000, clientHeight: 500 });
+    drawer.setZoom(1.2);
+    assert.equal(canvas.style.width, '900px');
+    assert.equal(canvas.style.height, '600px');
+    assert.equal(canvas.width, 1800);
+    assert.equal(canvas.height, 1200);
+});
+
+test('zoom is clamped to the supported range', () => {
+    const drawer = Object.create(CanvasDrawer.prototype);
+    Object.assign(drawer, { canvas: { style: {} }, zoom: 1, fitSize: null });
+    assert.equal(drawer.setZoom(0.1), 0.5);
+    assert.equal(drawer.setZoom(3), 2);
+    assert.throws(() => drawer.setZoom(NaN), TypeError);
+});

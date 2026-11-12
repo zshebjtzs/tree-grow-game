@@ -1,8 +1,39 @@
 // js/renderer/CanvasDrawer.js
+import { calculateCanvasFit } from './Viewport.js';
+
 export class CanvasDrawer {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d');
+        this.logicalWidth = this.canvas.width;
+        this.logicalHeight = this.canvas.height;
+        this.zoom = 1;
+        this.fitSize = null;
+    }
+
+    _applyDisplaySize() {
+        if (!this.fitSize || !this.fitSize.width || !this.fitSize.height) return;
+        this.canvas.style.width = `${Math.round(this.fitSize.width * this.zoom)}px`;
+        this.canvas.style.height = `${Math.round(this.fitSize.height * this.zoom)}px`;
+        this.canvas.style.maxWidth = 'none';
+        this.canvas.style.maxHeight = 'none';
+    }
+
+    setZoom(value) {
+        if (!Number.isFinite(value)) throw new TypeError('Zoom must be finite');
+        this.zoom = Math.max(0.5, Math.min(2, value));
+        this._applyDisplaySize();
+        return this.zoom;
+    }
+
+    fitToContainer(container) {
+        if (!container || !this.canvas) return null;
+        const fit = calculateCanvasFit(container.clientWidth, container.clientHeight, this.logicalWidth, this.logicalHeight);
+        if (fit.width && fit.height) {
+            this.fitSize = fit;
+            this._applyDisplaySize();
+        }
+        return fit;
     }
 
     renderMap(areas, redBaseId = null, blueBaseId = null, shortEdges = [], legalAreaIds = new Set()) {
@@ -231,6 +262,18 @@ export class CanvasDrawer {
             ctx.lineWidth = 1.5;
             ctx.stroke();
 
+            const childCount = node.childrenIds?.length || 0;
+            if (!node.isRoot && childCount >= 2) {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, childCount >= 3 ? 18 : 16, 0, Math.PI * 2);
+                ctx.strokeStyle = childCount >= 3 ? '#d7a744' : '#f0d28a';
+                ctx.lineWidth = childCount >= 3 ? 3 : 2;
+                ctx.stroke();
+                if (childCount >= 3) {
+                    ctx.save(); ctx.fillStyle = '#5b4215'; ctx.font = 'bold 9px Arial';
+                    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('堡', node.x, node.y); ctx.restore();
+                }
+            }
             if (node.isFrozen) this._drawFrozenEffect(node);
         });
     }
