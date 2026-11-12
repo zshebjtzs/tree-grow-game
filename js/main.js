@@ -935,6 +935,9 @@ function renderGame() {
 // gameplay state or requiring a test-only code path.
 const canvasContainer = document.getElementById('canvas-container');
 const gameCanvas = document.getElementById('gameCanvas');
+const viewportModeHint = document.getElementById('viewport-mode-hint');
+let zoomAnchorX = 0;
+let zoomAnchorY = 0;
 let panGesture = null;
 let suppressNextCanvasClick = false;
 
@@ -953,6 +956,9 @@ function updateViewportModeUI() {
         canvasContainer.setAttribute('aria-describedby', 'viewport-mode-hint');
     }
     if (gameScreen) gameScreen.dataset.viewportMode = drawer.mode;
+    if (viewportModeHint) viewportModeHint.textContent = drawer.isLocked
+        ? '锁定状态：点击地图进行游戏操作'
+        : '解锁状态：按住鼠标左键拖动地图；游戏操作暂时禁用';
 }
 function fitGameCanvas() {
     if (!canvasContainer || gameScreen.hidden) return;
@@ -970,8 +976,8 @@ function setViewportMode(mode) {
     updateViewportModeUI();
     gameCanvas.classList.remove('is-panning');
 }
-zoomOutBtn.addEventListener('click', () => { drawer.setZoom(drawer.zoom - 0.1); updateZoomUI(); });
-zoomInBtn.addEventListener('click', () => { drawer.setZoom(drawer.zoom + 0.1); updateZoomUI(); });
+zoomOutBtn.addEventListener('click', () => { drawer.setZoom(drawer.zoom - 0.1, zoomAnchorX, zoomAnchorY); updateZoomUI(); });
+zoomInBtn.addEventListener('click', () => { drawer.setZoom(drawer.zoom + 0.1, zoomAnchorX, zoomAnchorY); updateZoomUI(); });
 fitMapBtn.addEventListener('click', () => resetMapViewport(true));
 resetViewportBtn.addEventListener('click', () => resetMapViewport(false));
 viewportModeBtn.addEventListener('click', () => setViewportMode(drawer.isLocked ? 'unlocked' : 'locked'));
@@ -1000,6 +1006,11 @@ gameCanvas.addEventListener('pointerdown', event => {
     gameCanvas.classList.add('is-panning');
 });
 gameCanvas.addEventListener('pointermove', event => {
+    if (canvasContainer) {
+        const rect = canvasContainer.getBoundingClientRect();
+        zoomAnchorX = event.clientX - (rect.left + rect.width / 2);
+        zoomAnchorY = event.clientY - (rect.top + rect.height / 2);
+    }
     if (!panGesture || panGesture.pointerId !== event.pointerId) return;
     const dx = event.clientX - panGesture.startX;
     const dy = event.clientY - panGesture.startY;
