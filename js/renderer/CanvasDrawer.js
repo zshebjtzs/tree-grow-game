@@ -30,6 +30,8 @@ export class CanvasDrawer {
     }
 
     _clampPan() {
+        this.offsetX = Number.isFinite(this.offsetX) ? this.offsetX : 0;
+        this.offsetY = Number.isFinite(this.offsetY) ? this.offsetY : 0;
         if (!this.container) return;
         const { width, height } = this._displayDimensions();
         this.offsetX = clampPanOffset(this.offsetX, width, this.container.clientWidth);
@@ -49,6 +51,8 @@ export class CanvasDrawer {
 
     setZoom(value, anchorX = 0, anchorY = 0) {
         if (!Number.isFinite(value)) throw new TypeError('Zoom must be finite');
+        this.offsetX = Number.isFinite(this.offsetX) ? this.offsetX : 0;
+        this.offsetY = Number.isFinite(this.offsetY) ? this.offsetY : 0;
         const nextZoom = Math.max(0.5, Math.min(2, value));
         this.offsetX = calculateZoomOffset(this.offsetX, anchorX, this.zoom, nextZoom);
         this.offsetY = calculateZoomOffset(this.offsetY, anchorY, this.zoom, nextZoom);
