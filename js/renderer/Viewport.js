@@ -7,3 +7,21 @@ export function calculateCanvasFit(containerWidth, containerHeight, logicalWidth
     const scale = Math.min(containerWidth / logicalWidth, containerHeight / logicalHeight);
     return { width: Math.floor(logicalWidth * scale), height: Math.floor(logicalHeight * scale), scale };
 }
+
+export function clampPanOffset(offset, mapSize, viewportSize) {
+    if (![offset, mapSize, viewportSize].every(Number.isFinite) || mapSize < 0 || viewportSize < 0) {
+        throw new TypeError('Pan dimensions and offset must be finite');
+    }
+    const overflow = Math.max(0, (mapSize - viewportSize) / 2);
+    if (overflow === 0) return 0;
+    const visibleMargin = Math.min(72, mapSize * 0.12, viewportSize * 0.2);
+    const limit = overflow + visibleMargin;
+    return Math.max(-limit, Math.min(limit, offset));
+}
+
+export function calculateZoomOffset(offset, anchor, currentZoom, nextZoom) {
+    if (![offset, anchor, currentZoom, nextZoom].every(Number.isFinite) || currentZoom <= 0 || nextZoom <= 0) {
+        throw new TypeError('Zoom transform values must be finite and zoom values positive');
+    }
+    return anchor - (anchor - offset) * (nextZoom / currentZoom);
+}

@@ -1,5 +1,5 @@
 // js/renderer/CanvasDrawer.js
-import { calculateCanvasFit } from './Viewport.js';
+import { calculateCanvasFit, clampPanOffset, calculateZoomOffset } from './Viewport.js';
 
 export class CanvasDrawer {
     constructor(canvasId) {
@@ -9,31 +9,91 @@ export class CanvasDrawer {
         this.logicalHeight = this.canvas.height;
         this.zoom = 1;
         this.fitSize = null;
+        this.container = null;
+        this.offsetX = 0;
+        this.offsetY = 0;
+        this.mode = 'locked';
+    }
+
+    get isLocked() { return this.mode === 'locked'; }
+
+    setMode(mode) {
+        if (mode !== 'locked' && mode !== 'unlocked') throw new TypeError('Viewport mode must be locked or unlocked');
+        this.mode = mode;
+        this.canvas?.classList?.toggle('is-pan-mode', !this.isLocked);
+        return this.mode;
+    }
+
+    _displayDimensions() {
+        if (!this.fitSize) return { width: 0, height: 0 };
+        return { width: this.fitSize.width * this.zoom, height: this.fitSize.height * this.zoom };
+    }
+
+    _clampPan() {
+        this.offsetX = Number.isFinite(this.offsetX) ? this.offsetX : 0;
+        this.offsetY = Number.isFinite(this.offsetY) ? this.offsetY : 0;
+        if (!this.container) return;
+        const { width, height } = this._displayDimensions();
+        this.offsetX = clampPanOffset(this.offsetX, width, this.container.clientWidth);
+        this.offsetY = clampPanOffset(this.offsetY, height, this.container.clientHeight);
     }
 
     _applyDisplaySize() {
         if (!this.fitSize || !this.fitSize.width || !this.fitSize.height) return;
-        this.canvas.style.width = `${Math.round(this.fitSize.width * this.zoom)}px`;
-        this.canvas.style.height = `${Math.round(this.fitSize.height * this.zoom)}px`;
+        const { width, height } = this._displayDimensions();
+        this.canvas.style.width = `${Math.round(width)}px`;
+        this.canvas.style.height = `${Math.round(height)}px`;
         this.canvas.style.maxWidth = 'none';
         this.canvas.style.maxHeight = 'none';
+        this._clampPan();
+        this.canvas.style.transform = `translate3d(${this.offsetX}px, ${this.offsetY}px, 0)`;
     }
 
-    setZoom(value) {
+    setZoom(value, anchorX = 0, anchorY = 0) {
         if (!Number.isFinite(value)) throw new TypeError('Zoom must be finite');
-        this.zoom = Math.max(0.5, Math.min(2, value));
+        this.offsetX = Number.isFinite(this.offsetX) ? this.offsetX : 0;
+        this.offsetY = Number.isFinite(this.offsetY) ? this.offsetY : 0;
+        const nextZoom = Math.max(0.5, Math.min(2, value));
+        this.offsetX = calculateZoomOffset(this.offsetX, anchorX, this.zoom, nextZoom);
+        this.offsetY = calculateZoomOffset(this.offsetY, anchorY, this.zoom, nextZoom);
+        this.zoom = nextZoom;
         this._applyDisplaySize();
         return this.zoom;
     }
 
+    setPan(offsetX, offsetY) {
+        if (!Number.isFinite(offsetX) || !Number.isFinite(offsetY)) throw new TypeError('Pan offsets must be finite');
+        this.offsetX = offsetX;
+        this.offsetY = offsetY;
+        this._applyDisplaySize();
+        return { x: this.offsetX, y: this.offsetY };
+    }
+
+    resetViewport() {
+        this.zoom = 1;
+        this.offsetX = 0;
+        this.offsetY = 0;
+        this._applyDisplaySize();
+    }
+
     fitToContainer(container) {
         if (!container || !this.canvas) return null;
+        this.container = container;
         const fit = calculateCanvasFit(container.clientWidth, container.clientHeight, this.logicalWidth, this.logicalHeight);
         if (fit.width && fit.height) {
             this.fitSize = fit;
             this._applyDisplaySize();
         }
         return fit;
+    }
+
+    getLogicalPoint(clientX, clientY) {
+        const rect = this.canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return null;
+        return {
+            x: (clientX - rect.left) * this.logicalWidth / rect.width,
+            y: (clientY - rect.top) * this.logicalHeight / rect.height
+        };
     }
 
     renderMap(areas, redBaseId = null, blueBaseId = null, shortEdges = [], legalAreaIds = new Set()) {
