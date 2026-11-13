@@ -23,6 +23,8 @@ jobs:
       - run: npm run build
         env:
           GITHUB_ACTIONS: true
+      - name: Verify GitHub Pages build output
+        run: npm run verify:pages
       - uses: actions/configure-pages@v5
         with:
           enablement: true
