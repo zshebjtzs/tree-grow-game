@@ -265,19 +265,21 @@ test('GameState.clone creates an independent state without changing serialized d
 test('search reuses root move ordering and orders minimizing replies from low score to high', () => {
     const ai = new AIController('hard', line, centers);
     const root = { currentTurn: 'blue', isGameOver: false };
-    const scoredReplies = [];
     const scoredStates = [];
+    const appliedReplies = [];
     ai._generateMoves = (state, side) => side === 'red'
         ? [{ targetAreaId: 5 }, { targetAreaId: 4 }]
         : [];
-    ai._simulateMove = (state, move, side) => ({
-        currentTurn: side === 'red' ? 'blue' : 'red',
-        isGameOver: false,
-        lastMove: move.targetAreaId
-    });
+    ai._simulateMove = (state, move, side) => {
+        if (side === 'red') appliedReplies.push(move.targetAreaId);
+        return {
+            currentTurn: side === 'red' ? 'blue' : 'red',
+            isGameOver: false,
+            lastMove: move.targetAreaId
+        };
+    };
     ai._scoreMove = (state, move) => {
         scoredStates.push(state);
-        scoredReplies.push(move.targetAreaId);
         return move.targetAreaId;
     };
     ai._evaluateState = state => state.lastMove || 0;
@@ -287,5 +289,5 @@ test('search reuses root move ordering and orders minimizing replies from low sc
     ], 'blue', { red: 6, blue: 1 });
 
     assert.equal(scoredStates.includes(root), false, 'root actions should not be rescored');
-    assert.deepEqual(scoredReplies, [4, 5], 'minimizing replies should be ordered ascending');
+    assert.deepEqual(appliedReplies, [4, 5], 'minimizing replies should be searched ascending');
 });
