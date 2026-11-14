@@ -261,6 +261,7 @@ export class AIController {
         const result = this.searchEngine.search({
             rootState: game,
             rootMoves,
+            getMoveKey: moveKey,
             maxDepth: this.profile.maxDepth,
             timeBudgetMs: this.profile.searchBudgetMs,
             maxNodes: this.profile.maxNodes,
