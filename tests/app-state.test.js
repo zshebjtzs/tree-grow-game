@@ -27,7 +27,7 @@ test('starting a match stores an immutable configuration snapshot', () => {
 test('invalid match configurations are rejected', () => {
     const app = new AppState();
     assert.throws(() => app.startMatch({ mode: 'coop', difficulty: 'hard', playerSide: 'red' }), TypeError);
-    assert.throws(() => app.startMatch({ mode: 'pvp', difficulty: 'expert', playerSide: 'red' }), TypeError);
+    assert.equal(app.startMatch({ mode: 'pvp', difficulty: 'expert', playerSide: 'red' }).difficulty, 'expert');
 });
 
 test('returning to the menu does not mutate the match configuration', () => {
@@ -44,4 +44,13 @@ test('result screen is a valid application navigation state', () => {
     assert.equal(app.navigate('result'), 'result');
     assert.equal(app.screen, 'result');
     assert.throws(() => app.navigate('unknown'), TypeError);
+});
+
+test('all four AI difficulty levels are accepted by application state', () => {
+    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+        const app = new AppState();
+        const config = app.startMatch({ mode: 'pve', difficulty, playerSide: 'red' });
+        assert.equal(config.difficulty, difficulty);
+        assert.equal(app.screen, 'game');
+    }
 });
