@@ -264,7 +264,13 @@ test('GameState.clone creates an independent state without changing serialized d
 
 test('search reuses root move ordering and orders minimizing replies from low score to high', () => {
     const ai = new AIController('hard', line, centers);
-    const root = { currentTurn: 'blue', isGameOver: false };
+    const root = {
+        currentTurn: 'blue',
+        isGameOver: false,
+        toJSON() {
+            return { currentTurn: this.currentTurn, lastMove: this.lastMove ?? null };
+        }
+    };
     const scoredStates = [];
     const appliedReplies = [];
     ai._generateMoves = (state, side) => side === 'red'
