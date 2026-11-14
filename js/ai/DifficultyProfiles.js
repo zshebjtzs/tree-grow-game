@@ -44,7 +44,7 @@ const PROFILES = {
         structureWeight: 1.18,
         branchingWeight: 1.15,
         searchWidth: 7,
-        maxDepth: 4,
+        maxDepth: 6,
         searchBudgetMs: 700,
         maxNodes: 30000,
         selection: 'search'
@@ -59,7 +59,7 @@ const PROFILES = {
         structureWeight: 1.48,
         branchingWeight: 1.42,
         searchWidth: 10,
-        maxDepth: 5,
+        maxDepth: 7,
         searchBudgetMs: 1200,
         maxNodes: 60000,
         selection: 'search'
