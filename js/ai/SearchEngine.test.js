@@ -117,3 +117,35 @@ test('alpha-beta result matches exhaustive minimax on a deterministic three-ply 
     assert.equal(actual.value, expected.value);
     assert.equal(actual.completedDepth, 3);
 });
+
+
+test('compact position keys preserve search-relevant state without serializing snapshots', async () => {
+    const { getPositionKey } = await import('./PositionKey.js');
+    const state = {
+        currentTurn: 'red',
+        nodeIdCounter: 2,
+        isGameOver: false,
+        nodes: [{
+            id: 1, owner: 'red', parentId: null, areaId: 1,
+            isRoot: true, isDestroyed: false, isFrozen: false, childrenIds: [2],
+            x: 10, y: 20
+        }, {
+            id: 2, owner: 'red', parentId: 1, areaId: 2,
+            isRoot: false, isDestroyed: false, isFrozen: true, childrenIds: [],
+            x: 30, y: 40
+        }],
+        toJSON() { throw new Error('position key must not allocate a JSON snapshot'); }
+    };
+    const key = getPositionKey(state);
+    assert.equal(typeof key, 'string');
+    assert.equal(getPositionKey(state), key);
+    const changedFreeze = {
+        ...state,
+        nodes: state.nodes.map((node, index) =>
+            index === 1 ? { ...node, isFrozen: false } : node
+        )
+    };
+    assert.notEqual(getPositionKey(changedFreeze), key);
+    assert.notEqual(getPositionKey({ ...state, currentTurn: 'blue' }), key);
+    assert.notEqual(getPositionKey({ ...state, nodeIdCounter: 3 }), key);
+});
