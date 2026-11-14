@@ -96,3 +96,9 @@
   evaluation; if future AI logic starts using coordinates, the key must be extended.
 - A dedicated test verifies key stability and sensitivity to turn, ID counter,
   and freeze-state changes, while ensuring no JSON snapshot is requested.
+
+## Transposition-table move ordering
+
+Search entries now retain the best move key found at that position. When iterative deepening revisits a position at a greater depth, the retained move is promoted ahead of the heuristic ordering. The root also promotes the best move from the previous completed iteration before searching the next depth.
+
+This improves alpha-beta's chance of reaching useful bounds early without reducing candidate width, search depth, or node/time budgets. The move key is supplied by AIController as the stable `parentNodeId:targetAreaId` pair; it does not alter move legality or evaluation. A regression test verifies that a cached reply is promoted on a deeper revisit.
