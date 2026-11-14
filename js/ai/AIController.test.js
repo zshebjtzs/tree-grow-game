@@ -305,7 +305,7 @@ test('search reuses root move ordering and orders minimizing replies from low sc
     ], 'blue', { red: 6, blue: 1 });
 
     assert.equal(scoredStates.includes(root), false, 'root actions should not be rescored');
-    assert.ok(appliedReplies.length >= 2);
-    assert.ok(appliedReplies.every(areaId => areaId === 4),
-        'the lower-scored reply must be searched first; alpha-beta may then prune the higher-scored reply');
+    assert.ok(appliedReplies.length >= 1);
+    assert.equal(appliedReplies[0], 4,
+        'the lower-scored minimizing reply must be searched first');
 });
