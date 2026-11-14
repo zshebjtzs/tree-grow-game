@@ -4,6 +4,7 @@ import { RuleEngine } from '../game/RuleEngine.js';
 import { resolveCombat } from '../game/CombatResolver.js';
 import { PositionEvaluator } from './PositionEvaluator.js';
 import { TacticalAnalyzer } from './TacticalAnalyzer.js';
+import { SearchEngine } from './SearchEngine.js';
 import { getDifficultyProfile, DIFFICULTY_LEVELS } from './DifficultyProfiles.js';
 
 const WIN_SCORE = 100000;
@@ -19,6 +20,8 @@ export class AIController {
         this.areaCenters = areaCenters || [];
         this.ruleEngine = new RuleEngine({ adjacency: this.adjacency });
         this.tacticalAnalyzer = new TacticalAnalyzer();
+        this.searchEngine = new SearchEngine();
+        this.lastSearchStats = null;
         this.positionEvaluator = new PositionEvaluator({
             adjacency: this.adjacency,
             distanceToBase: (...args) => this._distanceToBase(...args),
@@ -198,49 +201,32 @@ export class AIController {
     }
 
     _searchHard(game, rankedMoves, side, bases) {
-        // A bounded two-ply adversarial search: AI action, best opponent reply.
-        // Candidate pruning keeps the worker responsive on the 50-area map.
-        const candidates = rankedMoves.slice(0, this.profile.searchWidth);
-        let bestMove = candidates[0];
-        let bestValue = -Infinity;
-
-        for (const move of candidates) {
-            const afterAI = this._simulateMove(game, move, side, bases);
-            if (!afterAI) continue;
-            if (afterAI.isGameOver) return move;
-
-            const opponent = this._enemy(side);
-            const replies = this._generateMoves(afterAI, opponent, bases)
-                .map(reply => ({
-                    ...reply,
-                    score: this._scoreMove(afterAI, reply, opponent, bases)
+        const rootMoves = rankedMoves.slice(0, this.profile.searchWidth);
+        const result = this.searchEngine.search({
+            rootState: game,
+            rootMoves,
+            maxDepth: this.profile.maxDepth,
+            timeBudgetMs: this.profile.searchBudgetMs,
+            maxNodes: this.profile.maxNodes,
+            getPositionKey: state => JSON.stringify(state.toJSON()),
+            applyMove: (state, move, movingSide) =>
+                this._simulateMove(state, move, movingSide, bases),
+            generateMoves: (state, movingSide) =>
+                this._generateMoves(state, movingSide, bases),
+            evaluate: state => this._evaluateState(state, side, bases),
+            orderMoves: (state, moves) => moves
+                .map(move => ({
+                    move,
+                    score: this._scoreMove(state, move, state.currentTurn, bases)
                 }))
                 .sort((a, b) => b.score - a.score)
-                .slice(0, this.profile.searchWidth);
-
-            let value;
-            if (!replies.length) {
-                value = this._evaluateState(afterAI, side, bases);
-            } else {
-                let worstReply = Infinity;
-                for (const reply of replies) {
-                    const afterReply = this._simulateMove(afterAI, reply, opponent, bases);
-                    const replyValue = afterReply
-                        ? this._evaluateState(afterReply, side, bases)
-                        : -WIN_SCORE;
-                    worstReply = Math.min(worstReply, replyValue);
-                }
-                value = worstReply;
-            }
-
-            // Retain a small amount of the immediate tactical score as a tie-break.
-            value += move.score * 0.12;
-            if (value > bestValue) {
-                bestValue = value;
-                bestMove = move;
-            }
-        }
-        return bestMove;
+                .map(item => item.move)
+        });
+        this.lastSearchStats = {
+            difficulty: this.difficulty,
+            ...result
+        };
+        return result.move || rootMoves[0];
     }
 
     _weightedChoice(ranked) {
