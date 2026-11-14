@@ -14,6 +14,7 @@ export class SearchEngine {
         getPositionKey,
         applyMove,
         generateMoves,
+        passTurn,
         evaluate,
         orderMoves,
         maxDepth,
@@ -52,7 +53,10 @@ export class SearchEngine {
 
             const side = state.currentTurn;
             let moves = generateMoves(state, side);
-            if (!moves.length) return evaluate(state);
+            if (!moves.length) {
+                const passed = passTurn?.(state, side);
+                return passed ? visit(passed, depth - 1, alpha, beta, !maximizing) : evaluate(state);
+            }
             moves = orderMoves(state, moves, maximizing);
             let value = maximizing ? -Infinity : Infinity;
 
