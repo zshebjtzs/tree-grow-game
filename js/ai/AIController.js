@@ -244,6 +244,11 @@ export class AIController {
             passTurn: (state, movingSide) => this._simulatePass(state, movingSide),
             evaluate: state => this._evaluateState(state, side, bases),
             orderMoves: (state, moves, maximizing, checkBudget) => {
+                // Root moves already carry the scores computed by getBestMove().
+                // Reusing their existing order avoids rescoring every root action
+                // once per iterative-deepening pass.
+                if (state === game) return moves;
+
                 const scored = [];
                 for (const move of moves) {
                     checkBudget();
@@ -252,7 +257,12 @@ export class AIController {
                         score: this._scoreMove(state, move, state.currentTurn, bases)
                     });
                 }
-                scored.sort((a, b) => b.score - a.score);
+                // Scores are always from the AI/root player's perspective.
+                // Min nodes must search low-valued replies first for stronger
+                // alpha-beta cutoffs.
+                scored.sort((a, b) => maximizing
+                    ? b.score - a.score
+                    : a.score - b.score);
                 return scored.map(item => item.move);
             }
         });
