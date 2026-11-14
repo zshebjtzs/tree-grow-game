@@ -47,3 +47,28 @@ test('budget exhaustion keeps the last fully completed iteration', () => {
     assert.equal(result.move, 'first');
     assert.equal(result.value, 5);
 });
+
+
+test('search models a skipped turn and continues after freeze cleanup', () => {
+    const engine = new SearchEngine({ now: () => 0 });
+    const result = engine.search({
+        rootState: { currentTurn: 'red', isGameOver: false, phase: 'root', score: 0 },
+        rootMoves: ['grow'],
+        maxDepth: 2,
+        timeBudgetMs: 100,
+        getPositionKey: state => JSON.stringify(state),
+        applyMove: (state, move, side) => side === 'red'
+            ? { currentTurn: 'blue', isGameOver: false, phase: 'after-red', score: 0 }
+            : { currentTurn: 'blue', isGameOver: false, phase: 'after-blue', score: 42 },
+        generateMoves: state => state.currentTurn === 'blue' ? [] : ['reply'],
+        passTurn: state => ({
+            currentTurn: 'red',
+            isGameOver: false,
+            phase: 'after-pass',
+            score: state.score
+        }),
+        evaluate: state => state.score,
+        orderMoves: (state, moves) => moves
+    });
+    assert.equal(result.value, 42);
+});
