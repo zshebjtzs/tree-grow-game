@@ -185,3 +185,36 @@ test('transposition-table best reply is promoted before heuristic move order', (
     assert.deepEqual(observedOrders[0], ['weak', 'best']);
     assert.deepEqual(observedOrders[1], ['weak', 'best']);
 });
+
+
+test('principal variation search matches full-window alpha-beta', () => {
+    const run = principalVariationSearch => new SearchEngine({ now: () => 0 }).search({
+        rootState: { id: 'root', currentTurn: 'red', isGameOver: false, ply: 0, path: [] },
+        rootMoves: [0, 1, 2],
+        maxDepth: 4,
+        timeBudgetMs: 1000,
+        getPositionKey: state => `${state.ply}:${state.currentTurn}:${state.path.join(',')}`,
+        getMoveKey: move => move,
+        applyMove: (state, move) => ({
+            id: `p${state.ply + 1}`,
+            currentTurn: state.currentTurn === 'red' ? 'blue' : 'red',
+            isGameOver: false,
+            ply: state.ply + 1,
+            path: [...state.path, move]
+        }),
+        generateMoves: state => state.ply < 4 ? [0, 1, 2] : [],
+        evaluate: state => {
+            const [a = 0, b = 0, c = 0, d = 0] = state.path;
+            return (a * 17) - (b * 13) + (c * 7) - (d * 5) +
+                (a === d ? 11 : 0) + (b === c ? 3 : 0);
+        },
+        orderMoves: (state, moves) => moves,
+        principalVariationSearch
+    });
+
+    const pvs = run(true);
+    const fullWindow = run(false);
+    assert.equal(pvs.completedDepth, 4);
+    assert.equal(pvs.move, fullWindow.move);
+    assert.equal(pvs.value, fullWindow.value);
+});
