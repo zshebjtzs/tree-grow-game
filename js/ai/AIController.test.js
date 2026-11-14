@@ -314,6 +314,8 @@ test('search reuses prepared root states and orders opponent replies by their ow
 
     assert.equal(rootSimulations, 1, 'root child state should be prepared once and reused across depths');
     assert.equal(scoredStates.includes(root), false, 'root actions should not be rescored');
+    assert.equal(scoredStates.length, 2,
+        'the reused root child should not have its internal move ordering recomputed at every depth');
     assert.ok(searchedReplies.length >= 1);
     assert.equal(searchedReplies[0], 5,
         'the opponent-favorable reply must be traversed first at a minimizing node');
