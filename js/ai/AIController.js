@@ -216,7 +216,7 @@ export class AIController {
                     score: this._scoreMove(afterAI, reply, opponent, bases)
                 }))
                 .sort((a, b) => b.score - a.score)
-                .slice(0, SEARCH_WIDTH);
+                .slice(0, this.profile.searchWidth);
 
             let value;
             if (!replies.length) {
