@@ -5,6 +5,7 @@ import { resolveCombat } from '../game/CombatResolver.js';
 import { PositionEvaluator } from './PositionEvaluator.js';
 import { TacticalAnalyzer } from './TacticalAnalyzer.js';
 import { SearchEngine } from './SearchEngine.js';
+import { getPositionKey } from './PositionKey.js';
 import { getDifficultyProfile, DIFFICULTY_LEVELS } from './DifficultyProfiles.js';
 
 const WIN_SCORE = 100000;
@@ -266,7 +267,7 @@ export class AIController {
             getPositionKey: state => {
                 let key = positionKeyCache.get(state);
                 if (key === undefined) {
-                    key = JSON.stringify(state.toJSON());
+                    key = getPositionKey(state);
                     positionKeyCache.set(state, key);
                 }
                 return key;
