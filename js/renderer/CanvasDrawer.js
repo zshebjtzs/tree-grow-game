@@ -96,7 +96,7 @@ export class CanvasDrawer {
         };
     }
 
-    renderMap(areas, redBaseId = null, blueBaseId = null, shortEdges = [], legalAreaIds = new Set()) {
+    renderMap(areas, redBaseId = null, blueBaseId = null, shortEdges = [], legalAreaIds = new Set(), hoverAreaId = null) {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -130,8 +130,8 @@ export class CanvasDrawer {
                 ctx.fill();
             }
 
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = area.id === hoverAreaId ? '#087f70' : '#333';
+            ctx.lineWidth = area.id === hoverAreaId ? 5 : 2;
             ctx.stroke();
         });
 
@@ -248,7 +248,7 @@ export class CanvasDrawer {
     }
 
     // 第三个参数：dyingNodes（即将被摧毁的节点列表）
-    renderNodes(nodes, selectedNodeId = null, dyingNodes = [], portals = {}) {
+    renderNodes(nodes, selectedNodeId = null, dyingNodes = [], portals = {}, animationState = null, combatState = null) {
         const ctx = this.ctx;
         const alive = nodes.filter(n => !n.isDestroyed);
 
@@ -297,10 +297,14 @@ export class CanvasDrawer {
                             ctx.lineTo((edge.p1[0] + edge.p2[0]) / 2, (edge.p1[1] + edge.p2[1]) / 2);
                         }
                     }
-                    ctx.lineTo(node.x, node.y);
+                    const growing = animationState?.type === 'growth' && animationState.nodeId === node.id;
+                    const progress = growing ? Math.max(0, Math.min(1, animationState.progress)) : 1;
+                    ctx.lineTo(parent.x + (node.x - parent.x) * progress, parent.y + (node.y - parent.y) * progress);
                     ctx.strokeStyle = node.owner === 'red' ? '#ff9999' : '#99bbff';
-                    ctx.lineWidth = 3;
+                    ctx.lineWidth = growing ? 4 : 3;
+                    if (growing) { ctx.shadowColor = node.owner === 'red' ? '#ff7777' : '#7da4ff'; ctx.shadowBlur = 14; }
                     ctx.stroke();
+                    if (growing) ctx.shadowBlur = 0;
                 }
             }
         });
@@ -314,13 +318,19 @@ export class CanvasDrawer {
                 ctx.stroke();
             }
 
+            const growing = animationState?.type === 'growth' && animationState.nodeId === node.id;
+            const progress = growing ? Math.max(0, Math.min(1, animationState.progress)) : 1;
+            const eased = 1 - Math.pow(1 - progress, 3);
+            ctx.save();
+            if (growing) { ctx.globalAlpha = Math.max(0.15, progress); ctx.shadowColor = node.owner === 'red' ? '#ff7777' : '#7da4ff'; ctx.shadowBlur = 16; }
             ctx.beginPath();
-            ctx.arc(node.x, node.y, 12, 0, Math.PI * 2);
+            ctx.arc(node.x, node.y, growing ? 12 * eased : 12, 0, Math.PI * 2);
             ctx.fillStyle = node.owner === 'red' ? '#ff4d4d' : '#4d79ff';
             ctx.fill();
             ctx.strokeStyle = '#000';
             ctx.lineWidth = 1.5;
             ctx.stroke();
+            ctx.restore();
 
             const childCount = node.childrenIds?.length || 0;
             if (!node.isRoot && childCount >= 2) {
@@ -336,5 +346,45 @@ export class CanvasDrawer {
             }
             if (node.isFrozen) this._drawFrozenEffect(node);
         });
+        if (combatState?.type === 'combat' && combatState.event) this._drawCombatEffect(combatState);
+    }
+
+    _drawCombatEffect(combatState) {
+        const ctx = this.ctx;
+        const event = combatState.event;
+        const progress = Math.max(0, Math.min(1, combatState.progress));
+        const pulse = 0.5 + 0.5 * Math.sin(progress * Math.PI * 5);
+        const byId = new Map(event.allNodes.map(node => [node.id, node]));
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = 0.92 - progress * 0.42;
+        ctx.shadowColor = '#ff624f';
+        ctx.shadowBlur = 12 + pulse * 10;
+        ctx.strokeStyle = '#e84c45';
+        ctx.lineWidth = 7 - progress * 2;
+        for (const node of event.affectedNodes) {
+            if (node.parentId === null) continue;
+            const parent = byId.get(node.parentId);
+            if (!parent) continue;
+            ctx.beginPath(); ctx.moveTo(parent.x, parent.y); ctx.lineTo(node.x, node.y); ctx.stroke();
+        }
+        for (const node of event.affectedNodes) {
+            const radius = Math.max(5, 15 - progress * 5) + pulse * 2;
+            ctx.beginPath(); ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(220,65,55,.72)'; ctx.fill();
+            ctx.strokeStyle = '#fff0e8'; ctx.lineWidth = 2; ctx.stroke();
+        }
+        const drawTarget = (node, color, baseRadius) => {
+            if (!node) return;
+            ctx.globalAlpha = 0.45 + pulse * 0.5;
+            ctx.shadowColor = color; ctx.shadowBlur = 18;
+            ctx.beginPath(); ctx.arc(node.x, node.y, baseRadius + pulse * 5, 0, Math.PI * 2);
+            ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.stroke();
+        };
+        drawTarget(event.attacker, '#ffb45d', 19);
+        drawTarget(event.defender, '#ff655b', 24);
+        if (event.freezeTarget) drawTarget(event.freezeTarget, '#63d9f5', 21);
+        ctx.restore();
     }
 }

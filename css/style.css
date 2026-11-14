@@ -36,3 +36,29 @@
 .game-screen[data-viewport-mode="unlocked"] .turn-controls::after{content:"地图浏览中 · 锁定地图后恢复游戏操作";align-self:center;padding:0 5px;color:#8fcbb5;font-size:9px}
 .map-zoom-controls{flex-wrap:wrap}
 @media(max-width:900px){.stage-caption{flex-wrap:wrap}.map-zoom-controls{gap:4px}.viewport-mode-hint{font-size:8px}}
+
+/* Stage D1: in-game feedback */
+.action-feedback{max-width:min(48vw,520px);padding:6px 10px;border:1px solid rgba(139,211,183,.25);border-radius:6px;color:#c5e8d9;background:rgba(45,103,86,.18);font-size:10px;line-height:1.45;animation:feedback-enter .16s ease-out}
+.action-feedback[data-type="warning"]{color:#f2d6a0;border-color:rgba(224,177,91,.34);background:rgba(115,78,28,.2)}
+.action-feedback[data-type="success"]{color:#bcebd4;border-color:rgba(106,198,151,.36);background:rgba(37,105,74,.2)}
+#turnIndicator.turn-flash{animation:turn-flash .42s ease-out}
+@keyframes feedback-enter{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+@keyframes turn-flash{0%{border-color:rgba(139,211,183,.8);box-shadow:0 0 0 0 rgba(139,211,183,.28)}100%{border-color:rgba(168,194,201,.14);box-shadow:0 0 0 9px rgba(139,211,183,0)}}
+@media(max-width:900px){.action-feedback{max-width:100%;width:100%;order:3}}
+@media(prefers-reduced-motion:reduce){.action-feedback,#turnIndicator.turn-flash{animation:none}}
+
+/* Stage D2: combat readability */
+.combat-explanation{width:min(100%,560px);padding:7px 10px;border:1px solid rgba(236,133,105,.28);border-radius:7px;background:linear-gradient(120deg,rgba(105,48,44,.2),rgba(30,43,54,.48));color:#d6dfe1;font-size:10px;line-height:1.5}
+.combat-explanation-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:#e6a58e;font-size:9px;letter-spacing:.04em}
+.combat-explanation-heading strong{color:#f0d5c9;font-size:10px;letter-spacing:0}
+.combat-explanation p{margin:3px 0;color:#c3d0d5}
+.combat-explanation small{color:#8ea3ad;font-size:9px}
+@media(max-width:900px){.combat-explanation{width:100%;order:4}}
+
+/* Stage D3: optional synthesized sound controls */
+.audio-controls{display:inline-flex;align-items:center;gap:6px;padding:0 4px}
+.audio-mute-button[aria-pressed="true"]{color:#e5b5a5;border-color:rgba(229,181,165,.38)}
+.audio-volume-label{color:#8499a4;font-size:9px;white-space:nowrap}
+.audio-volume{width:72px;height:16px;margin:0;accent-color:#8bd3b7;cursor:pointer}
+@media(max-width:900px){.audio-controls{padding:0 2px}.audio-volume{width:62px}}
+@media(prefers-reduced-motion:reduce){.audio-controls *{transition:none!important}}
