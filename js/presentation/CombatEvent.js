@@ -6,12 +6,12 @@ export function createCombatEvent(gameState, attacker, defender, result) {
     if (!gameState || !attacker || !defender || !result || !Array.isArray(result.nodesToDelete)) {
         throw new TypeError('战斗事件需要完整的规则结算结果');
     }
+    if (defender.getDegree() > 3) {
+        throw new Error('不能为堡垒节点创建战斗事件');
+    }
+
     let outcome, title, description;
-    const degree = defender.getDegree();
-    if (degree > 3) {
-        outcome='fortress-repel'; title='堡垒防御成功';
-        description=`${ownerLabel(defender.owner)}的堡垒节点连接度为 ${degree}，成功抵御入侵；进攻节点被摧毁，防守结构保留。`;
-    } else if (defender.childrenIds.length >= 2) {
+    if (defender.childrenIds.length >= 2) {
         outcome='branch-destroyed'; title='分叉节点被摧毁';
         description=`${ownerLabel(defender.owner)}的非堡垒分叉节点遭到攻击，该节点及其全部后代被一并摧毁。`;
     } else {

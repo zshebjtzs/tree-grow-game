@@ -19,6 +19,53 @@ test('ordinary growth only permits one adjacent area', () => {
     assert.equal(engine.canGrow(game, root, 4).allowed, false);
 });
 
+test('fortress-occupied enemy area is rejected without consuming the turn', () => {
+    const adjacency = {
+        1: [2], 2: [1, 3, 4, 5, 6],
+        3: [2], 4: [2], 5: [2], 6: [2]
+    };
+    const engine = new RuleEngine({ adjacency });
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const redRoot = game.addNode(null, 0, 0, 1, 'red');
+    game.currentTurn = 'blue';
+    const blueRoot = game.addNode(null, 0, 0, 6, 'blue');
+    const fortress = game.addNode(blueRoot.id, 0, 0, 2, 'blue');
+    game.addNode(fortress.id, 0, 0, 3, 'blue');
+    game.addNode(fortress.id, 0, 0, 4, 'blue');
+    game.addNode(fortress.id, 0, 0, 5, 'blue');
+    game.currentTurn = 'red';
+
+    const nodeCount = game.getAliveNodes().length;
+    const result = engine.canGrow(game, redRoot, 2, {
+        ownBaseId: 1, enemyBaseId: 6
+    });
+
+    assert.equal(result.allowed, false);
+    assert.equal(result.reason, '堡垒节点不能作为攻击目标');
+    assert.deepEqual(engine.getLegalGrowthAreas(game, redRoot, [2], {
+        ownBaseId: 1, enemyBaseId: 6
+    }), []);
+    assert.equal(game.currentTurn, 'red');
+    assert.equal(game.getAliveNodes().length, nodeCount);
+});
+
+test('non-fortress enemy node remains a legal attack target', () => {
+    const adjacency = { 1: [2], 2: [1, 3], 3: [2] };
+    const engine = new RuleEngine({ adjacency });
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const redRoot = game.addNode(null, 0, 0, 1, 'red');
+    game.currentTurn = 'blue';
+    const blueRoot = game.addNode(null, 0, 0, 3, 'blue');
+    game.addNode(blueRoot.id, 0, 0, 2, 'blue');
+    game.currentTurn = 'red';
+
+    assert.equal(engine.canGrow(game, redRoot, 2, {
+        ownBaseId: 1, enemyBaseId: 3
+    }).allowed, true);
+});
+
 test('root first branch may use a path of at most two edges', () => {
     const { game, engine, root } = setup();
     assert.equal(engine.canGrow(game, root, 3).allowed, true);

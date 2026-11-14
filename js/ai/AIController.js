@@ -162,6 +162,11 @@ export class AIController {
         next.currentTurn = side;
         const parent = next.getNode(move.parentNodeId);
         if (!parent) return null;
+        const validation = this.ruleEngine.canGrow(next, parent, move.targetAreaId, {
+            ownBaseId: bases[side],
+            enemyBaseId: bases[this._enemy(side)]
+        });
+        if (!validation.allowed) return null;
         const child = next.addNode(parent.id, move.x, move.y, move.targetAreaId, side);
         if (!child) return null;
 
