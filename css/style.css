@@ -54,3 +54,11 @@
 .combat-explanation p{margin:3px 0;color:#c3d0d5}
 .combat-explanation small{color:#8ea3ad;font-size:9px}
 @media(max-width:900px){.combat-explanation{width:100%;order:4}}
+
+/* Stage D3: optional synthesized sound controls */
+.audio-controls{display:inline-flex;align-items:center;gap:6px;padding:0 4px}
+.audio-mute-button[aria-pressed="true"]{color:#e5b5a5;border-color:rgba(229,181,165,.38)}
+.audio-volume-label{color:#8499a4;font-size:9px;white-space:nowrap}
+.audio-volume{width:72px;height:16px;margin:0;accent-color:#8bd3b7;cursor:pointer}
+@media(max-width:900px){.audio-controls{padding:0 2px}.audio-volume{width:62px}}
+@media(prefers-reduced-motion:reduce){.audio-controls *{transition:none!important}}

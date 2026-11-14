@@ -7,6 +7,7 @@ import { RuleEngine } from './game/RuleEngine.js';
 import { resolveCombat } from './game/CombatResolver.js';
 import { PresentationController } from './presentation/PresentationController.js';
 import { createCombatEvent } from './presentation/CombatEvent.js';
+import { AudioController } from './presentation/AudioController.js';
 
 // 1. 初始化各模块
 const appState = new AppState();
@@ -79,6 +80,22 @@ const combatExplanationDetail = document.getElementById('combat-explanation-deta
 const combatExplanationMeta = document.getElementById('combat-explanation-meta');
 
 presentation = new PresentationController({ render: () => renderGame() });
+const audio = new AudioController();
+const audioMuteBtn = document.getElementById('audio-mute-btn');
+const audioVolume = document.getElementById('audio-volume');
+function syncAudioControls() {
+    if (audioMuteBtn) {
+        audioMuteBtn.textContent = audio.muted ? '音效：关' : '音效：开';
+        audioMuteBtn.setAttribute('aria-pressed', String(audio.muted));
+    }
+    if (audioVolume) audioVolume.value = String(audio.volume);
+}
+document.addEventListener('pointerdown', () => { audio.unlock(); }, { capture: true, passive: true });
+document.addEventListener('keydown', event => {
+    if (!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) audio.unlock();
+}, { capture: true });
+window.addEventListener('pagehide', () => audio.destroy(), { once: true });
+syncAudioControls();
 function showFeedback(message, type = 'info', duration = 1900) {
     if (!actionFeedback) return;
     actionFeedback.textContent = message;
@@ -194,6 +211,7 @@ if (!aiWorker && pveOption) {
 
 // --- 【核心提取】通用成长后处理函数（人类和 AI 共用） ---
 function processSuccessfulGrowth(newNode, owner) {
+    audio.play('growth');
     selectedNodeId = null;
     const parentNode = newNode.parentId === null ? null : game.getNode(newNode.parentId);
     isAnimating = true;
@@ -205,6 +223,7 @@ function processSuccessfulGrowth(newNode, owner) {
         if (newNode.areaId === enemyBaseId) {
             game.isGameOver = true;
             showFeedback(`${owner === 'red' ? '红方' : '蓝方'}成功突入敌方基地，获得胜利。`, 'success', 3600);
+            audio.play('victory');
             updateUI(); renderGame(); return;
         }
         const rivalNode = game.getAliveNodes().find(node =>
@@ -220,13 +239,15 @@ function processSuccessfulGrowth(newNode, owner) {
         const combatEvent = createCombatEvent(game, newNode, rivalNode, combat);
         showCombatExplanation(combatEvent);
         showFeedback(combatEvent.title, 'warning', 2600);
+        audio.play('combat');
 
         const finishCombat = () => {
             game.deleteNodes(nodesToDelete);
             dyingNodes = [];
+            if (nodesToDelete.length > 0) audio.play('destroy');
             if (freezeTargetId) {
                 const targetNode = game.getNode(freezeTargetId);
-                if (targetNode) targetNode.isFrozen = true;
+                if (targetNode) { targetNode.isFrozen = true; audio.play('freeze'); }
             }
             isAnimating = false;
             const redRoots = game.getPlayerRootNodes('red');
@@ -234,9 +255,11 @@ function processSuccessfulGrowth(newNode, owner) {
             if (redRoots.length === 0) {
                 game.isGameOver = true;
                 showFeedback('红方全部根节点被摧毁，蓝方获胜。', 'success', 3600);
+                audio.play('victory');
             } else if (blueRoots.length === 0) {
                 game.isGameOver = true;
                 showFeedback('蓝方全部根节点被摧毁，红方获胜。', 'success', 3600);
+                audio.play('victory');
             } else performTurnSwitch();
             updateUI();
             renderGame();
@@ -293,6 +316,7 @@ function performTurnSwitch() {
     }
 
     game.switchTurn();
+    audio.play('turn');
     selectedNodeId = null;
     flashTurnIndicator();
     updateUI();
@@ -916,7 +940,9 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
 
 pauseBtn.addEventListener('click', () => {
     if (gamePhase !== 'playing' || game.isGameOver || isAnimating || isAIThinking) return;
-    isPaused = !isPaused; selectedNodeId = null; updateUI(); renderGame();
+    isPaused = !isPaused;
+    audio.play(isPaused ? 'pause' : 'resume');
+    selectedNodeId = null; updateUI(); renderGame();
 });
 restartBtn.addEventListener('click', () => {
     if (isAnimating || isAIThinking || !confirm('重新开始将结束当前对局并生成新地图，是否继续？')) return;
@@ -928,6 +954,15 @@ menuBtn.addEventListener('click', () => {
 });
 document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !gameScreen.hidden && pauseBtn && !pauseBtn.disabled) pauseBtn.click();
+});
+
+audioMuteBtn?.addEventListener('click', () => {
+    audio.setMuted(!audio.muted);
+    syncAudioControls();
+    if (!audio.muted) { audio.unlock().then(() => audio.play('resume')); }
+});
+audioVolume?.addEventListener('input', event => {
+    audio.setVolume(Number(event.target.value));
 });
 
 endTurnBtn.addEventListener('click', () => {
