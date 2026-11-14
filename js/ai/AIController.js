@@ -267,7 +267,9 @@ export class AIController {
             getPositionKey: state => {
                 let key = positionKeyCache.get(state);
                 if (key === undefined) {
-                    key = getPositionKey(state);
+                    key = Array.isArray(state.nodes)
+                        ? getPositionKey(state)
+                        : JSON.stringify(state.toJSON());
                     positionKeyCache.set(state, key);
                 }
                 return key;
