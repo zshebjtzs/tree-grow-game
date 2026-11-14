@@ -262,7 +262,7 @@ test('GameState.clone creates an independent state without changing serialized d
 });
 
 
-test('search reuses root move ordering and orders minimizing replies from low score to high', () => {
+test('search reuses root move ordering and orders minimizing replies by opponent-side value', () => {
     const ai = new AIController('hard', line, centers);
     const root = {
         currentTurn: 'blue',
@@ -306,6 +306,6 @@ test('search reuses root move ordering and orders minimizing replies from low sc
 
     assert.equal(scoredStates.includes(root), false, 'root actions should not be rescored');
     assert.ok(appliedReplies.length >= 1);
-    assert.equal(appliedReplies[0], 4,
-        'the lower-scored minimizing reply must be searched first');
+    assert.equal(appliedReplies[0], 5,
+        'the opponent-favorable reply must be searched first at a minimizing node');
 });
