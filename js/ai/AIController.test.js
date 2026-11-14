@@ -276,6 +276,7 @@ test('search reuses prepared root states and orders opponent replies by their ow
     const searchedReplies = [];
     let rootSimulations = 0;
     let rootChild = null;
+    let rootChildKeySerializations = 0;
 
     ai._generateMoves = (state, side) => side === 'red'
         ? [{ targetAreaId: 5 }, { targetAreaId: 4 }]
@@ -287,6 +288,7 @@ test('search reuses prepared root states and orders opponent replies by their ow
             isGameOver: false,
             lastMove: move.targetAreaId,
             toJSON() {
+                if (next === rootChild) rootChildKeySerializations++;
                 return { currentTurn: this.currentTurn, lastMove: this.lastMove ?? null };
             }
         };
@@ -318,6 +320,8 @@ test('search reuses prepared root states and orders opponent replies by their ow
     ], 'blue', { red: 6, blue: 1 });
 
     assert.equal(rootSimulations, 1, 'root child state should be prepared once and reused across depths');
+    assert.equal(rootChildKeySerializations, 1,
+        'an immutable root child position key should be serialized only once');
     assert.equal(scoredStates.includes(root), false, 'root actions should not be rescored');
     assert.equal(rootChildScores.length, 2,
         'the reused root child should not have its internal move ordering recomputed at every depth');
