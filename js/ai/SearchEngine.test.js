@@ -149,3 +149,40 @@ test('compact position keys preserve search-relevant state without serializing s
     assert.notEqual(getPositionKey({ ...state, currentTurn: 'blue' }), key);
     assert.notEqual(getPositionKey({ ...state, nodeIdCounter: 3 }), key);
 });
+
+
+test('transposition-table best reply is promoted before heuristic move order', () => {
+    const engine = new SearchEngine({ now: () => 0 });
+    const observedOrders = [];
+    const root = { id: 'root', currentTurn: 'red', isGameOver: false };
+    const child = { id: 'child', currentTurn: 'blue', isGameOver: false };
+    const applyMove = (state, move) => {
+        if (state.id === 'root') return child;
+        return {
+            id: move === 'best' ? 'best-leaf' : 'weak-leaf',
+            currentTurn: 'red',
+            isGameOver: false,
+            score: move === 'best' ? 1 : 9
+        };
+    };
+    const result = engine.search({
+        rootState: root,
+        rootMoves: ['root-move'],
+        maxDepth: 3,
+        timeBudgetMs: 100,
+        getPositionKey: state => state.id,
+        getMoveKey: move => move,
+        applyMove,
+        generateMoves: state => state.id === 'child' ? ['weak', 'best'] : [],
+        evaluate: state => state.score ?? 0,
+        orderMoves: (state, moves) => {
+            if (state.id === 'child') observedOrders.push([...moves]);
+            return moves;
+        }
+    });
+
+    assert.equal(result.completedDepth, 3);
+    assert.deepEqual(observedOrders[0], ['weak', 'best']);
+    assert.deepEqual(observedOrders[1], ['weak', 'best']);
+    assert.deepEqual(observedOrders[2], ['best', 'weak']);
+});
