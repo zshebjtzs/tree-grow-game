@@ -18,7 +18,7 @@ export class AppState {
 
     startMatch(config) {
         if (!config || !['pvp', 'pve'].includes(config.mode) ||
-            !['easy', 'medium', 'hard'].includes(config.difficulty) ||
+            !['easy', 'medium', 'hard', 'expert'].includes(config.difficulty) ||
             config.playerSide !== 'red') {
             throw new TypeError('Invalid match configuration');
         }
