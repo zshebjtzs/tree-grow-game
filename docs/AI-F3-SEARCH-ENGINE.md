@@ -108,3 +108,7 @@ This improves alpha-beta's chance of reaching useful bounds early without reduci
 After the first ordered child establishes a principal variation, later siblings are first searched with a narrow alpha-beta window. A full-window re-search is performed only when the probe indicates a value that can improve the current bound without already causing a cutoff. This preserves the same minimax result while reducing unnecessary full-window exploration in well-ordered trees.
 
 The feature is enabled by default and can be disabled in tests to compare against full-window alpha-beta. Regression coverage compares the selected move and value across a deterministic four-ply tree.
+
+## PVS benchmark parity
+
+The AI benchmark now runs hard/expert fixtures in both full-window alpha-beta mode and PVS mode. Before timing, it asserts that both modes select the same root action, return the same evaluation value, and complete the same configured depth. Timings and node counts are then reported separately for each variant across sparse, branching-heavy, and combat-heavy fixtures.
