@@ -11,6 +11,7 @@ export class PositionEvaluator {
         this.adjacency = adjacency || {};
         this.distanceToBase = distanceToBase;
         this.simulateMove = simulateMove;
+        this.profile = arguments[0].profile;
     }
 
     scoreMove(game, move, side, bases) {
@@ -29,22 +30,23 @@ export class PositionEvaluator {
             ? beforeDistance - afterDistance
             : (Number.isFinite(afterDistance) ? 1 : 0);
 
-        let score = progress * 95;
+        const profile = this.profile;
+        let score = progress * 95 * profile.progressWeight;
         if (move.attacks) {
             const beforeEnemyNodes = game.getAliveNodesByOwner(enemy).length;
             const afterEnemyNodes = next.getAliveNodesByOwner(enemy).length;
-            score += (beforeEnemyNodes - afterEnemyNodes) * 85;
+            score += (beforeEnemyNodes - afterEnemyNodes) * 85 * profile.attackWeight;
             const beforeRoots = game.getPlayerRootNodes(enemy).length;
             const afterRoots = next.getPlayerRootNodes(enemy).length;
-            score += (beforeRoots - afterRoots) * 900;
+            score += (beforeRoots - afterRoots) * 900 * profile.rootAttackWeight;
         }
 
         const ownAreaGain = next.getAliveNodesByOwner(side).length -
             game.getAliveNodesByOwner(side).length;
-        score += ownAreaGain * 8;
+        score += ownAreaGain * 8 * profile.expansionWeight;
 
         const ownThreat = this.distanceToBase(next, enemy, bases[side]);
-        if (Number.isFinite(ownThreat)) score -= Math.max(0, 5 - ownThreat) * 24;
+        if (Number.isFinite(ownThreat)) score -= Math.max(0, 5 - ownThreat) * 24 * profile.safetyWeight;
 
         // Structural value: preserve branching flexibility and avoid leaving
         // the newly created frontier as an isolated, immediately vulnerable leaf.
@@ -53,8 +55,8 @@ export class PositionEvaluator {
         );
         if (newNode) {
             const parent = next.getNode(newNode.parentId);
-            if (parent && parent.childrenIds.length >= 2) score += 10;
-            if (parent && parent.isRoot) score += 6;
+            if (parent && parent.childrenIds.length >= 2) score += 10 * profile.branchingWeight;
+            if (parent && parent.isRoot) score += 6 * profile.structureWeight;
         }
         return score;
     }
@@ -79,7 +81,7 @@ export class PositionEvaluator {
         return (distanceValue(ownDistance) - distanceValue(enemyDistance)) +
             (ownNodes - enemyNodes) * 7 +
             (ownRoots - enemyRoots) * 220 +
-            (ownStructure - enemyStructure);
+            (ownStructure - enemyStructure) * this.profile.structureWeight;
     }
 
     _structureValue(game, side) {
