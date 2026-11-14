@@ -22,6 +22,9 @@ export class AIController {
         this.tacticalAnalyzer = new TacticalAnalyzer();
         this.searchEngine = new SearchEngine();
         this.lastSearchStats = null;
+        // Evaluations repeatedly query the same immutable search position.
+        // WeakMap avoids retaining discarded search states after a decision.
+        this.distanceCache = new WeakMap();
         this.positionEvaluator = new PositionEvaluator({
             adjacency: this.adjacency,
             distanceToBase: (...args) => this._distanceToBase(...args),
@@ -122,26 +125,42 @@ export class AIController {
     }
 
     _distanceToBase(game, side, baseId) {
+        let positionCache = this.distanceCache.get(game);
+        if (!positionCache) {
+            positionCache = new Map();
+            this.distanceCache.set(game, positionCache);
+        }
+        const cacheKey = `${side}:${baseId}`;
+        if (positionCache.has(cacheKey)) return positionCache.get(cacheKey);
+
+        // Multi-source BFS is equivalent to running one BFS per owned node,
+        // but visits each reachable area at most once for this query.
         const occupied = new Set(game.getAliveNodes().map(node => node.areaId));
-        let best = Infinity;
+        const queue = [];
+        const distance = new Map();
         for (const node of game.getAliveNodesByOwner(side)) {
-            const queue = [node.areaId];
-            const distance = new Map([[node.areaId, 0]]);
-            for (let head = 0; head < queue.length; head++) {
-                const current = queue[head];
-                const d = distance.get(current);
-                if (current === baseId) {
-                    best = Math.min(best, d);
-                    break;
-                }
-                for (const next of this.adjacency[current] || []) {
-                    if (distance.has(next)) continue;
-                    if (occupied.has(next) && next !== baseId) continue;
-                    distance.set(next, d + 1);
-                    queue.push(next);
-                }
+            if (distance.has(node.areaId)) continue;
+            distance.set(node.areaId, 0);
+            queue.push(node.areaId);
+        }
+
+        let best = Infinity;
+        for (let head = 0; head < queue.length; head++) {
+            const current = queue[head];
+            const currentDistance = distance.get(current);
+            if (current === baseId) {
+                best = currentDistance;
+                break;
+            }
+            for (const next of this.adjacency[current] || []) {
+                if (distance.has(next)) continue;
+                if (occupied.has(next) && next !== baseId) continue;
+                distance.set(next, currentDistance + 1);
+                queue.push(next);
             }
         }
+
+        positionCache.set(cacheKey, best);
         return best;
     }
 
