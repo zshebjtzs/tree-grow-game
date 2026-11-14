@@ -42,7 +42,7 @@ export class TacticalAnalyzer {
         if (!currentThreats) return moves;
 
         const ranked = moves.map(move => {
-            const next = simulateMove(game, move, side, bases);
+            const next = move._nextState || simulateMove(game, move, side, bases);
             if (!next) return { move, remainingThreats: Infinity };
             const remainingThreats = !next.getPlayerRootNodes(side).length
                 ? Infinity
