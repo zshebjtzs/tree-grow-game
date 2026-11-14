@@ -8,10 +8,12 @@ import { resolveCombat } from './game/CombatResolver.js';
 import { PresentationController } from './presentation/PresentationController.js';
 import { createCombatEvent } from './presentation/CombatEvent.js';
 import { AudioController } from './presentation/AudioController.js';
+import { MatchTracker } from './game/MatchTracker.js';
 
 // 1. 初始化各模块
 const appState = new AppState();
 let activeMatchConfig = null;
+let matchTracker = null;
 const LAST_MATCH_KEY = 'treeGrow:lastMatch:v1';
 let game = new GameState();
 const mapManager = new MapManager(1800, 1200);
@@ -111,6 +113,7 @@ function showCombatExplanation(event) {
     combatExplanation.hidden = false;
 }
 function clearCombatExplanation() { if (combatExplanation) combatExplanation.hidden = true; }
+function finishMatch(winner, reason) { game.isGameOver = true; matchTracker?.finish(winner, reason, game); }
 function flashTurnIndicator() {
     if (!turnIndicator) return;
     turnIndicator.classList.remove('turn-flash');
@@ -210,6 +213,8 @@ if (!aiWorker && pveOption) {
 
 // --- 【核心提取】通用成长后处理函数（人类和 AI 共用） ---
 function processSuccessfulGrowth(newNode, owner) {
+    const isAttack = game.getAliveNodes().some(node => node.id !== newNode.id && node.owner !== owner && node.areaId === newNode.areaId);
+    matchTracker?.recordGrowth(game, newNode, { isAttack });
     audio.play('growth');
     selectedNodeId = null;
     const parentNode = newNode.parentId === null ? null : game.getNode(newNode.parentId);
@@ -220,7 +225,7 @@ function processSuccessfulGrowth(newNode, owner) {
         isAnimating = false;
         const enemyBaseId = owner === 'red' ? blueBaseId : redBaseId;
         if (newNode.areaId === enemyBaseId) {
-            game.isGameOver = true;
+            finishMatch(owner, 'enemy_base_reached');
             showFeedback(`${owner === 'red' ? '红方' : '蓝方'}成功突入敌方基地，获得胜利。`, 'success', 3600);
             audio.play('victory');
             updateUI(); renderGame(); return;
@@ -236,12 +241,14 @@ function processSuccessfulGrowth(newNode, owner) {
         const nodesToDelete = [...new Set(combat.nodesToDelete)];
         const freezeTargetId = combat.freezeTargetId;
         const combatEvent = createCombatEvent(game, newNode, rivalNode, combat);
+        matchTracker?.recordCombat(combatEvent, combat);
         showCombatExplanation(combatEvent);
         showFeedback(combatEvent.title, 'warning', 2600);
         audio.play('combat');
 
         const finishCombat = () => {
             game.deleteNodes(nodesToDelete);
+            matchTracker?.syncAfterMutation(game);
             dyingNodes = [];
             if (nodesToDelete.length > 0) audio.play('destroy');
             if (freezeTargetId) {
@@ -252,11 +259,11 @@ function processSuccessfulGrowth(newNode, owner) {
             const redRoots = game.getPlayerRootNodes('red');
             const blueRoots = game.getPlayerRootNodes('blue');
             if (redRoots.length === 0) {
-                game.isGameOver = true;
+                finishMatch('blue', 'all_roots_destroyed');
                 showFeedback('红方全部根节点被摧毁，蓝方获胜。', 'success', 3600);
                 audio.play('victory');
             } else if (blueRoots.length === 0) {
-                game.isGameOver = true;
+                finishMatch('red', 'all_roots_destroyed');
                 showFeedback('蓝方全部根节点被摧毁，红方获胜。', 'success', 3600);
                 audio.play('victory');
             } else performTurnSwitch();
@@ -269,6 +276,7 @@ function processSuccessfulGrowth(newNode, owner) {
                 const targetNode = game.getNode(freezeTargetId);
                 if (targetNode) { targetNode.isFrozen = true; audio.play('freeze'); }
             }
+            matchTracker?.syncAfterMutation(game);
             isAnimating = false;
             performTurnSwitch();
             updateUI();
@@ -328,6 +336,7 @@ function performTurnSwitch() {
 
 // --- 主动跳过回合（针对玩家或 AI 无棋可走） ---
 function performSkipTurn() {
+    matchTracker?.recordSkip(game.currentTurn);
     // Skipping is a turn completion, not a separate state transition.
     // Reuse the authoritative cleanup/switch/AI path so frozen nodes and
     // AI scheduling cannot diverge from a normal completed action.
@@ -480,7 +489,8 @@ function getGameBlob() {
         blueBaseId: blueBaseId,
         gamePhase: gamePhase,
         isAIMode: isAIMode,
-        difficulty: activeMatchConfig?.difficulty || difficultySelect.value
+        difficulty: activeMatchConfig?.difficulty || difficultySelect.value,
+        matchTracker: matchTracker?.toJSON() || null
     };
     return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
 }
@@ -624,6 +634,7 @@ function applyLoadedGameData(data, sourceName = '存档') {
         ruleEngine = new RuleEngine(mapManager);
 
         activeMatchConfig = Object.freeze({ mode: isAIMode ? 'pve' : 'pvp', difficulty: difficultySelect.value, playerSide: 'red' });
+        matchTracker = MatchTracker.fromJSON(data.matchTracker) || MatchTracker.start(game, activeMatchConfig, { historyIncomplete: true });
         appState.startMatch(activeMatchConfig);
         renderGame();
         updateUI();
@@ -671,7 +682,8 @@ function persistLastMatch() {
         localStorage.setItem(LAST_MATCH_KEY, JSON.stringify({
             schemaVersion: 1, gameState: game.toJSON(), mapSeeds: mapManager.seeds,
             redBaseId, blueBaseId, gamePhase, isAIMode,
-            difficulty: activeMatchConfig?.difficulty || difficultySelect.value
+            difficulty: activeMatchConfig?.difficulty || difficultySelect.value,
+            matchTracker: matchTracker?.toJSON() || null
         }));
     } catch (error) { console.warn('最近对局自动保存失败：', error); }
 }
@@ -695,6 +707,7 @@ function beginNewMatch() {
 
     // 重置整个游戏到开局状态
     game = new GameState();
+    matchTracker = null;
     mapAreas = mapManager.generateMap(50);
     ruleEngine = new RuleEngine(mapManager);
     
@@ -820,6 +833,7 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
                 gamePhase = 'playing';
                 generateRootNodesInArea(redBaseId, 'red', 3);
                 generateRootNodesInArea(blueBaseId, 'blue', 3);
+                matchTracker = MatchTracker.start(game, activeMatchConfig || { mode: isAIMode ? 'pve' : 'pvp', difficulty: difficultySelect.value });
                 selectedNodeId = null;
                 drawer.renderMap(mapAreas, redBaseId, blueBaseId);
                 drawer.renderNodes(game.getAliveNodes(), selectedNodeId);
@@ -837,6 +851,7 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
         gamePhase = 'playing';
         generateRootNodesInArea(redBaseId, 'red', 3);
         generateRootNodesInArea(blueBaseId, 'blue', 3);
+        matchTracker = MatchTracker.start(game, activeMatchConfig || { mode: isAIMode ? 'pve' : 'pvp', difficulty: difficultySelect.value });
         selectedNodeId = null;
         drawer.renderMap(mapAreas, redBaseId, blueBaseId);
         drawer.renderNodes(game.getAliveNodes(), selectedNodeId);
