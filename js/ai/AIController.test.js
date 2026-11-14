@@ -281,7 +281,10 @@ test('search reuses root move ordering and orders minimizing replies from low sc
         return {
             currentTurn: side === 'red' ? 'blue' : 'red',
             isGameOver: false,
-            lastMove: move.targetAreaId
+            lastMove: move.targetAreaId,
+            toJSON() {
+                return { currentTurn: this.currentTurn, lastMove: this.lastMove ?? null };
+            }
         };
     };
     ai._scoreMove = (state, move) => {
@@ -290,7 +293,10 @@ test('search reuses root move ordering and orders minimizing replies from low sc
     };
     ai._simulatePass = (state, side) => ({
         ...state,
-        currentTurn: side === 'red' ? 'blue' : 'red'
+        currentTurn: side === 'red' ? 'blue' : 'red',
+        toJSON() {
+            return { currentTurn: this.currentTurn, lastMove: this.lastMove ?? null };
+        }
     });
     ai._evaluateState = state => state.lastMove || 0;
 
