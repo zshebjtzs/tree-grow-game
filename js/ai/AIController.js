@@ -238,6 +238,7 @@ export class AIController {
         const rootMoves = rankedMoves.slice(0, this.profile.searchWidth);
         const preparedChildren = new WeakMap();
         const preparedMoveOrder = new WeakMap();
+        const positionKeyCache = new WeakMap();
         const moveKey = move => `${move.parentNodeId}:${move.targetAreaId}`;
 
         // Root candidates were already simulated while calculating their
@@ -256,7 +257,14 @@ export class AIController {
             maxDepth: this.profile.maxDepth,
             timeBudgetMs: this.profile.searchBudgetMs,
             maxNodes: this.profile.maxNodes,
-            getPositionKey: state => JSON.stringify(state.toJSON()),
+            getPositionKey: state => {
+                let key = positionKeyCache.get(state);
+                if (key === undefined) {
+                    key = JSON.stringify(state.toJSON());
+                    positionKeyCache.set(state, key);
+                }
+                return key;
+            },
             applyMove: (state, move, movingSide) => {
                 const cached = preparedChildren.get(state)?.get(moveKey(move));
                 return cached || this._simulateMove(state, move, movingSide, bases);
