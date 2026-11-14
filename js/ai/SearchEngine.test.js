@@ -218,3 +218,30 @@ test('principal variation search matches full-window alpha-beta', () => {
     assert.equal(pvs.move, fullWindow.move);
     assert.equal(pvs.value, fullWindow.value);
 });
+
+
+test('search progress reports only fully completed iterative-deepening depths', () => {
+    const progress = [];
+    const engine = new SearchEngine({ now: () => 0 });
+    const result = engine.search({
+        rootState: { currentTurn: 'red', isGameOver: false, ply: 0 },
+        rootMoves: [0, 1],
+        maxDepth: 3,
+        timeBudgetMs: 100,
+        getPositionKey: state => `${state.ply}:${state.currentTurn}`,
+        applyMove: state => ({
+            currentTurn: state.currentTurn === 'red' ? 'blue' : 'red',
+            isGameOver: false,
+            ply: state.ply + 1
+        }),
+        generateMoves: state => state.ply < 3 ? [0, 1] : [],
+        evaluate: state => state.ply * 10,
+        orderMoves: (state, moves) => moves,
+        onProgress: snapshot => progress.push(snapshot)
+    });
+
+    assert.equal(result.completedDepth, 3);
+    assert.deepEqual(progress.map(item => item.completedDepth), [1, 2, 3]);
+    assert.ok(progress.every(item => item.phase === 'search'));
+    assert.ok(progress.every(item => item.nodes > 0 && item.elapsedMs >= 0));
+});
