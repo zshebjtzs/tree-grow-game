@@ -7,7 +7,7 @@ test('alpha-beta search chooses the maximin move', () => {
     const result = engine.search({
         rootState: { currentTurn: 'red', isGameOver: false, branch: null, score: 0 },
         rootMoves: ['a', 'b'],
-        maxDepth: 2,
+        maxDepth: 3,
         timeBudgetMs: 100,
         getPositionKey: state => JSON.stringify(state),
         applyMove: (state, move, side) => side === 'red'
