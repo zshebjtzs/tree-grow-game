@@ -127,6 +127,42 @@ test('AI returns null when every owned growth parent is frozen', () => {
     assert.equal(ai.getBestMove(snapshot(game, 6, 1), 'blue'), null);
 });
 
+test('generated legal moves are not revalidated during simulation, while external moves remain validated', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    const redRoot = game.addNode(null, 0, 0, 6, 'red');
+    const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
+    const ai = new AIController('hard', line, centers);
+    const bases = { red: 6, blue: 1 };
+
+    const originalCanGrow = ai.ruleEngine.canGrow.bind(ai.ruleEngine);
+    let validationCalls = 0;
+    ai.ruleEngine.canGrow = (...args) => {
+        validationCalls++;
+        return originalCanGrow(...args);
+    };
+
+    const generated = ai._generateMoves(game, 'blue', bases);
+    assert.ok(generated.length > 0);
+    const callsAfterGeneration = validationCalls;
+    const legalMove = generated[0];
+    const simulated = ai._simulateMove(game, legalMove, 'blue', bases, { alreadyValidated: true });
+    assert.ok(simulated);
+    assert.equal(validationCalls, callsAfterGeneration,
+        'a move returned by _generateMoves must not repeat RuleEngine validation');
+
+    const invalidMove = {
+        parentNodeId: blueRoot.id,
+        targetAreaId: 6,
+        x: centers[5][0],
+        y: centers[5][1]
+    };
+    ai._simulateMove(game, invalidMove, 'blue', bases);
+    assert.ok(validationCalls > callsAfterGeneration,
+        'untrusted/external moves must still go through RuleEngine validation');
+    assert.equal(redRoot.areaId, 6);
+});
+
 test('AI combat simulation preserves defender freeze until the defender completes its turn', () => {
     const adjacency = {
         1: [2, 6], 2: [1, 3], 3: [2, 4], 4: [3, 5],
