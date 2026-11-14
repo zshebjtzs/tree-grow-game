@@ -84,3 +84,57 @@
 @media(max-width:900px){.ai-explanation{width:100%;order:4}}
 
 @media(max-width:520px){.ai-progress-detail{max-width:125px}}
+
+
+/* F4 layout refinement: keep the map as the primary flexible region. */
+.game-footer{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    align-items:start;
+    justify-content:stretch;
+    gap:7px 12px;
+    flex:0 0 auto;
+    min-height:0;
+    max-height:clamp(104px,24vh,210px);
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    scrollbar-width:thin;
+    scrollbar-color:rgba(139,211,183,.28) transparent;
+    padding:7px 3px 3px;
+}
+.game-hint{grid-column:1;align-self:center;min-width:0}
+.node-legend{grid-column:2;justify-content:flex-end;align-self:center;min-width:0}
+.action-feedback{grid-column:1/-1;width:100%;max-width:none;min-width:0}
+.ai-explanation,.combat-explanation{
+    width:100%;
+    max-width:none;
+    min-width:0;
+    align-self:stretch;
+}
+.ai-explanation{grid-column:1}
+.combat-explanation{grid-column:2}
+.game-footer:has(#ai-explanation:not([hidden])):not(:has(#combat-explanation:not([hidden]))) #ai-explanation,
+.game-footer:has(#combat-explanation:not([hidden])):not(:has(#ai-explanation:not([hidden]))){
+    grid-column:1/-1;
+}
+.ai-explanation ul{max-height:58px;overflow-y:auto}
+@media(max-width:900px){
+    .game-footer{
+        grid-template-columns:minmax(0,1fr);
+        gap:6px;
+        max-height:30vh;
+        max-height:min(30vh,210px);
+        padding-top:6px;
+    }
+    .game-hint,.node-legend,.action-feedback,.ai-explanation,.combat-explanation{
+        grid-column:1/-1;
+        width:100%;
+        max-width:none;
+    }
+    .node-legend{justify-content:flex-start}
+    .ai-explanation ul{max-height:48px}
+}
+@media(max-height:620px) and (min-width:901px){
+    .game-footer{max-height:22vh;gap:4px 10px;padding-top:4px}
+    .ai-explanation,.combat-explanation{padding:5px 8px}
+}
