@@ -150,3 +150,24 @@ test('AI combat simulation preserves defender freeze until the defender complete
     assert.equal(next.getNode(branch.id).isFrozen, true);
     assert.equal(next.getAliveNodesByOwner('blue').some(node => node.areaId === 6), false);
 });
+
+
+test('AI prioritizes a legal move that removes an immediate enemy base threat', () => {
+    const adjacency = {
+        1: [4], 2: [3], 3: [2, 4], 4: [1, 3, 6], 5: [6], 6: [4, 5]
+    };
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const redRoot = game.addNode(null, 0, 0, 2, 'red');
+    const redLeaf = game.addNode(redRoot.id, 20, 0, 3, 'red');
+    game.currentTurn = 'blue';
+    const blueRoot = game.addNode(null, 60, 0, 6, 'blue');
+    game.addNode(blueRoot.id, 40, 0, 4, 'blue');
+    game.currentTurn = 'red';
+
+    const ai = new AIController('hard', adjacency, centers);
+    const move = ai.getBestMove(snapshot(game, 1, 6), 'red');
+    assert.ok(move);
+    assert.equal(move.parentNodeId, redLeaf.id);
+    assert.equal(move.targetAreaId, 4);
+});
