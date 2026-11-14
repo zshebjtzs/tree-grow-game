@@ -19,7 +19,7 @@ export class TacticalAnalyzer {
                 count++;
                 continue;
             }
-            const next = simulateMove(game, move, side, bases);
+            const next = move._nextState || simulateMove(game, move, side, bases);
             if (next?.isGameOver && !next.getPlayerRootNodes(side === 'red' ? 'blue' : 'red').length) {
                 count++;
             }
