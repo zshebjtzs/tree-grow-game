@@ -10,14 +10,17 @@ test('rematch preserves PVP configuration as a fresh immutable snapshot', () => 
     assert.equal(Object.isFrozen(next), true);
 });
 
-test('rematch preserves PVE mode and AI difficulty', () => {
-    assert.deepEqual(createRematchConfig({ mode: 'pve', difficulty: 'hard', playerSide: 'red' }), {
-        mode: 'pve', difficulty: 'hard', playerSide: 'red'
-    });
+test('rematch preserves PVE mode and every supported AI difficulty', () => {
+    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+        assert.deepEqual(
+            createRematchConfig({ mode: 'pve', difficulty, playerSide: 'red' }),
+            { mode: 'pve', difficulty, playerSide: 'red' }
+        );
+    }
 });
 
 test('rematch rejects incomplete or invalid configuration', () => {
     assert.throws(() => createRematchConfig(null), TypeError);
-    assert.throws(() => createRematchConfig({ mode: 'pve', difficulty: 'expert', playerSide: 'red' }), TypeError);
+    assert.throws(() => createRematchConfig({ mode: 'pve', difficulty: 'unknown', playerSide: 'red' }), TypeError);
     assert.throws(() => createRematchConfig({ mode: 'pvp', difficulty: 'easy', playerSide: 'blue' }), TypeError);
 });

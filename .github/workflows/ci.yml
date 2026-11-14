@@ -16,6 +16,8 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm test
+      - name: Collect AI decision-time baseline
+        run: npm run benchmark:ai
       - run: npm run build
         env:
           GITHUB_ACTIONS: true

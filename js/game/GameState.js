@@ -75,6 +75,22 @@ export class GameState {
         return [...idSet];
     }
 
+    // Create a detached in-memory copy for search simulation. Unlike a
+    // toJSON()/fromJSON() round trip, this avoids serialization and save-data
+    // validation while still copying every mutable node field and child list.
+    clone() {
+        const copy = new GameState();
+        copy.nodes = this.nodes.map(source => {
+            const node = new Node(source.id, source.x, source.y, source.owner, source.parentId);
+            Object.assign(node, source, { childrenIds: [...source.childrenIds] });
+            return node;
+        });
+        copy.currentTurn = this.currentTurn;
+        copy.nodeIdCounter = this.nodeIdCounter;
+        copy.isGameOver = this.isGameOver;
+        return copy;
+    }
+
     // Return a detached, JSON-safe snapshot. Callers may validate or modify it
     // without gaining a mutable reference to the live game state.
     toJSON() {

@@ -41,7 +41,7 @@ self.onmessage = function(event) {
             !areaCenters.every(center => Array.isArray(center) && center.length >= 2 &&
                 Number.isFinite(center[0]) && Number.isFinite(center[1])) ||
             !['red', 'blue'].includes(playerSide) ||
-            !['easy', 'medium', 'hard'].includes(difficulty) ||
+            !['easy', 'medium', 'hard', 'expert'].includes(difficulty) ||
             !Number.isInteger(redBaseId) || !Number.isInteger(blueBaseId)) {
             throw new TypeError('AI 请求数据字段无效');
         }
@@ -50,17 +50,15 @@ self.onmessage = function(event) {
         const ai = new AIController(difficulty, adjacency, areaCenters);
         const decision = ai.getBestMove(snapshot, playerSide);
 
-        setTimeout(() => {
-            if (decision) {
-                postWorkerMessage({
-                    requestId,
-                    parentNodeId: decision.parentNodeId,
-                    targetAreaId: decision.targetAreaId
-                });
-            } else {
-                postWorkerMessage({ requestId, parentNodeId: null, targetAreaId: null });
-            }
-        }, 300);
+        if (decision) {
+            postWorkerMessage({
+                requestId,
+                parentNodeId: decision.parentNodeId,
+                targetAreaId: decision.targetAreaId
+            });
+        } else {
+            postWorkerMessage({ requestId, parentNodeId: null, targetAreaId: null });
+        }
     } catch (error) {
         console.error('❌【AI 计算过程报错】:', error);
         postWorkerMessage({

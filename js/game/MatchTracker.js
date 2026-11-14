@@ -4,7 +4,7 @@ const copy=value=>JSON.parse(JSON.stringify(value));
 const freeze=value=>{if(value&&typeof value==='object'&&!Object.isFrozen(value)){Object.freeze(value);Object.values(value).forEach(freeze);}return value;};
 export class MatchTracker{
  constructor({startedAt=Date.now(),mode='pvp',difficulty='medium',historyIncomplete=false}={}){
-  if(!Number.isFinite(startedAt)||!['pvp','pve'].includes(mode)||!['easy','medium','hard'].includes(difficulty))throw new TypeError('对局统计初始化参数无效');
+  if(!Number.isFinite(startedAt)||!['pvp','pve'].includes(mode)||!['easy','medium','hard','expert'].includes(difficulty))throw new TypeError('对局统计初始化参数无效');
   this.startedAt=startedAt;this.endedAt=null;this.mode=mode;this.difficulty=difficulty;this.historyIncomplete=!!historyIncomplete;this.totalTurns=0;
   this.players={red:empty(),blue:empty()};this.events=[];this.maxDestructionPerAttack={red:0,blue:0};this.rootCounts={red:0,blue:0};this.finished=false;
  }

@@ -36,7 +36,7 @@ test('root first branch can target map areas without a direct adjacency entry', 
 });
 
 test('all difficulties take an immediate legal winning move', () => {
-    for (const difficulty of ['easy', 'medium', 'hard']) {
+    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
         game.addNode(null, 0, 0, 6, 'red');
@@ -69,7 +69,7 @@ test('AI rejects an unsupported player side and invalid difficulty', () => {
 
 
 test('all three difficulty levels only return moves accepted by RuleEngine', () => {
-    for (const difficulty of ['easy', 'medium', 'hard']) {
+    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
         game.addNode(null, 0, 0, 6, 'red');
@@ -93,7 +93,7 @@ test('all AI difficulties reject a fortress as the only possible attack target',
         1: [2], 2: [1, 3, 4, 5, 6],
         3: [2], 4: [2], 5: [2], 6: [2]
     };
-    for (const difficulty of ['easy', 'medium', 'hard']) {
+    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
         const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
@@ -127,6 +127,42 @@ test('AI returns null when every owned growth parent is frozen', () => {
     assert.equal(ai.getBestMove(snapshot(game, 6, 1), 'blue'), null);
 });
 
+test('generated legal moves are not revalidated during simulation, while external moves remain validated', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    const redRoot = game.addNode(null, 0, 0, 6, 'red');
+    const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
+    const ai = new AIController('hard', line, centers);
+    const bases = { red: 6, blue: 1 };
+
+    const originalCanGrow = ai.ruleEngine.canGrow.bind(ai.ruleEngine);
+    let validationCalls = 0;
+    ai.ruleEngine.canGrow = (...args) => {
+        validationCalls++;
+        return originalCanGrow(...args);
+    };
+
+    const generated = ai._generateMoves(game, 'blue', bases);
+    assert.ok(generated.length > 0);
+    const callsAfterGeneration = validationCalls;
+    const legalMove = generated[0];
+    const simulated = ai._simulateMove(game, legalMove, 'blue', bases, { alreadyValidated: true });
+    assert.ok(simulated);
+    assert.equal(validationCalls, callsAfterGeneration,
+        'a move returned by _generateMoves must not repeat RuleEngine validation');
+
+    const invalidMove = {
+        parentNodeId: blueRoot.id,
+        targetAreaId: 1,
+        x: centers[0][0],
+        y: centers[0][1]
+    };
+    assert.equal(ai._simulateMove(game, invalidMove, 'blue', bases), null);
+    assert.ok(validationCalls > callsAfterGeneration,
+        'untrusted/external moves must still go through RuleEngine validation');
+    assert.equal(redRoot.areaId, 6);
+});
+
 test('AI combat simulation preserves defender freeze until the defender completes its turn', () => {
     const adjacency = {
         1: [2, 6], 2: [1, 3], 3: [2, 4], 4: [3, 5],
@@ -149,4 +185,183 @@ test('AI combat simulation preserves defender freeze until the defender complete
     assert.equal(next.currentTurn, 'blue');
     assert.equal(next.getNode(branch.id).isFrozen, true);
     assert.equal(next.getAliveNodesByOwner('blue').some(node => node.areaId === 6), false);
+});
+
+
+test('AI prioritizes a legal move that removes an immediate enemy base threat', () => {
+    const adjacency = {
+        1: [4], 2: [3], 3: [2, 4], 4: [1, 3, 6], 5: [6], 6: [4, 5]
+    };
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const redRoot = game.addNode(null, 0, 0, 2, 'red');
+    const redLeaf = game.addNode(redRoot.id, 20, 0, 3, 'red');
+    game.currentTurn = 'blue';
+    const blueRoot = game.addNode(null, 60, 0, 6, 'blue');
+    game.addNode(blueRoot.id, 40, 0, 4, 'blue');
+    game.currentTurn = 'red';
+
+    const ai = new AIController('hard', adjacency, centers);
+    const move = ai.getBestMove(snapshot(game, 1, 6), 'red');
+    assert.ok(move);
+    assert.equal(move.parentNodeId, redLeaf.id);
+    assert.equal(move.targetAreaId, 4);
+});
+
+
+test('expert difficulty is accepted and returns a RuleEngine-legal move', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 6, 'red');
+    const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
+    const ai = new AIController('expert', line, centers);
+    const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+    assert.ok(move);
+    assert.equal(move.parentNodeId, blueRoot.id);
+    const restored = GameState.fromJSON(game.toJSON());
+    restored.currentTurn = 'blue';
+    const validation = new RuleEngine({ adjacency: line }).canGrow(
+        restored, restored.getNode(move.parentNodeId), move.targetAreaId,
+        { ownBaseId: 1, enemyBaseId: 6 }
+    );
+    assert.equal(validation.allowed, true);
+});
+
+test('difficulty profiles encode distinct strategic priorities and expert search breadth', async () => {
+    const { getDifficultyProfile, DIFFICULTY_LEVELS } = await import('./DifficultyProfiles.js');
+    assert.deepEqual(DIFFICULTY_LEVELS, ['easy', 'medium', 'hard', 'expert']);
+    const easy = getDifficultyProfile('easy');
+    const medium = getDifficultyProfile('medium');
+    const hard = getDifficultyProfile('hard');
+    const expert = getDifficultyProfile('expert');
+    assert.ok(easy.expansionWeight > medium.expansionWeight);
+    assert.ok(easy.attackWeight < medium.attackWeight);
+    assert.ok(hard.attackWeight > medium.attackWeight);
+    assert.ok(expert.safetyWeight > hard.safetyWeight);
+    assert.ok(expert.structureWeight > hard.structureWeight);
+    assert.ok(expert.searchWidth > hard.searchWidth);
+    assert.throws(() => getDifficultyProfile('unknown'), /难度无效/);
+});
+
+
+test('hard and expert profiles configure bounded iterative search', async () => {
+    const { getDifficultyProfile } = await import('./DifficultyProfiles.js');
+    const hard = getDifficultyProfile('hard');
+    const expert = getDifficultyProfile('expert');
+    assert.equal(hard.maxDepth, 7);
+    assert.equal(expert.maxDepth, 8);
+    assert.ok(hard.searchBudgetMs > 0 && expert.searchBudgetMs > hard.searchBudgetMs);
+    assert.ok(hard.maxNodes > 0 && expert.maxNodes > hard.maxNodes);
+});
+
+
+test('multi-source base-distance search respects occupied blockers and caches position queries', () => {
+    const adjacency = {
+        1: [2], 2: [1, 3], 3: [2, 4], 4: [3, 5],
+        5: [4, 6], 6: [5, 7], 7: [6]
+    };
+    const game = new GameState();
+    game.currentTurn = 'red';
+    game.addNode(null, 0, 0, 1, 'red');
+    game.addNode(null, 0, 0, 5, 'red');
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 3, 'blue');
+
+    const ai = new AIController('hard', adjacency, centers);
+    assert.equal(ai._distanceToBase(game, 'red', 7), 2);
+    const cachedPosition = ai.distanceCache.get(game);
+    assert.ok(cachedPosition instanceof Map);
+    assert.equal(cachedPosition.get('red:7'), 2);
+    assert.equal(ai._distanceToBase(game, 'red', 7), 2);
+    assert.equal(cachedPosition.size, 1);
+});
+
+
+test('GameState.clone creates an independent state without changing serialized data', () => {
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const root = game.addNode(null, 0, 0, 1, 'red');
+    const child = game.addNode(root.id, 10, 0, 2, 'red');
+    child.isFrozen = true;
+    const before = game.toJSON();
+
+    const clone = game.clone();
+    assert.deepEqual(clone.toJSON(), before);
+    assert.notEqual(clone, game);
+    assert.notEqual(clone.nodes[0], game.nodes[0]);
+    assert.notEqual(clone.nodes[0].childrenIds, game.nodes[0].childrenIds);
+
+    clone.getNode(root.id).childrenIds.push(99);
+    clone.getNode(child.id).isFrozen = false;
+    clone.currentTurn = 'blue';
+    assert.deepEqual(game.toJSON(), before);
+});
+
+
+test('search reuses prepared root states and orders opponent replies by their own value', () => {
+    const ai = new AIController('hard', line, centers);
+    const root = {
+        currentTurn: 'blue',
+        isGameOver: false,
+        toJSON() {
+            return { currentTurn: this.currentTurn, lastMove: this.lastMove ?? null };
+        }
+    };
+    const scoredStates = [];
+    const rootChildScores = [];
+    const searchedReplies = [];
+    let rootSimulations = 0;
+    let rootChild = null;
+    let rootChildKeySerializations = 0;
+
+    ai._generateMoves = (state, side) => side === 'red'
+        ? [{ targetAreaId: 5 }, { targetAreaId: 4 }]
+        : [];
+    ai._simulateMove = (state, move, side) => {
+        if (state === root) rootSimulations++;
+        const next = {
+            currentTurn: side === 'red' ? 'blue' : 'red',
+            isGameOver: false,
+            lastMove: move.targetAreaId,
+            toJSON() {
+                if (next === rootChild) rootChildKeySerializations++;
+                return { currentTurn: this.currentTurn, lastMove: this.lastMove ?? null };
+            }
+        };
+        if (state === root) rootChild = next;
+        return next;
+    };
+    ai._scoreMove = (state, move, side, bases, next) => {
+        scoredStates.push(state);
+        if (state === rootChild) rootChildScores.push(state);
+        assert.ok(next, 'move ordering should score the already prepared child state');
+        return move.targetAreaId;
+    };
+    ai._simulatePass = (state, side) => ({
+        ...state,
+        currentTurn: side === 'red' ? 'blue' : 'red',
+        toJSON() {
+            return { currentTurn: this.currentTurn, lastMove: this.lastMove ?? null };
+        }
+    });
+    ai._evaluateState = state => {
+        if (state.currentTurn === 'blue' && state.lastMove !== 2) {
+            searchedReplies.push(state.lastMove);
+        }
+        return state.lastMove || 0;
+    };
+
+    ai._searchHard(root, [
+        { parentNodeId: 1, targetAreaId: 2, x: 0, y: 0, score: 10 }
+    ], 'blue', { red: 6, blue: 1 });
+
+    assert.equal(rootSimulations, 1, 'root child state should be prepared once and reused across depths');
+    assert.equal(rootChildKeySerializations, 1,
+        'an immutable root child position key should be serialized only once');
+    assert.equal(scoredStates.includes(root), false, 'root actions should not be rescored');
+    assert.equal(rootChildScores.length, 2,
+        'the reused root child should not have its internal move ordering recomputed at every depth');
+    assert.ok(searchedReplies.length >= 1);
+    assert.equal(searchedReplies[0], 5,
+        'the opponent-favorable reply must be traversed first at a minimizing node');
 });
