@@ -6,6 +6,7 @@ import { CanvasDrawer } from './renderer/CanvasDrawer.js';
 import { RuleEngine } from './game/RuleEngine.js';
 import { resolveCombat } from './game/CombatResolver.js';
 import { PresentationController } from './presentation/PresentationController.js';
+import { createCombatEvent } from './presentation/CombatEvent.js';
 
 // 1. 初始化各模块
 const appState = new AppState();
@@ -72,6 +73,10 @@ const rulesMenuBtn = document.getElementById('rules-menu-btn');
 const rulesPanel = document.getElementById('rules-panel');
 const closeRulesBtn = document.getElementById('close-rules-btn');
 const actionFeedback = document.getElementById('action-feedback');
+const combatExplanation = document.getElementById('combat-explanation');
+const combatExplanationTitle = document.getElementById('combat-explanation-title');
+const combatExplanationDetail = document.getElementById('combat-explanation-detail');
+const combatExplanationMeta = document.getElementById('combat-explanation-meta');
 
 presentation = new PresentationController({ render: () => renderGame() });
 function showFeedback(message, type = 'info', duration = 1900) {
@@ -82,6 +87,14 @@ function showFeedback(message, type = 'info', duration = 1900) {
     if (feedbackTimeoutId !== null) window.clearTimeout(feedbackTimeoutId);
     feedbackTimeoutId = window.setTimeout(() => { actionFeedback.hidden = true; feedbackTimeoutId = null; }, duration);
 }
+function showCombatExplanation(event) {
+    if (!combatExplanation) return;
+    combatExplanationTitle.textContent = event.title;
+    combatExplanationDetail.textContent = event.description;
+    combatExplanationMeta.textContent = event.meta;
+    combatExplanation.hidden = false;
+}
+function clearCombatExplanation() { if (combatExplanation) combatExplanation.hidden = true; }
 function flashTurnIndicator() {
     if (!turnIndicator) return;
     turnIndicator.classList.remove('turn-flash');
@@ -204,21 +217,11 @@ function processSuccessfulGrowth(newNode, owner) {
         const combat = resolveCombat(game, newNode, rivalNode);
         const nodesToDelete = [...new Set(combat.nodesToDelete)];
         const freezeTargetId = combat.freezeTargetId;
-        showFeedback(nodesToDelete.length
-            ? `发生战斗：预计摧毁 ${nodesToDelete.length} 个节点。`
-            : '发生战斗：进攻节点被防守机制拦截。', 'warning', 2400);
-        if (nodesToDelete.length === 0) {
-            if (freezeTargetId) {
-                const targetNode = game.getNode(freezeTargetId);
-                if (targetNode) targetNode.isFrozen = true;
-            }
-            performTurnSwitch(); return;
-        }
-        isAnimating = true;
-        dyingNodes = nodesToDelete.map(id => game.getNode(id)).filter(Boolean);
-        renderGame();
-        combatTimeoutId = window.setTimeout(() => {
-            combatTimeoutId = null;
+        const combatEvent = createCombatEvent(game, newNode, rivalNode, combat);
+        showCombatExplanation(combatEvent);
+        showFeedback(combatEvent.title, 'warning', 2600);
+
+        const finishCombat = () => {
             game.deleteNodes(nodesToDelete);
             dyingNodes = [];
             if (freezeTargetId) {
@@ -235,8 +238,30 @@ function processSuccessfulGrowth(newNode, owner) {
                 game.isGameOver = true;
                 showFeedback('蓝方全部根节点被摧毁，红方获胜。', 'success', 3600);
             } else performTurnSwitch();
-            updateUI(); renderGame();
-        }, 500);
+            updateUI();
+            renderGame();
+        };
+
+        if (nodesToDelete.length === 0) {
+            if (freezeTargetId) {
+                const targetNode = game.getNode(freezeTargetId);
+                if (targetNode) targetNode.isFrozen = true;
+            }
+            isAnimating = false;
+            performTurnSwitch();
+            updateUI();
+            renderGame();
+            return;
+        }
+
+        isAnimating = true;
+        dyingNodes = [];
+        updateUI();
+        presentation.playCombat({
+            event: combatEvent,
+            duration: Math.min(1050, 620 + nodesToDelete.length * 70),
+            onComplete: finishCombat
+        });
     };
 
     if (!parentNode) { finishGrowth(); return; }
@@ -535,6 +560,7 @@ function applyLoadedGameData(data, sourceName = '存档') {
         }
 
         invalidateAIRequest();
+        presentation.cancel();
         if (combatTimeoutId !== null) {
             clearTimeout(combatTimeoutId);
             combatTimeoutId = null;
@@ -542,6 +568,7 @@ function applyLoadedGameData(data, sourceName = '存档') {
         isAnimating = false;
         isPaused = false;
         dyingNodes = [];
+        clearCombatExplanation();
         mapManager.areas = restoredMapManager.areas;
         mapManager.voronoi = restoredMapManager.voronoi;
         mapManager.delaunay = restoredMapManager.delaunay;
@@ -637,6 +664,7 @@ function beginNewMatch() {
     isAIMode = config.mode === 'pve';
     invalidateAIRequest();
     presentation.cancel();
+    clearCombatExplanation();
     if (combatTimeoutId !== null) {
         clearTimeout(combatTimeoutId);
         combatTimeoutId = null;
@@ -946,7 +974,7 @@ function renderGame() {
         legalAreaIds,
         hoverAreaId
     );
-    drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes, mapManager.portals, presentation?.animationState || null);
+    drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes, mapManager.portals, presentation?.animationState || null, presentation?.combatState || null);
     persistLastMatch();
 }
 // Expose a lightweight startup diagnostic after the game module and UI event

@@ -46,3 +46,11 @@
 @keyframes turn-flash{0%{border-color:rgba(139,211,183,.8);box-shadow:0 0 0 0 rgba(139,211,183,.28)}100%{border-color:rgba(168,194,201,.14);box-shadow:0 0 0 9px rgba(139,211,183,0)}}
 @media(max-width:900px){.action-feedback{max-width:100%;width:100%;order:3}}
 @media(prefers-reduced-motion:reduce){.action-feedback,#turnIndicator.turn-flash{animation:none}}
+
+/* Stage D2: combat readability */
+.combat-explanation{width:min(100%,560px);padding:7px 10px;border:1px solid rgba(236,133,105,.28);border-radius:7px;background:linear-gradient(120deg,rgba(105,48,44,.2),rgba(30,43,54,.48));color:#d6dfe1;font-size:10px;line-height:1.5}
+.combat-explanation-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:#e6a58e;font-size:9px;letter-spacing:.04em}
+.combat-explanation-heading strong{color:#f0d5c9;font-size:10px;letter-spacing:0}
+.combat-explanation p{margin:3px 0;color:#c3d0d5}
+.combat-explanation small{color:#8ea3ad;font-size:9px}
+@media(max-width:900px){.combat-explanation{width:100%;order:4}}

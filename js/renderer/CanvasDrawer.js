@@ -248,7 +248,7 @@ export class CanvasDrawer {
     }
 
     // 第三个参数：dyingNodes（即将被摧毁的节点列表）
-    renderNodes(nodes, selectedNodeId = null, dyingNodes = [], portals = {}, animationState = null) {
+    renderNodes(nodes, selectedNodeId = null, dyingNodes = [], portals = {}, animationState = null, combatState = null) {
         const ctx = this.ctx;
         const alive = nodes.filter(n => !n.isDestroyed);
 
@@ -346,5 +346,45 @@ export class CanvasDrawer {
             }
             if (node.isFrozen) this._drawFrozenEffect(node);
         });
+        if (combatState?.type === 'combat' && combatState.event) this._drawCombatEffect(combatState);
+    }
+
+    _drawCombatEffect(combatState) {
+        const ctx = this.ctx;
+        const event = combatState.event;
+        const progress = Math.max(0, Math.min(1, combatState.progress));
+        const pulse = 0.5 + 0.5 * Math.sin(progress * Math.PI * 5);
+        const byId = new Map(event.allNodes.map(node => [node.id, node]));
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = 0.92 - progress * 0.42;
+        ctx.shadowColor = '#ff624f';
+        ctx.shadowBlur = 12 + pulse * 10;
+        ctx.strokeStyle = '#e84c45';
+        ctx.lineWidth = 7 - progress * 2;
+        for (const node of event.affectedNodes) {
+            if (node.parentId === null) continue;
+            const parent = byId.get(node.parentId);
+            if (!parent) continue;
+            ctx.beginPath(); ctx.moveTo(parent.x, parent.y); ctx.lineTo(node.x, node.y); ctx.stroke();
+        }
+        for (const node of event.affectedNodes) {
+            const radius = Math.max(5, 15 - progress * 5) + pulse * 2;
+            ctx.beginPath(); ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(220,65,55,.72)'; ctx.fill();
+            ctx.strokeStyle = '#fff0e8'; ctx.lineWidth = 2; ctx.stroke();
+        }
+        const drawTarget = (node, color, baseRadius) => {
+            if (!node) return;
+            ctx.globalAlpha = 0.45 + pulse * 0.5;
+            ctx.shadowColor = color; ctx.shadowBlur = 18;
+            ctx.beginPath(); ctx.arc(node.x, node.y, baseRadius + pulse * 5, 0, Math.PI * 2);
+            ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.stroke();
+        };
+        drawTarget(event.attacker, '#ffb45d', 19);
+        drawTarget(event.defender, '#ff655b', 24);
+        if (event.freezeTarget) drawTarget(event.freezeTarget, '#63d9f5', 21);
+        ctx.restore();
     }
 }
