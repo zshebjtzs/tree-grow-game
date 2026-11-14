@@ -16,6 +16,7 @@ const PROFILES = {
         searchWidth: 0,
         maxDepth: 0,
         searchBudgetMs: 0,
+        maxNodes: 0,
         selection: 'varied'
     },
     medium: {
@@ -30,6 +31,7 @@ const PROFILES = {
         searchWidth: 0,
         maxDepth: 0,
         searchBudgetMs: 0,
+        maxNodes: 0,
         selection: 'weighted'
     },
     hard: {
@@ -44,6 +46,7 @@ const PROFILES = {
         searchWidth: 7,
         maxDepth: 4,
         searchBudgetMs: 700,
+        maxNodes: 30000,
         selection: 'search'
     },
     expert: {
@@ -58,6 +61,7 @@ const PROFILES = {
         searchWidth: 10,
         maxDepth: 5,
         searchBudgetMs: 1200,
+        maxNodes: 60000,
         selection: 'search'
     }
 };
