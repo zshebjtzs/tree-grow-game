@@ -67,7 +67,9 @@ export class AIController {
         // the threat. If no action fully defends, minimize the remaining wins.
         const defenseMoves = this.tacticalAnalyzer.rankDefenses(
             game, ranked, playerSide, bases,
-            (state, move, side, matchBases) => this._simulateMove(state, move, side, matchBases),
+            (state, move, side, matchBases) => this._simulateMove(
+                state, move, side, matchBases, { alreadyValidated: true }
+            ),
             (state, side, matchBases) => this._generateMoves(state, side, matchBases)
         );
         const defenseSet = new Set(defenseMoves);
@@ -248,7 +250,9 @@ export class AIController {
         // iterative-deepening pass.
         const rootChildren = new Map();
         for (const move of rootMoves) {
-            const next = move._nextState || this._simulateMove(game, move, side, bases);
+            const next = move._nextState || this._simulateMove(
+                game, move, side, bases, { alreadyValidated: true }
+            );
             if (next) rootChildren.set(moveKey(move), next);
         }
         preparedChildren.set(game, rootChildren);
