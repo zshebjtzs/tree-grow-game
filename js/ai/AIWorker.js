@@ -50,17 +50,15 @@ self.onmessage = function(event) {
         const ai = new AIController(difficulty, adjacency, areaCenters);
         const decision = ai.getBestMove(snapshot, playerSide);
 
-        setTimeout(() => {
-            if (decision) {
-                postWorkerMessage({
-                    requestId,
-                    parentNodeId: decision.parentNodeId,
-                    targetAreaId: decision.targetAreaId
-                });
-            } else {
-                postWorkerMessage({ requestId, parentNodeId: null, targetAreaId: null });
-            }
-        }, 300);
+        if (decision) {
+            postWorkerMessage({
+                requestId,
+                parentNodeId: decision.parentNodeId,
+                targetAreaId: decision.targetAreaId
+            });
+        } else {
+            postWorkerMessage({ requestId, parentNodeId: null, targetAreaId: null });
+        }
     } catch (error) {
         console.error('❌【AI 计算过程报错】:', error);
         postWorkerMessage({
