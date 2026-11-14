@@ -8,10 +8,14 @@ import { resolveCombat } from './game/CombatResolver.js';
 import { PresentationController } from './presentation/PresentationController.js';
 import { createCombatEvent } from './presentation/CombatEvent.js';
 import { AudioController } from './presentation/AudioController.js';
+import { MatchTracker } from './game/MatchTracker.js';
+import { createRematchConfig } from './app/RematchConfig.js';
 
 // 1. 初始化各模块
 const appState = new AppState();
 let activeMatchConfig = null;
+let matchTracker = null;
+let lastMatchResult = null;
 const LAST_MATCH_KEY = 'treeGrow:lastMatch:v1';
 let game = new GameState();
 const mapManager = new MapManager(1800, 1200);
@@ -66,6 +70,17 @@ const startGameBtn = document.getElementById('start-game-btn');
 const menuScreen = document.getElementById('menu-screen');
 const setupScreen = document.getElementById('setup-screen');
 const gameScreen = document.getElementById('game-screen');
+const resultScreen = document.getElementById('result-screen');
+const resultTitle = document.getElementById('result-title');
+const resultSubtitle = document.getElementById('result-subtitle');
+const resultMeta = document.getElementById('result-meta');
+const resultOverview = document.getElementById('result-overview');
+const resultStrategy = document.getElementById('result-strategy');
+const resultCombat = document.getElementById('result-combat');
+const resultEvents = document.getElementById('result-events');
+const resultEventsEmpty = document.getElementById('result-events-empty');
+const resultMenuBtn = document.getElementById('result-menu-btn');
+const resultRematchBtn = document.getElementById('result-rematch-btn');
 const newGameBtn = document.getElementById('new-game-btn');
 const continueGameBtn = document.getElementById('continue-game-btn');
 const loadMenuBtn = document.getElementById('load-menu-btn');
@@ -111,6 +126,50 @@ function showCombatExplanation(event) {
     combatExplanation.hidden = false;
 }
 function clearCombatExplanation() { if (combatExplanation) combatExplanation.hidden = true; }
+function finishMatch(winner, reason) {
+    if (game.isGameOver) return;
+    game.isGameOver = true;
+    lastMatchResult = matchTracker?.finish(winner, reason, game) || null;
+    try { localStorage.removeItem(LAST_MATCH_KEY); } catch (error) { console.warn('清理已结束对局恢复记录失败：', error); }
+    if (lastMatchResult) { renderMatchResult(lastMatchResult); showAppScreen('result'); }
+}
+function formatMatchDuration(milliseconds) {
+    const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+    const hours = Math.floor(seconds / 3600), minutes = Math.floor((seconds % 3600) / 60), remainder = seconds % 60;
+    return hours ? hours + '小时 ' + minutes + '分' : minutes ? minutes + '分 ' + remainder + '秒' : remainder + '秒';
+}
+function formatRate(value) { return value === null || !Number.isFinite(value) ? '—' : (value * 100).toFixed(1) + '%'; }
+function resultSideLabel(side, result) { if (result.mode === 'pve') return side === 'red' ? '红方 · 玩家' : '蓝方 · AI'; return side === 'red' ? '红方' : '蓝方'; }
+function appendResultText(parent, tag, className, value) { const el = document.createElement(tag); if (className) el.className = className; el.textContent = String(value); parent.appendChild(el); return el; }
+function renderResultComparison(container, result, rows) {
+    container.replaceChildren(); const head = document.createElement('div'); head.className = 'result-compare-head';
+    appendResultText(head, 'span', '', '统计指标'); appendResultText(head, 'span', '', resultSideLabel('red', result)); appendResultText(head, 'span', '', resultSideLabel('blue', result)); container.appendChild(head);
+    for (const [label, getter] of rows) { const row = document.createElement('div'); row.className = 'result-compare-row'; appendResultText(row, 'span', '', label); appendResultText(row, 'strong', '', getter(result.players.red, 'red', result)); appendResultText(row, 'strong', '', getter(result.players.blue, 'blue', result)); container.appendChild(row); }
+}
+function describeMatchEvent(event, result) {
+    const side = resultSideLabel(event.side, result);
+    switch (event.type) {
+        case 'GROWTH': return { title: side + (event.isAttack ? ' 发起区域攻击' : ' 完成生长'), detail: '进入区域 #' + event.areaId };
+        case 'COMBAT': return { title: side + ' 触发战斗 · ' + event.destroyedNodes + ' 个节点被摧毁', detail: event.outcome === 'branch-cut' ? '切断目标枝条' : event.outcome === 'branch-destroyed' ? '摧毁分叉节点及其后代' : event.outcome === 'tree-destroyed' ? '摧毁整棵防守树' : '完成战斗结算' };
+        case 'FREEZE': return { title: side + ' 的节点被冻结', detail: '节点 #' + event.nodeId + ' · 由' + resultSideLabel(event.causedBy, result) + '的攻击造成' };
+        case 'ROOT_DESTROYED': return { title: side + ' 根节点被摧毁', detail: '本次损失 ' + event.count + ' 个，剩余 ' + event.remaining + ' 个' };
+        case 'VICTORY': return { title: side + ' 获胜', detail: event.reason === 'enemy_base_reached' ? '成功突入敌方基地' : '摧毁对方全部根节点' };
+        default: return null;
+    }
+}
+function renderMatchResult(result) {
+    const winnerLabel = resultSideLabel(result.winner, result);
+    resultTitle.textContent = result.mode === 'pve' ? (result.winner === 'red' ? '胜利' : '本局失败') : winnerLabel + '获胜';
+    resultSubtitle.textContent = result.winReason === 'enemy_base_reached' ? '胜利条件：成功突入敌方基地' : '胜利条件：摧毁对方全部根节点';
+    resultMeta.replaceChildren(); const meta = [result.mode === 'pve' ? '人机对战 · AI ' + ({easy:'简单',medium:'普通',hard:'困难'}[result.difficulty] || result.difficulty) : '双人对战', '获胜方：' + winnerLabel];
+    if (result.historyIncomplete) meta.push('部分历史数据不可用'); meta.forEach(value => appendResultText(resultMeta, 'span', '', value));
+    const overview = [['对局时长', formatMatchDuration(result.durationMs)], ['总回合数', result.totalTurns], ['红方最终存活', result.players.red.survivingNodes + ' 节点 / ' + result.players.red.survivingRoots + ' 根'], ['蓝方最终存活', result.players.blue.survivingNodes + ' 节点 / ' + result.players.blue.survivingRoots + ' 根']];
+    resultOverview.replaceChildren(); for (const [label, value] of overview) { const card = document.createElement('div'); card.className = 'result-overview-card'; appendResultText(card, 'small', '', label); appendResultText(card, 'strong', '', value); resultOverview.appendChild(card); }
+    renderResultComparison(resultStrategy, result, [['历史最大存活节点数', p => p.maxTreeSize], ['最大分支数', p => p.maxBranching], ['最大生长深度', p => p.maxDepth], ['历史覆盖区域数', p => p.uniqueAreas.length]]);
+    renderResultComparison(resultCombat, result, [['攻击次数', p => p.attackCount], ['造成摧毁的攻击次数', p => p.successfulAttackCount], ['攻击摧毁转化率', p => formatRate(p.attackConversionRate)], ['摧毁节点总数', p => p.destroyedNodes], ['单次最大摧毁规模', (p, side, r) => r.maxDestructionPerAttack[side]], ['冻结次数', p => p.freezeCount], ['根节点损失数', p => p.rootDestroyedCount]]);
+    resultEvents.replaceChildren(); const important = result.events.filter(e => e.type !== 'GROWTH' || e.isAttack).slice(-5).reverse(); resultEventsEmpty.hidden = important.length > 0;
+    important.forEach((event, index) => { const d = describeMatchEvent(event, result); if (!d) return; const item = document.createElement('li'); item.className = 'result-event'; appendResultText(item, 'span', 'result-event-index', String(index + 1).padStart(2, '0')); const content = document.createElement('div'); appendResultText(content, 'strong', '', d.title); appendResultText(content, 'small', '', '第 ' + event.turn + ' 回合 · ' + d.detail); item.appendChild(content); resultEvents.appendChild(item); });
+}
 function flashTurnIndicator() {
     if (!turnIndicator) return;
     turnIndicator.classList.remove('turn-flash');
@@ -210,6 +269,9 @@ if (!aiWorker && pveOption) {
 
 // --- 【核心提取】通用成长后处理函数（人类和 AI 共用） ---
 function processSuccessfulGrowth(newNode, owner) {
+    const enemyBaseId = owner === 'red' ? blueBaseId : redBaseId;
+    const isAttack = newNode.areaId !== enemyBaseId && game.getAliveNodes().some(node => node.id !== newNode.id && node.owner !== owner && node.areaId === newNode.areaId);
+    matchTracker?.recordGrowth(game, newNode, { isAttack });
     audio.play('growth');
     selectedNodeId = null;
     const parentNode = newNode.parentId === null ? null : game.getNode(newNode.parentId);
@@ -220,7 +282,7 @@ function processSuccessfulGrowth(newNode, owner) {
         isAnimating = false;
         const enemyBaseId = owner === 'red' ? blueBaseId : redBaseId;
         if (newNode.areaId === enemyBaseId) {
-            game.isGameOver = true;
+            finishMatch(owner, 'enemy_base_reached');
             showFeedback(`${owner === 'red' ? '红方' : '蓝方'}成功突入敌方基地，获得胜利。`, 'success', 3600);
             audio.play('victory');
             updateUI(); renderGame(); return;
@@ -236,12 +298,14 @@ function processSuccessfulGrowth(newNode, owner) {
         const nodesToDelete = [...new Set(combat.nodesToDelete)];
         const freezeTargetId = combat.freezeTargetId;
         const combatEvent = createCombatEvent(game, newNode, rivalNode, combat);
+        matchTracker?.recordCombat(combatEvent, combat);
         showCombatExplanation(combatEvent);
         showFeedback(combatEvent.title, 'warning', 2600);
         audio.play('combat');
 
         const finishCombat = () => {
             game.deleteNodes(nodesToDelete);
+            matchTracker?.syncAfterMutation(game);
             dyingNodes = [];
             if (nodesToDelete.length > 0) audio.play('destroy');
             if (freezeTargetId) {
@@ -252,11 +316,11 @@ function processSuccessfulGrowth(newNode, owner) {
             const redRoots = game.getPlayerRootNodes('red');
             const blueRoots = game.getPlayerRootNodes('blue');
             if (redRoots.length === 0) {
-                game.isGameOver = true;
+                finishMatch('blue', 'all_roots_destroyed');
                 showFeedback('红方全部根节点被摧毁，蓝方获胜。', 'success', 3600);
                 audio.play('victory');
             } else if (blueRoots.length === 0) {
-                game.isGameOver = true;
+                finishMatch('red', 'all_roots_destroyed');
                 showFeedback('蓝方全部根节点被摧毁，红方获胜。', 'success', 3600);
                 audio.play('victory');
             } else performTurnSwitch();
@@ -269,6 +333,7 @@ function processSuccessfulGrowth(newNode, owner) {
                 const targetNode = game.getNode(freezeTargetId);
                 if (targetNode) { targetNode.isFrozen = true; audio.play('freeze'); }
             }
+            matchTracker?.syncAfterMutation(game);
             isAnimating = false;
             performTurnSwitch();
             updateUI();
@@ -328,6 +393,7 @@ function performTurnSwitch() {
 
 // --- 主动跳过回合（针对玩家或 AI 无棋可走） ---
 function performSkipTurn() {
+    matchTracker?.recordSkip(game.currentTurn);
     // Skipping is a turn completion, not a separate state transition.
     // Reuse the authoritative cleanup/switch/AI path so frozen nodes and
     // AI scheduling cannot diverge from a normal completed action.
@@ -480,7 +546,8 @@ function getGameBlob() {
         blueBaseId: blueBaseId,
         gamePhase: gamePhase,
         isAIMode: isAIMode,
-        difficulty: activeMatchConfig?.difficulty || difficultySelect.value
+        difficulty: activeMatchConfig?.difficulty || difficultySelect.value,
+        matchTracker: matchTracker?.toJSON() || null
     };
     return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
 }
@@ -559,6 +626,7 @@ async function loadGame() {
 }
 
 function applyLoadedGameData(data, sourceName = '存档') {
+        lastMatchResult = null;
         // 先在临时对象中完整验证存档，失败时不触碰当前游戏。
         if (!Array.isArray(data.mapSeeds) || data.mapSeeds.length !== 50 ||
             !data.mapSeeds.every(seed => Array.isArray(seed) && seed.length === 2 &&
@@ -624,6 +692,7 @@ function applyLoadedGameData(data, sourceName = '存档') {
         ruleEngine = new RuleEngine(mapManager);
 
         activeMatchConfig = Object.freeze({ mode: isAIMode ? 'pve' : 'pvp', difficulty: difficultySelect.value, playerSide: 'red' });
+        matchTracker = MatchTracker.fromJSON(data.matchTracker) || MatchTracker.start(game, activeMatchConfig, { historyIncomplete: true });
         appState.startMatch(activeMatchConfig);
         renderGame();
         updateUI();
@@ -646,6 +715,7 @@ function showAppScreen(screen) {
     menuScreen.hidden = screen !== 'menu';
     setupScreen.hidden = screen !== 'setup';
     gameScreen.hidden = screen !== 'game';
+    resultScreen.hidden = screen !== 'result';
     document.body.dataset.screen = screen;
     if (screen === 'game') requestAnimationFrame(() => fitGameCanvas());
     if (screen === 'menu') updateMenuUI();
@@ -671,17 +741,26 @@ function persistLastMatch() {
         localStorage.setItem(LAST_MATCH_KEY, JSON.stringify({
             schemaVersion: 1, gameState: game.toJSON(), mapSeeds: mapManager.seeds,
             redBaseId, blueBaseId, gamePhase, isAIMode,
-            difficulty: activeMatchConfig?.difficulty || difficultySelect.value
+            difficulty: activeMatchConfig?.difficulty || difficultySelect.value,
+            matchTracker: matchTracker?.toJSON() || null
         }));
     } catch (error) { console.warn('最近对局自动保存失败：', error); }
 }
 
-function beginNewMatch() {
-    const config = Object.freeze({
+function beginNewMatch(configOverride = null) {
+    lastMatchResult = null;
+    const config = createRematchConfig(configOverride || {
         mode: modeSelect.value === 'pve' ? 'pve' : 'pvp',
         difficulty: difficultySelect.value,
         playerSide: 'red'
     });
+    modeSelect.value = config.mode;
+    difficultySelect.value = config.difficulty;
+    difficultyGroup.hidden = config.mode !== 'pve';
+    try { localStorage.removeItem(LAST_MATCH_KEY); } catch (error) { console.warn('清理上一局自动恢复记录失败：', error); }
+    if (feedbackTimeoutId !== null) { clearTimeout(feedbackTimeoutId); feedbackTimeoutId = null; }
+    if (actionFeedback) actionFeedback.hidden = true;
+    audio.stopAll();
     activeMatchConfig = config;
     appState.startMatch(config);
     isAIMode = config.mode === 'pve';
@@ -695,6 +774,7 @@ function beginNewMatch() {
 
     // 重置整个游戏到开局状态
     game = new GameState();
+    matchTracker = null;
     mapAreas = mapManager.generateMap(50);
     ruleEngine = new RuleEngine(mapManager);
     
@@ -705,11 +785,18 @@ function beginNewMatch() {
     legalAreaIds = new Set();
     hoverAreaId = null;
     presentation.cancel();
+    audio.stopAll();
     dyingNodes = [];
     isAnimating = false;
     isAIThinking = false;
     isPaused = false;
     
+    // 重置地图视口与交互模式，避免上一局的缩放/拖动状态泄漏。
+    drawer.setMode('locked');
+    drawer.resetViewport();
+    updateViewportModeUI();
+    updateZoomUI();
+
     // 重新渲染地图
     drawer.renderMap(mapAreas);
     drawer.renderNodes(game.getAliveNodes(), selectedNodeId);
@@ -742,6 +829,11 @@ continueGameBtn.addEventListener('click', () => {
 });
 loadMenuBtn.addEventListener('click', loadGame);
 startGameBtn.addEventListener('click', beginNewMatch);
+resultMenuBtn.addEventListener('click', () => { isPaused = false; showAppScreen('menu'); });
+resultRematchBtn.addEventListener('click', () => {
+    if (!activeMatchConfig) return;
+    beginNewMatch(activeMatchConfig);
+});
 
 // ==========================================
 // 画布点击事件
@@ -820,6 +912,7 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
                 gamePhase = 'playing';
                 generateRootNodesInArea(redBaseId, 'red', 3);
                 generateRootNodesInArea(blueBaseId, 'blue', 3);
+                matchTracker = MatchTracker.start(game, activeMatchConfig || { mode: isAIMode ? 'pve' : 'pvp', difficulty: difficultySelect.value });
                 selectedNodeId = null;
                 drawer.renderMap(mapAreas, redBaseId, blueBaseId);
                 drawer.renderNodes(game.getAliveNodes(), selectedNodeId);
@@ -837,6 +930,7 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
         gamePhase = 'playing';
         generateRootNodesInArea(redBaseId, 'red', 3);
         generateRootNodesInArea(blueBaseId, 'blue', 3);
+        matchTracker = MatchTracker.start(game, activeMatchConfig || { mode: isAIMode ? 'pve' : 'pvp', difficulty: difficultySelect.value });
         selectedNodeId = null;
         drawer.renderMap(mapAreas, redBaseId, blueBaseId);
         drawer.renderNodes(game.getAliveNodes(), selectedNodeId);

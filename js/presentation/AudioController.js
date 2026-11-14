@@ -24,6 +24,7 @@ export class AudioController {
         this.muted = false;
         this.volume = 0.32;
         this.destroyed = false;
+        this.activeOscillators = new Set();
     }
 
     async unlock() {
@@ -84,6 +85,8 @@ export class AudioController {
                 envelope.gain.exponentialRampToValueAtTime(0.0001, now + note.offset + note.duration);
                 oscillator.connect(envelope);
                 envelope.connect(this.masterGain);
+                this.activeOscillators.add(oscillator);
+                oscillator.onended = () => this.activeOscillators.delete(oscillator);
                 oscillator.start(now + note.offset);
                 oscillator.stop(now + note.offset + note.duration + 0.01);
             }
@@ -93,7 +96,15 @@ export class AudioController {
         }
     }
 
+    stopAll() {
+        for (const oscillator of this.activeOscillators) {
+            try { oscillator.stop(); } catch { /* An oscillator may already have stopped. */ }
+        }
+        this.activeOscillators.clear();
+    }
+
     destroy() {
+        this.stopAll();
         this.destroyed = true;
         if (this.context && typeof this.context.close === 'function') {
             try { this.context.close(); } catch { /* Audio is optional. */ }
