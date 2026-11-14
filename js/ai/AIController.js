@@ -237,6 +237,7 @@ export class AIController {
     _searchHard(game, rankedMoves, side, bases) {
         const rootMoves = rankedMoves.slice(0, this.profile.searchWidth);
         const preparedChildren = new WeakMap();
+        const preparedMoveOrder = new WeakMap();
         const moveKey = move => `${move.parentNodeId}:${move.targetAreaId}`;
 
         // Root candidates were already simulated while calculating their
@@ -268,6 +269,8 @@ export class AIController {
                 // Root moves already carry their scores and prepared child
                 // states, so every iteration can reuse both.
                 if (state === game) return moves;
+                const cachedOrder = preparedMoveOrder.get(state);
+                if (cachedOrder) return cachedOrder;
 
                 const scored = [];
                 const children = new Map();
@@ -285,7 +288,9 @@ export class AIController {
                 // search that player's strongest replies first at every ply.
                 scored.sort((a, b) => b.score - a.score);
                 preparedChildren.set(state, children);
-                return scored.map(item => item.move);
+                const orderedMoves = scored.map(item => item.move);
+                preparedMoveOrder.set(state, orderedMoves);
+                return orderedMoves;
             }
         });
         this.lastSearchStats = {
