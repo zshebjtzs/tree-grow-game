@@ -5,6 +5,7 @@ import { MapManager } from './core/MapManager.js';
 import { CanvasDrawer } from './renderer/CanvasDrawer.js';
 import { RuleEngine } from './game/RuleEngine.js';
 import { resolveCombat } from './game/CombatResolver.js';
+import { PresentationController } from './presentation/PresentationController.js';
 
 // 1. 初始化各模块
 const appState = new AppState();
@@ -14,6 +15,9 @@ let game = new GameState();
 const mapManager = new MapManager(1800, 1200);
 let mapAreas = [];
 const drawer = new CanvasDrawer('gameCanvas');
+let presentation;
+let hoverAreaId = null;
+let feedbackTimeoutId = null;
 let ruleEngine = new RuleEngine(mapManager);
 
 // 2. 游戏阶段与状态变量
@@ -67,7 +71,23 @@ const backToMenuBtn = document.getElementById('back-to-menu-btn');
 const rulesMenuBtn = document.getElementById('rules-menu-btn');
 const rulesPanel = document.getElementById('rules-panel');
 const closeRulesBtn = document.getElementById('close-rules-btn');
+const actionFeedback = document.getElementById('action-feedback');
 
+presentation = new PresentationController({ render: () => renderGame() });
+function showFeedback(message, type = 'info', duration = 1900) {
+    if (!actionFeedback) return;
+    actionFeedback.textContent = message;
+    actionFeedback.dataset.type = type;
+    actionFeedback.hidden = false;
+    if (feedbackTimeoutId !== null) window.clearTimeout(feedbackTimeoutId);
+    feedbackTimeoutId = window.setTimeout(() => { actionFeedback.hidden = true; feedbackTimeoutId = null; }, duration);
+}
+function flashTurnIndicator() {
+    if (!turnIndicator) return;
+    turnIndicator.classList.remove('turn-flash');
+    void turnIndicator.offsetWidth;
+    turnIndicator.classList.add('turn-flash');
+}
 // --- AI Worker 初始化 ---
 function failAITurn(message) {
     console.error('AI 对战不可继续:', message);
@@ -162,77 +182,70 @@ if (!aiWorker && pveOption) {
 // --- 【核心提取】通用成长后处理函数（人类和 AI 共用） ---
 function processSuccessfulGrowth(newNode, owner) {
     selectedNodeId = null;
-
-    // Entering the enemy base wins immediately; no combat resolution is needed.
-    const enemyBaseId = owner === 'red' ? blueBaseId : redBaseId;
-    if (newNode.areaId === enemyBaseId) {
-        const winner = owner === 'red' ? '🔴 红方' : '🔵 蓝方';
-        alert(`${winner} 成功突入敌方基地！取得最终胜利！`);
-        game.isGameOver = true;
-        updateUI();
-        renderGame();
-        return;
-    }
-
-    // Combat is triggered only when the new node occupies an enemy node's area.
-    const rivalNode = game.getAliveNodes().find(node =>
-        node.id !== newNode.id &&
-        node.owner !== owner &&
-        node.areaId === newNode.areaId
-    );
-
-    if (!rivalNode) {
-        performTurnSwitch();
-        return;
-    }
-
-    const combat = resolveCombat(game, newNode, rivalNode);
-    const nodesToDelete = [...new Set(combat.nodesToDelete)];
-    const freezeTargetId = combat.freezeTargetId;
-    console.log(`-> 战斗结算：摧毁 ${nodesToDelete.length} 个节点${freezeTargetId ? `，冻结节点 ${freezeTargetId}` : ''}`);
-
-    if (nodesToDelete.length === 0) {
-        if (freezeTargetId) {
-            const targetNode = game.getNode(freezeTargetId);
-            if (targetNode) targetNode.isFrozen = true;
-        }
-        performTurnSwitch();
-        return;
-    }
-
+    const parentNode = newNode.parentId === null ? null : game.getNode(newNode.parentId);
     isAnimating = true;
-    dyingNodes = nodesToDelete.map(id => game.getNode(id)).filter(Boolean);
-    renderGame();
+    updateUI();
 
-    combatTimeoutId = setTimeout(() => {
-        combatTimeoutId = null;
-        game.deleteNodes(nodesToDelete);
-        dyingNodes = [];
-
-        if (freezeTargetId) {
-            const targetNode = game.getNode(freezeTargetId);
-            if (targetNode) {
-                targetNode.isFrozen = true;
-                console.log(`【冻结执行】节点 ${targetNode.id} (区域 ${targetNode.areaId}) 的分支被摧毁。`);
-            }
-        }
-
+    const finishGrowth = () => {
         isAnimating = false;
-
-        const redRoots = game.getPlayerRootNodes('red');
-        const blueRoots = game.getPlayerRootNodes('blue');
-        if (redRoots.length === 0) {
-            alert('🔴 红方所有根节点被摧毁！🔵 蓝方胜利！');
+        const enemyBaseId = owner === 'red' ? blueBaseId : redBaseId;
+        if (newNode.areaId === enemyBaseId) {
             game.isGameOver = true;
-        } else if (blueRoots.length === 0) {
-            alert('🔵 蓝方所有根节点被摧毁！🔴 红方胜利！');
-            game.isGameOver = true;
-        } else {
-            performTurnSwitch();
+            showFeedback(`${owner === 'red' ? '红方' : '蓝方'}成功突入敌方基地，获得胜利。`, 'success', 3600);
+            updateUI(); renderGame(); return;
         }
-        updateUI();
+        const rivalNode = game.getAliveNodes().find(node =>
+            node.id !== newNode.id && node.owner !== owner && node.areaId === newNode.areaId
+        );
+        if (!rivalNode) {
+            showFeedback(`生长成功：进入区域 ${newNode.areaId}。`, 'success');
+            performTurnSwitch(); return;
+        }
+        const combat = resolveCombat(game, newNode, rivalNode);
+        const nodesToDelete = [...new Set(combat.nodesToDelete)];
+        const freezeTargetId = combat.freezeTargetId;
+        showFeedback(nodesToDelete.length
+            ? `发生战斗：预计摧毁 ${nodesToDelete.length} 个节点。`
+            : '发生战斗：进攻节点被防守机制拦截。', 'warning', 2400);
+        if (nodesToDelete.length === 0) {
+            if (freezeTargetId) {
+                const targetNode = game.getNode(freezeTargetId);
+                if (targetNode) targetNode.isFrozen = true;
+            }
+            performTurnSwitch(); return;
+        }
+        isAnimating = true;
+        dyingNodes = nodesToDelete.map(id => game.getNode(id)).filter(Boolean);
         renderGame();
-    }, 500);
+        combatTimeoutId = window.setTimeout(() => {
+            combatTimeoutId = null;
+            game.deleteNodes(nodesToDelete);
+            dyingNodes = [];
+            if (freezeTargetId) {
+                const targetNode = game.getNode(freezeTargetId);
+                if (targetNode) targetNode.isFrozen = true;
+            }
+            isAnimating = false;
+            const redRoots = game.getPlayerRootNodes('red');
+            const blueRoots = game.getPlayerRootNodes('blue');
+            if (redRoots.length === 0) {
+                game.isGameOver = true;
+                showFeedback('红方全部根节点被摧毁，蓝方获胜。', 'success', 3600);
+            } else if (blueRoots.length === 0) {
+                game.isGameOver = true;
+                showFeedback('蓝方全部根节点被摧毁，红方获胜。', 'success', 3600);
+            } else performTurnSwitch();
+            updateUI(); renderGame();
+        }, 500);
+    };
+
+    if (!parentNode) { finishGrowth(); return; }
+    presentation.playGrowth({
+        node: { id: newNode.id, x: newNode.x, y: newNode.y, owner: newNode.owner },
+        parent: { id: parentNode.id, x: parentNode.x, y: parentNode.y },
+        duration: 280,
+        onComplete: finishGrowth
+    });
 }
 
 // --- 切换回合（包含 AI 触发） ---
@@ -256,6 +269,7 @@ function performTurnSwitch() {
 
     game.switchTurn();
     selectedNodeId = null;
+    flashTurnIndicator();
     updateUI();
     renderGame();
 
@@ -622,6 +636,7 @@ function beginNewMatch() {
     appState.startMatch(config);
     isAIMode = config.mode === 'pve';
     invalidateAIRequest();
+    presentation.cancel();
     if (combatTimeoutId !== null) {
         clearTimeout(combatTimeoutId);
         combatTimeoutId = null;
@@ -637,6 +652,8 @@ function beginNewMatch() {
     blueBaseId = null;
     selectedNodeId = null;
     legalAreaIds = new Set();
+    hoverAreaId = null;
+    presentation.cancel();
     dyingNodes = [];
     isAnimating = false;
     isAIThinking = false;
@@ -764,7 +781,7 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
     }
     if (gamePhase === 'selectBlue') {
         // 双人模式走原有的逻辑
-        if (clickedAreaId === redBaseId) { alert('这块地盘已经被红方占领了！'); return; }
+        if (clickedAreaId === redBaseId) { showFeedback('该区域已经被红方占领，请选择其他区域。', 'warning'); return; }
         blueBaseId = clickedAreaId;
         gamePhase = 'playing';
         generateRootNodesInArea(redBaseId, 'red', 3);
@@ -799,7 +816,7 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
 
         // 1.1 如果是对方的节点，直接拦截
         if (clickedNode.owner !== game.currentTurn) {
-            alert('这是对手的节点！');
+            showFeedback('这是对手的节点，不能作为生长起点。', 'warning');
             selectedNodeId = null;
             renderGame();
             return;
@@ -807,7 +824,7 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
 
         // 1.2 如果是处于冻结状态的节点，直接拦截
         if (clickedNode.isFrozen) {
-            alert('规则限制：该节点因分支刚被摧毁，本回合处于休整状态，无法生长！');
+            showFeedback('该节点本回合处于冻结状态，无法作为生长起点。', 'warning');
             selectedNodeId = null;
             renderGame();
             return;
@@ -815,7 +832,7 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
 
         // 1.3 如果是已有子节点的根节点，直接拦截
         if (clickedNode.isRoot && clickedNode.childrenIds.length > 0) {
-            alert('规则限制：根节点不能作为分叉点再次生长。');
+            showFeedback('根节点不能作为分叉点再次生长。', 'warning');
             selectedNodeId = null;
             renderGame();
             return;
@@ -823,13 +840,14 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
 
         // 2. 核心选中逻辑：通过所有拦截后，执行选中
         selectedNodeId = clickedNode.id;
+        showFeedback(`已选中节点 #${clickedNode.id}，请选择高亮区域。`, 'info', 1500);
         console.log(`已选中父节点 ID: ${selectedNodeId}`);
         renderGame();
         return;
     }
 
     if (selectedNodeId === null) {
-        alert('请先点击一个属于你且不是根节点的节点作为生长的起点！');
+        showFeedback('请先选择一个可生长的己方节点。', 'warning');
         return;
     }
 
@@ -839,12 +857,12 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
     const currentBaseId = game.currentTurn === 'red' ? redBaseId : blueBaseId;
     const enemyBaseId = game.currentTurn === 'red' ? blueBaseId : redBaseId;
     const result = ruleEngine.canGrow(game, parentNode, clickedAreaId, { ownBaseId: currentBaseId, enemyBaseId });
-    if (!result.allowed) { alert(`非法生长！原因：${result.reason}`); return; }
+    if (!result.allowed) { showFeedback(`无法生长：${result.reason}`, 'warning'); return; }
 
     // 除了己方基地，一个区域只能容纳一个节点
     // 1. 绝对禁止向己方基地区域生长（防止绕回老巢）
     if (clickedAreaId === currentBaseId) {
-        alert('规则限制：禁止向己方基地区域生长！');
+        showFeedback('不能向己方基地所在区域生长。', 'warning');
         return;
     }
 
@@ -855,7 +873,7 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
         // 必须只查找己方节点，敌方节点不禁止，用来触发进攻！
         const hasOwnNodeInArea = game.getAliveNodesByOwner(game.currentTurn).some(n => n.areaId === clickedAreaId);
         if (hasOwnNodeInArea) {
-            alert('规则限制：除基地外，己方在一个区域内只能拥有一个据点！');
+            showFeedback('该区域已有己方节点，不能重复占据。', 'warning');
             return; // 阻止生长
         }
     }
@@ -925,9 +943,10 @@ function renderGame() {
         redBaseId,
         blueBaseId,
         mapManager.shortEdges || [],
-        legalAreaIds
+        legalAreaIds,
+        hoverAreaId
     );
-    drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes, mapManager.portals);
+    drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes, mapManager.portals, presentation?.animationState || null);
     persistLastMatch();
 }
 // Expose a lightweight startup diagnostic after the game module and UI event
@@ -990,6 +1009,20 @@ for (const control of [pauseBtn, saveBtn, loadBtn, restartBtn, menuBtn, endTurnB
         }
     }, true);
 }
+
+gameCanvas.addEventListener('mousemove', event => {
+    if (!drawer.isLocked || isPaused || isAnimating || isAIThinking || gamePhase !== 'playing' || selectedNodeId === null) {
+        if (hoverAreaId !== null) { hoverAreaId = null; renderGame(); }
+        return;
+    }
+    const point = drawer.getLogicalPoint(event.clientX, event.clientY);
+    const areaId = point ? mapManager.getAreaAtPoint(point.x, point.y) : null;
+    const nextHover = areaId !== null && legalAreaIds.has(areaId) ? areaId : null;
+    if (nextHover !== hoverAreaId) { hoverAreaId = nextHover; renderGame(); }
+});
+gameCanvas.addEventListener('mouseleave', () => {
+    if (hoverAreaId !== null) { hoverAreaId = null; renderGame(); }
+});
 
 gameCanvas.addEventListener('pointerdown', event => {
     if (drawer.isLocked || event.button !== 0 || !canvasContainer) return;

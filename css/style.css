@@ -36,3 +36,13 @@
 .game-screen[data-viewport-mode="unlocked"] .turn-controls::after{content:"地图浏览中 · 锁定地图后恢复游戏操作";align-self:center;padding:0 5px;color:#8fcbb5;font-size:9px}
 .map-zoom-controls{flex-wrap:wrap}
 @media(max-width:900px){.stage-caption{flex-wrap:wrap}.map-zoom-controls{gap:4px}.viewport-mode-hint{font-size:8px}}
+
+/* Stage D1: in-game feedback */
+.action-feedback{max-width:min(48vw,520px);padding:6px 10px;border:1px solid rgba(139,211,183,.25);border-radius:6px;color:#c5e8d9;background:rgba(45,103,86,.18);font-size:10px;line-height:1.45;animation:feedback-enter .16s ease-out}
+.action-feedback[data-type="warning"]{color:#f2d6a0;border-color:rgba(224,177,91,.34);background:rgba(115,78,28,.2)}
+.action-feedback[data-type="success"]{color:#bcebd4;border-color:rgba(106,198,151,.36);background:rgba(37,105,74,.2)}
+#turnIndicator.turn-flash{animation:turn-flash .42s ease-out}
+@keyframes feedback-enter{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+@keyframes turn-flash{0%{border-color:rgba(139,211,183,.8);box-shadow:0 0 0 0 rgba(139,211,183,.28)}100%{border-color:rgba(168,194,201,.14);box-shadow:0 0 0 9px rgba(139,211,183,0)}}
+@media(max-width:900px){.action-feedback{max-width:100%;width:100%;order:3}}
+@media(prefers-reduced-motion:reduce){.action-feedback,#turnIndicator.turn-flash{animation:none}}

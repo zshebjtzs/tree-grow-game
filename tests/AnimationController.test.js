@@ -1,0 +1,7 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {AnimationController} from '../js/presentation/AnimationController.js';
+function harness(){let id=0;const callbacks=new Map();return{requestFrame(cb){const key=++id;callbacks.set(key,cb);return key;},cancelFrame(key){callbacks.delete(key);},step(t){const batch=[...callbacks.values()];callbacks.clear();batch.forEach(cb=>cb(t));},get pending(){return callbacks.size;}};}
+test('animation reports normalized progress and completes once',()=>{const f=harness(),c=new AnimationController({requestFrame:f.requestFrame,cancelFrame:f.cancelFrame}),p=[];let done=0;c.play({duration:100,onUpdate:x=>p.push(x),onComplete:()=>done++});f.step(1000);f.step(1050);f.step(1100);assert.deepEqual(p,[0,.5,1]);assert.equal(done,1);assert.equal(c.isRunning,false);});
+test('animation cancellation prevents completion',()=>{const f=harness(),c=new AnimationController({requestFrame:f.requestFrame,cancelFrame:f.cancelFrame});let done=0;c.play({duration:100,onComplete:()=>done++});f.step(0);assert.equal(c.cancel(),true);f.step(200);assert.equal(done,0);});
+test('animation can finish once when explicitly cancelled with finish',()=>{const f=harness(),c=new AnimationController({requestFrame:f.requestFrame,cancelFrame:f.cancelFrame}),p=[];let done=0;c.play({duration:100,onUpdate:x=>p.push(x),onComplete:()=>done++});f.step(0);c.cancel({finish:true});assert.deepEqual(p,[0,1]);assert.equal(done,1);});
