@@ -97,6 +97,17 @@ const results = [];
 for (const fixture of fixtures) {
     for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
         const ai = new AIController(difficulty, fixture.adjacency, fixture.areaCenters);
+        const probe = GameState.fromJSON(fixture.snapshot);
+        probe.currentTurn = 'blue';
+        const legalMoveCount = ai._generateMoves(probe, 'blue', {
+            red: fixture.snapshot.redBaseId,
+            blue: fixture.snapshot.blueBaseId
+        }).length;
+        if (difficulty === 'hard' || difficulty === 'expert') {
+            if (legalMoveCount === 0 && fixture.name !== 'sparse') {
+                throw new Error(`Benchmark fixture ${fixture.name} has no legal blue moves`);
+            }
+        }
         for (let index = 0; index < WARMUP; index++) {
             ai.getBestMove(fixture.snapshot, 'blue');
         }
@@ -112,6 +123,7 @@ for (const fixture of fixtures) {
         samples.sort((a, b) => a - b);
         results.push({
             fixture: fixture.name,
+            legalMoveCount,
             difficulty,
             samples: samples.length,
             meanMs: Number((samples.reduce((sum, value) => sum + value, 0) / samples.length).toFixed(3)),
