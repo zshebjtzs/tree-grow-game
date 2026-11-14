@@ -95,6 +95,9 @@ export class AIController {
     _generateMoves(game, side, bases) {
         const aliveNodes = game.getAliveNodes();
         const occupiedBySide = new Set(game.getAliveNodesByOwner(side).map(node => node.areaId));
+        const enemyAreas = new Set(aliveNodes
+            .filter(node => node.owner !== side)
+            .map(node => node.areaId));
         const moves = [];
         for (const parent of game.getAliveNodesByOwner(side)) {
             if (parent.isFrozen) continue;
@@ -115,9 +118,7 @@ export class AIController {
                     targetAreaId,
                     x: center[0],
                     y: center[1],
-                    attacks: aliveNodes.some(node =>
-                        node.owner !== side && node.areaId === targetAreaId
-                    )
+                    attacks: enemyAreas.has(targetAreaId)
                 });
             }
         }
@@ -169,7 +170,7 @@ export class AIController {
     }
 
     _simulateMove(game, move, side, bases) {
-        const next = GameState.fromJSON(game.toJSON());
+        const next = game.clone();
         next.currentTurn = side;
         const parent = next.getNode(move.parentNodeId);
         if (!parent) return null;
@@ -216,7 +217,7 @@ export class AIController {
     }
 
     _simulatePass(game, side) {
-        const next = GameState.fromJSON(game.toJSON());
+        const next = game.clone();
         next.currentTurn = side;
         for (const node of next.getAliveNodesByOwner(side)) node.isFrozen = false;
         next.switchTurn();
