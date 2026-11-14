@@ -129,8 +129,8 @@ test('AI returns null when every owned growth parent is frozen', () => {
 
 test('AI combat simulation preserves defender freeze until the defender completes its turn', () => {
     const adjacency = {
-        1: [2], 2: [1, 3], 3: [2, 4], 4: [3, 5],
-        5: [4, 6, 7], 6: [5], 7: [5]
+        1: [2, 6], 2: [1, 3], 3: [2, 4], 4: [3, 5],
+        5: [4, 6, 7], 6: [1, 5], 7: [5]
     };
     const game = new GameState();
     game.currentTurn = 'red';

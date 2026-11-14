@@ -84,9 +84,8 @@ export class RuleEngine {
             return { allowed: false, reason: '普通生长必须进入共享边界直接相邻的区域' };
         }
 
-        // Enemy fortresses are valid attack targets. Combat resolution handles
-        // their immunity by destroying the invading node; rejecting growth here
-        // made that battle branch unreachable.
+        // Fortress attacks are illegal actions. Reject them before the
+        // caller creates an invading node or advances the turn.
         const enemyNode = gameState.getAliveNodes().find(node =>
             node.owner !== parentNode.owner && node.areaId === childAreaId
         );
