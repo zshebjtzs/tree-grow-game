@@ -88,6 +88,35 @@ test('all three difficulty levels only return moves accepted by RuleEngine', () 
     }
 });
 
+test('all AI difficulties reject a fortress as the only possible attack target', () => {
+    const adjacency = {
+        1: [2], 2: [1, 3, 4, 5, 6],
+        3: [2], 4: [2], 5: [2], 6: [2]
+    };
+    for (const difficulty of ['easy', 'medium', 'hard']) {
+        const game = new GameState();
+        game.currentTurn = 'blue';
+        const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
+        game.currentTurn = 'red';
+        const redRoot = game.addNode(null, 0, 0, 6, 'red');
+        const fortress = game.addNode(redRoot.id, 0, 0, 2, 'red');
+        game.addNode(fortress.id, 0, 0, 3, 'red');
+        game.addNode(fortress.id, 0, 0, 4, 'red');
+        game.addNode(fortress.id, 0, 0, 5, 'red');
+        game.currentTurn = 'blue';
+
+        const ai = new AIController(difficulty, adjacency, centers);
+        assert.equal(ai.getBestMove(snapshot(game, 6, 1), 'blue'), null, difficulty);
+        assert.equal(ai._simulateMove(game, {
+            parentNodeId: blueRoot.id,
+            targetAreaId: 2,
+            x: 10,
+            y: 0,
+            attacks: true
+        }, 'blue', { red: 6, blue: 1 }), null);
+    }
+});
+
 test('AI returns null when every owned growth parent is frozen', () => {
     const game = new GameState();
     game.currentTurn = 'blue';

@@ -8,7 +8,7 @@ function addChild(game, parent, areaId, owner) {
     return game.addNode(parent.id, areaId * 10, areaId * 10, areaId, owner);
 }
 
-test('fortress repels the invading node without damaging the defender tree', () => {
+test('combat resolver rejects fortress targets as an invariant guard', () => {
     const game = new GameState();
     const redRoot = game.addNode(null, 0, 0, 1, 'red');
     const attacker = addChild(game, redRoot, 2, 'red');
@@ -18,9 +18,11 @@ test('fortress repels the invading node without damaging the defender tree', () 
     addChild(game, fortress, 6, 'blue');
     addChild(game, fortress, 7, 'blue');
 
-    const result = resolveCombat(game, attacker, fortress);
-    assert.deepEqual(result.nodesToDelete, [attacker.id]);
-    assert.equal(result.freezeTargetId, null);
+    const nodeCount = game.getAliveNodes().length;
+    assert.throws(() => resolveCombat(game, attacker, fortress), /堡垒节点不能作为攻击目标/);
+    assert.equal(game.getAliveNodes().length, nodeCount);
+    assert.equal(game.getNode(attacker.id), attacker);
+    assert.equal(game.getNode(fortress.id), fortress);
 });
 
 test('low-degree branching defender loses its complete subtree', () => {

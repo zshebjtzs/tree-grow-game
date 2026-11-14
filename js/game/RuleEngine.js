@@ -87,6 +87,13 @@ export class RuleEngine {
         // Enemy fortresses are valid attack targets. Combat resolution handles
         // their immunity by destroying the invading node; rejecting growth here
         // made that battle branch unreachable.
+        const enemyNode = gameState.getAliveNodes().find(node =>
+            node.owner !== parentNode.owner && node.areaId === childAreaId
+        );
+        if (enemyNode && enemyNode.getDegree() > 3) {
+            return { allowed: false, reason: '堡垒节点不能作为攻击目标' };
+        }
+
         const targetOwn = gameState.getAliveNodesByOwner(parentNode.owner).some(node => node.areaId === childAreaId);
         if (targetOwn && childAreaId !== enemyBaseId) {
             return { allowed: false, reason: '己方普通区域只能有一个节点' };

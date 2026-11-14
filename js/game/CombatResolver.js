@@ -35,15 +35,16 @@ export function resolveCombat(gameState, invadingNode, defenderNode) {
         cursor = cursor.parentId === null ? null : gameState.getNode(cursor.parentId);
     }
 
+    if (defenderNode.getDegree() > 3) {
+        throw new Error('堡垒节点不能作为攻击目标');
+    }
+
     let nodesToDelete;
     let freezeTargetId = null;
 
-    // A low-degree branching point loses its own branch; a fortress
-    // (degree > 3) instead repels the invading node.
-    if (defenderNode.childrenIds.length >= 2 && defenderNode.getDegree() <= 3) {
+    // A non-fortress branching point loses its complete subtree.
+    if (defenderNode.childrenIds.length >= 2) {
         nodesToDelete = getSubtreeIds(defenderNode.id);
-    } else if (defenderNode.getDegree() > 3) {
-        nodesToDelete = [invadingNode.id];
     } else {
         // Remove the defender-to-branch path and every descendant hanging
         // from that path. The branching point itself survives.
