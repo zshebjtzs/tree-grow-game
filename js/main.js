@@ -41,7 +41,9 @@ let combatTimeoutId = null;
 
 // --- AI 相关变量 ---
 let isAIMode = false;       
-let isAIThinking = false;   
+let isAIThinking = false;
+let aiProgress = null;
+let aiTargetAreaId = null;
 let aiWorker = null;
 let aiRequestId = 0;         
 
@@ -94,6 +96,10 @@ const combatExplanation = document.getElementById('combat-explanation');
 const combatExplanationTitle = document.getElementById('combat-explanation-title');
 const combatExplanationDetail = document.getElementById('combat-explanation-detail');
 const combatExplanationMeta = document.getElementById('combat-explanation-meta');
+const aiExplanation = document.getElementById('ai-explanation');
+const aiExplanationSummary = document.getElementById('ai-explanation-summary');
+const aiExplanationDetails = document.getElementById('ai-explanation-details');
+const aiExplanationStats = document.getElementById('ai-explanation-stats');
 
 presentation = new PresentationController({ render: () => renderGame() });
 const audio = new AudioController();
@@ -127,6 +133,36 @@ function showCombatExplanation(event) {
     combatExplanation.hidden = false;
 }
 function clearCombatExplanation() { if (combatExplanation) combatExplanation.hidden = true; }
+function showAIExplanation(explanation) {
+    if (!aiExplanation || !explanation) return;
+    aiExplanationSummary.textContent = explanation.summary || '';
+    aiExplanationDetails.replaceChildren();
+    for (const detail of (Array.isArray(explanation.details) ? explanation.details : [])) {
+        const item = document.createElement('li');
+        item.textContent = String(detail);
+        aiExplanationDetails.appendChild(item);
+    }
+    const stats = explanation.search;
+    aiExplanationStats.textContent = stats
+        ? `搜索完成：深度 ${stats.completedDepth} · ${stats.nodes} 个节点 · ${Number(stats.elapsedMs).toFixed(1)} ms · 置换命中 ${stats.transpositionHits}`
+        : '行动由当前难度的候选评估与战术规则选出。';
+    aiExplanation.hidden = false;
+}
+function clearAIExplanation() {
+    if (aiExplanation) aiExplanation.hidden = true;
+    if (aiExplanationDetails) aiExplanationDetails.replaceChildren();
+}
+function formatAIProgress(progress) {
+    if (!progress) return '正在启动计算…';
+    if (progress.phase === 'generating') return '正在生成合法候选行动…';
+    if (progress.phase === 'evaluating') return `候选评估 ${progress.completedCandidates}/${progress.totalCandidates}`;
+    if (progress.phase === 'tactics') return '正在检查战术威胁与防守回应…';
+    if (progress.phase === 'search') {
+        return `搜索深度 ${progress.completedDepth}/${progress.maxDepth} · ${progress.nodes} 节点 · ${Number(progress.elapsedMs).toFixed(0)} ms`;
+    }
+    if (progress.phase === 'complete') return '计算完成，准备执行行动…';
+    return '正在分析当前局面…';
+}
 function finishMatch(winner, reason) {
     if (game.isGameOver) return;
     game.isGameOver = true;
@@ -208,6 +244,17 @@ if (aiWorker) {
             console.log('【AI 响应丢弃】请求已失效:', e.data?.requestId);
             return;
         }
+        if (e.data.type === 'progress') {
+            if (isAIThinking) {
+                aiProgress = e.data.progress || null;
+                updateUI();
+            }
+            return;
+        }
+        if (e.data.type && e.data.type !== 'decision') {
+            console.warn('忽略未知 AI Worker 消息类型:', e.data.type);
+            return;
+        }
         // 1. 优先判断 AI 有没有抛出致命报错
         if (e.data.error) {
             console.error('❌ 收到 AI 内部报错:', e.data.error);
@@ -218,9 +265,12 @@ if (aiWorker) {
         console.log('【AI 追踪 4】主线程收到了 Worker 的返回值:', e.data);
         const { parentNodeId, targetAreaId } = e.data;
         isAIThinking = false;
+        aiProgress = null;
+        updateUI();
 
         // Null/Null is the only valid representation of "no legal move".
         if (parentNodeId === null && targetAreaId === null) {
+            showAIExplanation(e.data.explanation);
             console.log('【AI 判定】当前无合法落子点，自动跳过回合。');
             performSkipTurn();
             return;
@@ -255,7 +305,10 @@ if (aiWorker) {
         }
 
         console.log(`【AI执行】父节点 ${parentNodeId} -> 新节点 ${newNode.id} (区域 ${targetAreaId})`);
+        showAIExplanation(e.data.explanation);
+        aiTargetAreaId = targetAreaId;
         selectedNodeId = null;
+        renderGame();
         processSuccessfulGrowth(newNode, 'blue');
     };
 } else {
@@ -281,6 +334,10 @@ function processSuccessfulGrowth(newNode, owner) {
 
     const finishGrowth = () => {
         isAnimating = false;
+        if (owner === 'blue' && isAIMode) {
+            aiTargetAreaId = null;
+            renderGame();
+        }
         const enemyBaseId = owner === 'red' ? blueBaseId : redBaseId;
         if (newNode.areaId === enemyBaseId) {
             finishMatch(owner, 'enemy_base_reached');
@@ -404,6 +461,7 @@ function performSkipTurn() {
 function invalidateAIRequest() {
     aiRequestId++;
     isAIThinking = false;
+    aiProgress = null;
 }
 
 // --- 触发 AI 运算 ---
@@ -415,6 +473,8 @@ function triggerAITurn() {
         return;
     }
     isAIThinking = true;
+    aiProgress = { phase: 'starting' };
+    clearAIExplanation();
     updateUI();
 
     const gameStateData = game.toJSON();
@@ -456,7 +516,7 @@ function updateUI() {
         turnIndicator.innerHTML = '🔵 <strong>蓝方玩家</strong>，请点击地图上的区域作为你的基地！';
         endTurnBtn.disabled = true;
     } else if (isAIThinking) {
-        turnIndicator.innerHTML = '🤖 <strong>AI 对手</strong> 正在思考...';
+        turnIndicator.innerHTML = `🤖 <strong>AI 对手</strong> 正在思考…<small class="ai-progress-detail">${formatAIProgress(aiProgress)}</small>`;
         endTurnBtn.disabled = true;
     } else {
         const playerLabel = game.currentTurn === 'red' ? '🔴 红方' : (isAIMode ? '🤖 AI 蓝方' : '🔵 蓝方');
@@ -1101,7 +1161,8 @@ function renderGame() {
         blueBaseId,
         mapManager.shortEdges || [],
         legalAreaIds,
-        hoverAreaId
+        hoverAreaId,
+        aiTargetAreaId
     );
     drawer.renderNodes(game.getAliveNodes(), selectedNodeId, dyingNodes, mapManager.portals, presentation?.animationState || null, presentation?.combatState || null);
     persistLastMatch();
