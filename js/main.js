@@ -213,7 +213,8 @@ if (!aiWorker && pveOption) {
 
 // --- 【核心提取】通用成长后处理函数（人类和 AI 共用） ---
 function processSuccessfulGrowth(newNode, owner) {
-    const isAttack = game.getAliveNodes().some(node => node.id !== newNode.id && node.owner !== owner && node.areaId === newNode.areaId);
+    const enemyBaseId = owner === 'red' ? blueBaseId : redBaseId;
+    const isAttack = newNode.areaId !== enemyBaseId && game.getAliveNodes().some(node => node.id !== newNode.id && node.owner !== owner && node.areaId === newNode.areaId);
     matchTracker?.recordGrowth(game, newNode, { isAttack });
     audio.play('growth');
     selectedNodeId = null;
