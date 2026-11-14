@@ -49,7 +49,7 @@ function percentile(sorted, fraction) {
 const fixture = createFixture();
 const results = [];
 
-for (const difficulty of ['easy', 'medium', 'hard']) {
+for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
     const ai = new AIController(difficulty, fixture.adjacency, fixture.areaCenters);
     for (let index = 0; index < WARMUP; index++) {
         ai.getBestMove(fixture.snapshot, 'blue');
