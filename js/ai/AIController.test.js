@@ -239,3 +239,24 @@ test('multi-source base-distance search respects occupied blockers and caches po
     assert.equal(ai._distanceToBase(game, 'red', 7), 2);
     assert.equal(cachedPosition.size, 1);
 });
+
+
+test('GameState.clone creates an independent state without changing serialized data', () => {
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const root = game.addNode(null, 0, 0, 1, 'red');
+    const child = game.addNode(root.id, 10, 0, 2, 'red');
+    child.isFrozen = true;
+    const before = game.toJSON();
+
+    const clone = game.clone();
+    assert.deepEqual(clone.toJSON(), before);
+    assert.notEqual(clone, game);
+    assert.notEqual(clone.nodes[0], game.nodes[0]);
+    assert.notEqual(clone.nodes[0].childrenIds, game.nodes[0].childrenIds);
+
+    clone.getNode(root.id).childrenIds.push(99);
+    clone.getNode(child.id).isFrozen = false;
+    clone.currentTurn = 'blue';
+    assert.deepEqual(game.toJSON(), before);
+});
