@@ -447,7 +447,7 @@ function updateUI() {
     if (menuBtn) menuBtn.disabled = isAnimating || isAIThinking;
     if (redNodeCount) redNodeCount.textContent = String(game.getAliveNodesByOwner('red').length);
     if (blueNodeCount) blueNodeCount.textContent = String(game.getAliveNodesByOwner('blue').length);
-    if (modeIndicator) modeIndicator.textContent = isAIMode ? `人机 · ${difficultySelect.value === 'easy' ? '简单' : difficultySelect.value === 'hard' ? '困难' : '普通'}` : '双人对战';
+    if (modeIndicator) modeIndicator.textContent = isAIMode ? `人机 · ${getDifficultyLabel(difficultySelect.value)}` : '双人对战';
     if (isPaused) { turnIndicator.textContent = '对局已暂停'; endTurnBtn.disabled = true; }
     else if (gamePhase === 'selectRed') {
         turnIndicator.innerHTML = '🔴 <strong>红方玩家</strong>，请点击地图上的区域作为你的基地！';
