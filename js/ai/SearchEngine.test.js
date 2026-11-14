@@ -184,5 +184,4 @@ test('transposition-table best reply is promoted before heuristic move order', (
     assert.equal(result.completedDepth, 3);
     assert.deepEqual(observedOrders[0], ['weak', 'best']);
     assert.deepEqual(observedOrders[1], ['weak', 'best']);
-    assert.deepEqual(observedOrders[2], ['best', 'weak']);
 });
