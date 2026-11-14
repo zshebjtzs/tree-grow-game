@@ -20,7 +20,8 @@ export class SearchEngine {
         orderMoves,
         maxDepth,
         timeBudgetMs,
-        maxNodes = Infinity
+        maxNodes = Infinity,
+        principalVariationSearch = true
     }) {
         if (!Array.isArray(rootMoves) || !rootMoves.length) {
             return { move: null, value: evaluate(rootState), completedDepth: 0, nodes: 0, cutoffs: 0 };
@@ -76,10 +77,31 @@ export class SearchEngine {
             let value = maximizing ? -Infinity : Infinity;
             let bestMoveKey;
 
-            for (const move of moves) {
+            for (let index = 0; index < moves.length; index++) {
+                const move = moves[index];
                 const next = applyMove(state, move, side);
                 if (!next) continue;
-                const childValue = visit(next, depth - 1, alpha, beta, !maximizing);
+
+                let childValue;
+                if (!principalVariationSearch || index === 0) {
+                    childValue = visit(next, depth - 1, alpha, beta, !maximizing);
+                } else if (maximizing) {
+                    // A narrow window cheaply tests whether this move can beat
+                    // the current principal variation. Re-search only when it
+                    // improves alpha without already causing a beta cutoff.
+                    const probeBeta = Math.min(beta, alpha + 1e-6);
+                    childValue = visit(next, depth - 1, alpha, probeBeta, false);
+                    if (childValue > alpha && childValue < beta) {
+                        childValue = visit(next, depth - 1, alpha, beta, false);
+                    }
+                } else {
+                    const probeAlpha = Math.max(alpha, beta - 1e-6);
+                    childValue = visit(next, depth - 1, probeAlpha, beta, true);
+                    if (childValue < beta && childValue > alpha) {
+                        childValue = visit(next, depth - 1, alpha, beta, true);
+                    }
+                }
+
                 if ((maximizing && childValue > value) || (!maximizing && childValue < value)) {
                     value = childValue;
                     bestMoveKey = getMoveKey(move);
