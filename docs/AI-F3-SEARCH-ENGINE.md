@@ -102,3 +102,9 @@
 Search entries now retain the best move key found at that position. When iterative deepening revisits a position at a greater depth, the retained move is promoted ahead of the heuristic ordering. The root also promotes the best move from the previous completed iteration before searching the next depth.
 
 This improves alpha-beta's chance of reaching useful bounds early without reducing candidate width, search depth, or node/time budgets. The move key is supplied by AIController as the stable `parentNodeId:targetAreaId` pair; it does not alter move legality or evaluation. A regression test verifies that a cached reply is promoted on a deeper revisit.
+
+## Principal Variation Search
+
+After the first ordered child establishes a principal variation, later siblings are first searched with a narrow alpha-beta window. A full-window re-search is performed only when the probe indicates a value that can improve the current bound without already causing a cutoff. This preserves the same minimax result while reducing unnecessary full-window exploration in well-ordered trees.
+
+The feature is enabled by default and can be disabled in tests to compare against full-window alpha-beta. Regression coverage compares the selected move and value across a deterministic four-ply tree.
