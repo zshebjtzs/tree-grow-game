@@ -49,17 +49,15 @@ function createPositionFixture(kind) {
     if (kind === 'branching') {
         game.currentTurn = 'red';
         const redRoot = game.addNode(null, 0, 0, 1, 'red');
-        const redLeft = game.addNode(redRoot.id, 10, 0, 2, 'red');
-        const redRight = game.addNode(redRoot.id, 130, 0, 14, 'red');
-        game.addNode(redLeft.id, 20, 0, 3, 'red');
-        game.addNode(redRight.id, 140, 0, 15, 'red');
+        const redBranch = game.addNode(redRoot.id, 10, 0, 2, 'red');
+        game.addNode(redBranch.id, 20, 0, 3, 'red');
+        game.addNode(redBranch.id, 150, 0, 15, 'red');
 
         game.currentTurn = 'blue';
         const blueRoot = game.addNode(null, 250, 0, 26, 'blue');
-        const blueLeft = game.addNode(blueRoot.id, 260, 0, 27, 'blue');
-        const blueRight = game.addNode(blueRoot.id, 370, 0, 38, 'blue');
-        game.addNode(blueLeft.id, 270, 0, 28, 'blue');
-        game.addNode(blueRight.id, 360, 0, 37, 'blue');
+        const blueBranch = game.addNode(blueRoot.id, 260, 0, 27, 'blue');
+        game.addNode(blueBranch.id, 270, 0, 28, 'blue');
+        game.addNode(blueBranch.id, 400, 0, 40, 'blue');
     } else if (kind === 'combat') {
         game.currentTurn = 'red';
         const redRoot = game.addNode(null, 0, 0, 1, 'red');
