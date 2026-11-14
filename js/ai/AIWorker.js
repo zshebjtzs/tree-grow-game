@@ -41,7 +41,7 @@ self.onmessage = function(event) {
             !areaCenters.every(center => Array.isArray(center) && center.length >= 2 &&
                 Number.isFinite(center[0]) && Number.isFinite(center[1])) ||
             !['red', 'blue'].includes(playerSide) ||
-            !['easy', 'medium', 'hard'].includes(difficulty) ||
+            !['easy', 'medium', 'hard', 'expert'].includes(difficulty) ||
             !Number.isInteger(redBaseId) || !Number.isInteger(blueBaseId)) {
             throw new TypeError('AI 请求数据字段无效');
         }
