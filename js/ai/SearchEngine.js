@@ -27,6 +27,11 @@ export class SearchEngine {
         const startedAt = this.now();
         const deadline = startedAt + Math.max(1, timeBudgetMs);
         const stats = { nodes: 0, cutoffs: 0, transpositionHits: 0 };
+        const checkBudget = () => {
+            if (stats.nodes > maxNodes || this.now() >= deadline) {
+                throw SearchEngine.BUDGET_EXHAUSTED;
+            }
+        };
         const table = new Map();
         let bestMove = rootMoves[0];
         let bestValue = -Infinity;
@@ -53,11 +58,12 @@ export class SearchEngine {
 
             const side = state.currentTurn;
             let moves = generateMoves(state, side);
+            checkBudget();
             if (!moves.length) {
                 const passed = passTurn?.(state, side);
                 return passed ? visit(passed, depth - 1, alpha, beta, !maximizing) : evaluate(state);
             }
-            moves = orderMoves(state, moves, maximizing);
+            moves = orderMoves(state, moves, maximizing, checkBudget);
             let value = maximizing ? -Infinity : Infinity;
 
             for (const move of moves) {
@@ -90,7 +96,7 @@ export class SearchEngine {
             let alpha = -Infinity;
             const beta = Infinity;
             try {
-                const ordered = orderMoves(rootState, rootMoves, true);
+                const ordered = orderMoves(rootState, rootMoves, true, checkBudget);
                 for (const move of ordered) {
                     const next = applyMove(rootState, move, rootState.currentTurn);
                     if (!next) continue;
