@@ -14,12 +14,12 @@ export class PositionEvaluator {
         this.profile = profile;
     }
 
-    scoreMove(game, move, side, bases) {
+    scoreMove(game, move, side, bases, simulatedNext = null) {
         const enemy = side === 'red' ? 'blue' : 'red';
         if (move.targetAreaId === bases[enemy]) return WIN_SCORE;
 
         const beforeDistance = this.distanceToBase(game, side, bases[enemy]);
-        const next = this.simulateMove(game, move, side, bases);
+        const next = simulatedNext || this.simulateMove(game, move, side, bases);
         if (!next) return -WIN_SCORE;
         if (next.isGameOver) {
             return next.getPlayerRootNodes(side).length ? WIN_SCORE : -WIN_SCORE;
