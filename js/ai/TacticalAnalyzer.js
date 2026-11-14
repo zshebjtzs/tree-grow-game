@@ -44,9 +44,11 @@ export class TacticalAnalyzer {
         const ranked = moves.map(move => {
             const next = simulateMove(game, move, side, bases);
             if (!next) return { move, remainingThreats: Infinity };
-            const remainingThreats = next.isGameOver
-                ? 0
-                : this.countImmediateWinningMoves(
+            const remainingThreats = !next.getPlayerRootNodes(side).length
+                ? Infinity
+                : next.isGameOver
+                    ? 0
+                    : this.countImmediateWinningMoves(
                     next, opponent, bases, generateMoves, simulateMove
                 );
             return { move, remainingThreats };
