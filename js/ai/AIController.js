@@ -38,6 +38,8 @@ export class AIController {
         if (!['red', 'blue'].includes(playerSide)) {
             throw new TypeError('AI 玩家阵营无效');
         }
+        this.lastSearchStats = null;
+        this.lastDecisionExplanation = null;
         const game = GameState.fromJSON(gameStateData);
         game.currentTurn = playerSide;
         const bases = {
@@ -48,42 +50,153 @@ export class AIController {
             throw new TypeError('AI 基地数据无效');
         }
 
+        this._emitProgress({ phase: 'generating', completedCandidates: 0, totalCandidates: 0 });
         const moves = this._generateMoves(game, playerSide, bases);
-        if (!moves.length) return null;
+        if (!moves.length) {
+            this.lastDecisionExplanation = {
+                title: 'AI 跳过回合',
+                summary: '当前局面没有可执行的合法生长行动。',
+                details: ['AI 未找到通过规则引擎验证的合法候选行动。'],
+                search: null
+            };
+            this._emitProgress({ phase: 'complete', completedCandidates: 0, totalCandidates: 0 });
+            return null;
+        }
 
-        const ranked = moves.map(move => {
-            const nextState = this._simulateMove(game, move, playerSide, bases, { alreadyValidated: true });
-            return {
+        const ranked = [];
+        const reportInterval = Math.max(1, Math.ceil(moves.length / 8));
+        for (let index = 0; index < moves.length; index++) {
+            const move = moves[index];
+            const nextState = this._simulateMove(
+                game, move, playerSide, bases, { alreadyValidated: true }
+            );
+            ranked.push({
                 ...move,
                 score: this._scoreMove(game, move, playerSide, bases, nextState),
                 _nextState: nextState
-            };
-        }).sort((a, b) => b.score - a.score);
+            });
+            if ((index + 1) % reportInterval === 0 || index + 1 === moves.length) {
+                this._emitProgress({
+                    phase: 'evaluating',
+                    completedCandidates: index + 1,
+                    totalCandidates: moves.length
+                });
+            }
+        }
+        ranked.sort((a, b) => b.score - a.score);
 
-        // A legal immediate win is never deliberately ignored, even on easy.
-        const winningMove = this.tacticalAnalyzer.findImmediateWinningMove(ranked, playerSide, bases);
-        if (winningMove) return this._publicMove(winningMove);
+        let selectedMove = this.tacticalAnalyzer.findImmediateWinningMove(ranked, playerSide, bases);
+        let selectionReason = selectedMove ? 'immediate-win' : 'profile-selection';
 
-        // When the opponent has a one-move win, prefer actions that eliminate
-        // the threat. If no action fully defends, minimize the remaining wins.
-        const defenseMoves = this.tacticalAnalyzer.rankDefenses(
-            game, ranked, playerSide, bases,
-            (state, move, side, matchBases) => this._simulateMove(
-                state, move, side, matchBases, { alreadyValidated: true }
-            ),
-            (state, side, matchBases) => this._generateMoves(state, side, matchBases)
+        if (!selectedMove) {
+            this._emitProgress({ phase: 'tactics' });
+            // When the opponent has a one-move win, prefer actions that eliminate
+            // the threat. If no action fully defends, minimize the remaining wins.
+            const defenseMoves = this.tacticalAnalyzer.rankDefenses(
+                game, ranked, playerSide, bases,
+                (state, move, side, matchBases) => this._simulateMove(
+                    state, move, side, matchBases, { alreadyValidated: true }
+                ),
+                (state, side, matchBases) => this._generateMoves(state, side, matchBases)
+            );
+            const defenseSet = new Set(defenseMoves);
+            const tacticallyRanked = ranked.filter(move => defenseSet.has(move));
+            if (tacticallyRanked.length < ranked.length) selectionReason = 'defense-priority';
+
+            if (this.profile.selection === 'varied') {
+                const pool = tacticallyRanked.slice(0, Math.min(4, tacticallyRanked.length));
+                selectedMove = pool[Math.floor(Math.random() * pool.length)];
+            } else if (this.profile.selection === 'weighted') {
+                selectedMove = this._weightedChoice(tacticallyRanked);
+            } else {
+                selectedMove = this._searchHard(game, tacticallyRanked, playerSide, bases);
+            }
+        }
+
+        this.lastDecisionExplanation = this._createDecisionExplanation(
+            game, selectedMove, playerSide, bases, ranked, selectionReason
         );
-        const defenseSet = new Set(defenseMoves);
-        const tacticallyRanked = ranked.filter(move => defenseSet.has(move));
+        this._emitProgress({ phase: 'complete', completedCandidates: moves.length, totalCandidates: moves.length });
+        return this._publicMove(selectedMove);
+    }
 
-        if (this.profile.selection === 'varied') {
-            const pool = tacticallyRanked.slice(0, Math.min(4, tacticallyRanked.length));
-            return this._publicMove(pool[Math.floor(Math.random() * pool.length)]);
+    _emitProgress(progress) {
+        if (typeof this.onProgress !== 'function') return;
+        try { this.onProgress(progress); } catch (error) {
+            // Progress reporting is observational and must not affect AI decisions.
         }
-        if (this.profile.selection === 'weighted') {
-            return this._publicMove(this._weightedChoice(tacticallyRanked));
+    }
+
+    _createDecisionExplanation(game, move, side, bases, rankedMoves, selectionReason) {
+        if (!move) return null;
+        const enemy = this._enemy(side);
+        const selected = rankedMoves.find(candidate =>
+            candidate.parentNodeId === move.parentNodeId &&
+            candidate.targetAreaId === move.targetAreaId
+        );
+        const next = selected?._nextState || this._simulateMove(
+            game, move, side, bases, { alreadyValidated: true }
+        );
+        const details = [];
+        let summary = '根据当前局面评估选择该行动。';
+
+        if (move.targetAreaId === bases[enemy]) {
+            summary = '该行动可以直接进入敌方基地并结束对局。';
+            details.push('检测到合法的立即获胜行动，战术规则优先选择了该行动。');
+        } else if (next) {
+            const beforeEnemyNodes = game.getAliveNodesByOwner(enemy).length;
+            const afterEnemyNodes = next.getAliveNodesByOwner(enemy).length;
+            const beforeEnemyRoots = game.getPlayerRootNodes(enemy).length;
+            const afterEnemyRoots = next.getPlayerRootNodes(enemy).length;
+            const removedNodes = beforeEnemyNodes - afterEnemyNodes;
+            const removedRoots = beforeEnemyRoots - afterEnemyRoots;
+            if (removedRoots > 0) {
+                details.push(`模拟战斗可摧毁对方 ${removedRoots} 个根节点。`);
+            }
+            if (removedNodes > 0) {
+                details.push(`模拟战斗可减少对方 ${removedNodes} 个存活节点。`);
+            }
+
+            const beforeDistance = this._distanceToBase(game, side, bases[enemy]);
+            const afterDistance = this._distanceToBase(next, side, bases[enemy]);
+            if (Number.isFinite(beforeDistance) && Number.isFinite(afterDistance) && afterDistance < beforeDistance) {
+                details.push(`推进路线：到敌方基地的图论距离从 ${beforeDistance} 缩短至 ${afterDistance}。`);
+            }
+
+            const beforeSafety = this._distanceToBase(game, enemy, bases[side]);
+            const afterSafety = this._distanceToBase(next, enemy, bases[side]);
+            if (Number.isFinite(beforeSafety) && Number.isFinite(afterSafety) && afterSafety > beforeSafety) {
+                details.push(`防守收益：对手到己方基地的最短可行距离从 ${beforeSafety} 增加至 ${afterSafety}。`);
+            }
+
+            const beforeParent = game.getNode(move.parentNodeId);
+            const afterParent = next.getNode(move.parentNodeId);
+            if (beforeParent && afterParent && afterParent.childrenIds.length > beforeParent.childrenIds.length) {
+                details.push(`结构扩张：父节点 #${move.parentNodeId} 的子枝数增加至 ${afterParent.childrenIds.length}。`);
+            }
         }
-        return this._publicMove(this._searchHard(game, tacticallyRanked, playerSide, bases));
+
+        if (selectionReason === 'defense-priority') {
+            details.unshift('战术筛选优先保留能最大限度减少对手立即获胜机会的行动。');
+        }
+        if (!details.length) {
+            details.push('该行动在当前难度配置的候选评分中排名靠前。');
+        }
+        if (selectionReason === 'immediate-win') summary = '识别到立即获胜机会，优先执行胜利行动。';
+        else if (selectionReason === 'defense-priority') summary = '当前存在紧急威胁，优先选择防守效果最好的候选行动。';
+
+        const search = this.lastSearchStats ? {
+            completedDepth: this.lastSearchStats.completedDepth,
+            nodes: this.lastSearchStats.nodes,
+            elapsedMs: this.lastSearchStats.elapsedMs,
+            transpositionHits: this.lastSearchStats.transpositionHits
+        } : null;
+        return {
+            title: 'AI 行动分析',
+            summary,
+            details: details.slice(0, 4),
+            search
+        };
     }
 
     _publicMove(move) {
@@ -283,6 +396,7 @@ export class AIController {
                 this._generateMoves(state, movingSide, bases),
             passTurn: (state, movingSide) => this._simulatePass(state, movingSide),
             evaluate: state => this._evaluateState(state, side, bases),
+            onProgress: progress => this._emitProgress(progress),
             orderMoves: (state, moves, maximizing, checkBudget) => {
                 // Root moves already carry their scores and prepared child
                 // states, so every iteration can reuse both.
