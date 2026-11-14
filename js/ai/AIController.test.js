@@ -282,6 +282,10 @@ test('search reuses root move ordering and orders minimizing replies from low sc
         scoredStates.push(state);
         return move.targetAreaId;
     };
+    ai._simulatePass = (state, side) => ({
+        ...state,
+        currentTurn: side === 'red' ? 'blue' : 'red'
+    });
     ai._evaluateState = state => state.lastMove || 0;
 
     ai._searchHard(root, [
