@@ -153,11 +153,11 @@ test('generated legal moves are not revalidated during simulation, while externa
 
     const invalidMove = {
         parentNodeId: blueRoot.id,
-        targetAreaId: 6,
-        x: centers[5][0],
-        y: centers[5][1]
+        targetAreaId: 1,
+        x: centers[0][0],
+        y: centers[0][1]
     };
-    ai._simulateMove(game, invalidMove, 'blue', bases);
+    assert.equal(ai._simulateMove(game, invalidMove, 'blue', bases), null);
     assert.ok(validationCalls > callsAfterGeneration,
         'untrusted/external moves must still go through RuleEngine validation');
     assert.equal(redRoot.areaId, 6);
