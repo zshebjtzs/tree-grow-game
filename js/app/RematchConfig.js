@@ -1,5 +1,5 @@
 const MODES = new Set(['pvp', 'pve']);
-const DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
+const DIFFICULTIES = new Set(['easy', 'medium', 'hard', 'expert']);
 
 /** Create a fresh immutable configuration without carrying match state forward. */
 export function createRematchConfig(previous) {
