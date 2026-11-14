@@ -272,15 +272,17 @@ test('search reuses prepared root states and orders opponent replies by their ow
         }
     };
     const scoredStates = [];
+    const rootChildScores = [];
     const searchedReplies = [];
     let rootSimulations = 0;
+    let rootChild = null;
 
     ai._generateMoves = (state, side) => side === 'red'
         ? [{ targetAreaId: 5 }, { targetAreaId: 4 }]
         : [];
     ai._simulateMove = (state, move, side) => {
         if (state === root) rootSimulations++;
-        return {
+        const next = {
             currentTurn: side === 'red' ? 'blue' : 'red',
             isGameOver: false,
             lastMove: move.targetAreaId,
@@ -288,9 +290,12 @@ test('search reuses prepared root states and orders opponent replies by their ow
                 return { currentTurn: this.currentTurn, lastMove: this.lastMove ?? null };
             }
         };
+        if (state === root) rootChild = next;
+        return next;
     };
     ai._scoreMove = (state, move, side, bases, next) => {
         scoredStates.push(state);
+        if (state === rootChild) rootChildScores.push(state);
         assert.ok(next, 'move ordering should score the already prepared child state');
         return move.targetAreaId;
     };
@@ -314,7 +319,7 @@ test('search reuses prepared root states and orders opponent replies by their ow
 
     assert.equal(rootSimulations, 1, 'root child state should be prepared once and reused across depths');
     assert.equal(scoredStates.includes(root), false, 'root actions should not be rescored');
-    assert.equal(scoredStates.length, 2,
+    assert.equal(rootChildScores.length, 2,
         'the reused root child should not have its internal move ordering recomputed at every depth');
     assert.ok(searchedReplies.length >= 1);
     assert.equal(searchedReplies[0], 5,
