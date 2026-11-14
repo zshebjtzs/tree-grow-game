@@ -96,7 +96,7 @@ export class CanvasDrawer {
         };
     }
 
-    renderMap(areas, redBaseId = null, blueBaseId = null, shortEdges = [], legalAreaIds = new Set(), hoverAreaId = null) {
+    renderMap(areas, redBaseId = null, blueBaseId = null, shortEdges = [], legalAreaIds = new Set(), hoverAreaId = null, highlightAreaId = null) {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -129,9 +129,15 @@ export class CanvasDrawer {
                 ctx.fillStyle = 'rgba(25, 178, 145, 0.30)';
                 ctx.fill();
             }
+            if (area.id === highlightAreaId) {
+                ctx.fillStyle = 'rgba(236, 174, 65, 0.28)';
+                ctx.fill();
+            }
 
-            ctx.strokeStyle = area.id === hoverAreaId ? '#087f70' : '#333';
-            ctx.lineWidth = area.id === hoverAreaId ? 5 : 2;
+            ctx.strokeStyle = area.id === highlightAreaId
+                ? '#d18a16'
+                : area.id === hoverAreaId ? '#087f70' : '#333';
+            ctx.lineWidth = area.id === highlightAreaId ? 6 : area.id === hoverAreaId ? 5 : 2;
             ctx.stroke();
         });
 
