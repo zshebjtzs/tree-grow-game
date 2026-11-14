@@ -217,3 +217,25 @@ test('hard and expert profiles configure bounded iterative search', async () => 
     assert.ok(hard.searchBudgetMs > 0 && expert.searchBudgetMs > hard.searchBudgetMs);
     assert.ok(hard.maxNodes > 0 && expert.maxNodes > hard.maxNodes);
 });
+
+
+test('multi-source base-distance search respects occupied blockers and caches position queries', () => {
+    const adjacency = {
+        1: [2], 2: [1, 3], 3: [2, 4], 4: [3, 5],
+        5: [4, 6], 6: [5, 7], 7: [6]
+    };
+    const game = new GameState();
+    game.currentTurn = 'red';
+    game.addNode(null, 0, 0, 1, 'red');
+    game.addNode(null, 0, 0, 5, 'red');
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 3, 'blue');
+
+    const ai = new AIController('hard', adjacency, centers);
+    assert.equal(ai._distanceToBase(game, 'red', 7), 2);
+    const cachedPosition = ai.distanceCache.get(game);
+    assert.ok(cachedPosition instanceof Map);
+    assert.equal(cachedPosition.get('red:7'), 2);
+    assert.equal(ai._distanceToBase(game, 'red', 7), 2);
+    assert.equal(cachedPosition.size, 1);
+});
