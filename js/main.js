@@ -967,20 +967,19 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
                 return;
             }
 
-            setTimeout(() => {
-                blueBaseId = selectedArea.id;
-                // 直接进入开局
-                gamePhase = 'playing';
-                generateRootNodesInArea(redBaseId, 'red', 3);
-                generateRootNodesInArea(blueBaseId, 'blue', 3);
-                matchTracker = MatchTracker.start(game, activeMatchConfig || { mode: isAIMode ? 'pve' : 'pvp', difficulty: difficultySelect.value });
-                selectedNodeId = null;
-                drawer.renderMap(mapAreas, redBaseId, blueBaseId);
-                drawer.renderNodes(game.getAliveNodes(), selectedNodeId);
-                updateUI();
-                persistLastMatch();
-                // 如果玩家是红方，AI 是蓝方，轮到玩家先手。
-            }, 600); // 模拟 AI 思考 0.6 秒
+            blueBaseId = selectedArea.id;
+            // Base placement is deterministic setup logic, not an AI search.
+            // Enter the match immediately instead of simulating thinking time.
+            gamePhase = 'playing';
+            generateRootNodesInArea(redBaseId, 'red', 3);
+            generateRootNodesInArea(blueBaseId, 'blue', 3);
+            matchTracker = MatchTracker.start(game, activeMatchConfig || { mode: isAIMode ? 'pve' : 'pvp', difficulty: difficultySelect.value });
+            selectedNodeId = null;
+            drawer.renderMap(mapAreas, redBaseId, blueBaseId);
+            drawer.renderNodes(game.getAliveNodes(), selectedNodeId);
+            updateUI();
+            persistLastMatch();
+            // 如果玩家是红方，AI 是蓝方，轮到玩家先手。
         }
         return;
     }
