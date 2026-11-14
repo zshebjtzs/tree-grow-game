@@ -112,3 +112,5 @@ The feature is enabled by default and can be disabled in tests to compare agains
 ## PVS benchmark parity
 
 The AI benchmark now runs hard/expert fixtures in both full-window alpha-beta mode and PVS mode. Before timing, it asserts that both modes select the same root action, return the same evaluation value, and complete the same configured depth. Timings and node counts are then reported separately for each variant across sparse, branching-heavy, and combat-heavy fixtures.
+
+PVS is applied only when a node has at least four legal moves. Lower-branching nodes stay on ordinary alpha-beta because narrow-window probes provide little pruning benefit there and can add overhead. This is a search-strategy choice only; no legal candidates are removed.
