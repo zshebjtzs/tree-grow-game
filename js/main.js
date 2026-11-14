@@ -10,6 +10,7 @@ import { createCombatEvent } from './presentation/CombatEvent.js';
 import { AudioController } from './presentation/AudioController.js';
 import { MatchTracker } from './game/MatchTracker.js';
 import { createRematchConfig } from './app/RematchConfig.js';
+import { getDifficultyLabel, DIFFICULTY_LEVELS } from './ai/DifficultyProfiles.js';
 
 // 1. 初始化各模块
 const appState = new AppState();
@@ -161,7 +162,7 @@ function renderMatchResult(result) {
     const winnerLabel = resultSideLabel(result.winner, result);
     resultTitle.textContent = result.mode === 'pve' ? (result.winner === 'red' ? '胜利' : '本局失败') : winnerLabel + '获胜';
     resultSubtitle.textContent = result.winReason === 'enemy_base_reached' ? '胜利条件：成功突入敌方基地' : '胜利条件：摧毁对方全部根节点';
-    resultMeta.replaceChildren(); const meta = [result.mode === 'pve' ? '人机对战 · AI ' + ({easy:'简单',medium:'普通',hard:'困难'}[result.difficulty] || result.difficulty) : '双人对战', '获胜方：' + winnerLabel];
+    resultMeta.replaceChildren(); const meta = [result.mode === 'pve' ? '人机对战 · AI ' + getDifficultyLabel(result.difficulty) : '双人对战', '获胜方：' + winnerLabel];
     if (result.historyIncomplete) meta.push('部分历史数据不可用'); meta.forEach(value => appendResultText(resultMeta, 'span', '', value));
     const overview = [['对局时长', formatMatchDuration(result.durationMs)], ['总回合数', result.totalTurns], ['红方最终存活', result.players.red.survivingNodes + ' 节点 / ' + result.players.red.survivingRoots + ' 根'], ['蓝方最终存活', result.players.blue.survivingNodes + ' 节点 / ' + result.players.blue.survivingRoots + ' 根']];
     resultOverview.replaceChildren(); for (const [label, value] of overview) { const card = document.createElement('div'); card.className = 'result-overview-card'; appendResultText(card, 'small', '', label); appendResultText(card, 'strong', '', value); resultOverview.appendChild(card); }
@@ -676,7 +677,7 @@ function applyLoadedGameData(data, sourceName = '存档') {
             isAIMode = data.isAIMode;
             modeSelect.value = isAIMode ? 'pve' : 'pvp';
         }
-        if (['easy', 'medium', 'hard'].includes(data.difficulty)) {
+        if (DIFFICULTY_LEVELS.includes(data.difficulty)) {
             difficultySelect.value = data.difficulty;
         }
         difficultyGroup.hidden = !isAIMode;
