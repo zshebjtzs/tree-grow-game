@@ -12,6 +12,7 @@ export class SearchEngine {
         rootState,
         rootMoves,
         getPositionKey,
+        getMoveKey = move => move,
         applyMove,
         generateMoves,
         passTurn,
@@ -33,9 +34,16 @@ export class SearchEngine {
             }
         };
         const table = new Map();
+        const promoteMove = (moves, preferredKey) => {
+            if (preferredKey === undefined || preferredKey === null) return moves;
+            const index = moves.findIndex(move => getMoveKey(move) === preferredKey);
+            if (index <= 0) return moves;
+            return [moves[index], ...moves.slice(0, index), ...moves.slice(index + 1)];
+        };
         let bestMove = rootMoves[0];
         let bestValue = -Infinity;
         let completedDepth = 0;
+        let preferredRootMoveKey;
 
         const visit = (state, depth, alpha, beta, maximizing) => {
             stats.nodes++;
@@ -64,17 +72,21 @@ export class SearchEngine {
                 return passed ? visit(passed, depth - 1, alpha, beta, !maximizing) : evaluate(state);
             }
             moves = orderMoves(state, moves, maximizing, checkBudget);
+            moves = promoteMove(moves, cached?.bestMoveKey);
             let value = maximizing ? -Infinity : Infinity;
+            let bestMoveKey;
 
             for (const move of moves) {
                 const next = applyMove(state, move, side);
                 if (!next) continue;
                 const childValue = visit(next, depth - 1, alpha, beta, !maximizing);
+                if ((maximizing && childValue > value) || (!maximizing && childValue < value)) {
+                    value = childValue;
+                    bestMoveKey = getMoveKey(move);
+                }
                 if (maximizing) {
-                    value = Math.max(value, childValue);
                     alpha = Math.max(alpha, value);
                 } else {
-                    value = Math.min(value, childValue);
                     beta = Math.min(beta, value);
                 }
                 if (alpha >= beta) {
@@ -86,7 +98,9 @@ export class SearchEngine {
             const bound = value <= originalAlpha ? 'upper'
                 : value >= originalBeta ? 'lower' : 'exact';
             const previous = table.get(key);
-            if (!previous || previous.depth <= depth) table.set(key, { depth, value, bound });
+            if (!previous || previous.depth <= depth) {
+                table.set(key, { depth, value, bound, bestMoveKey });
+            }
             return value;
         };
 
@@ -96,7 +110,8 @@ export class SearchEngine {
             let alpha = -Infinity;
             const beta = Infinity;
             try {
-                const ordered = orderMoves(rootState, rootMoves, true, checkBudget);
+                let ordered = orderMoves(rootState, rootMoves, true, checkBudget);
+                ordered = promoteMove(ordered, preferredRootMoveKey);
                 for (const move of ordered) {
                     const next = applyMove(rootState, move, rootState.currentTurn);
                     if (!next) continue;
@@ -112,6 +127,7 @@ export class SearchEngine {
                 if (!Number.isFinite(iterationValue)) break;
                 bestMove = iterationMove;
                 bestValue = iterationValue;
+                preferredRootMoveKey = getMoveKey(iterationMove);
                 completedDepth = depth;
             } catch (error) {
                 if (error !== SearchEngine.BUDGET_EXHAUSTED) throw error;
