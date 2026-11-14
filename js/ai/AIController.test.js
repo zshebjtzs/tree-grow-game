@@ -262,7 +262,7 @@ test('GameState.clone creates an independent state without changing serialized d
 });
 
 
-test('search reuses root move ordering and orders minimizing replies by opponent-side value', () => {
+test('search reuses prepared root states and orders opponent replies by their own value', () => {
     const ai = new AIController('hard', line, centers);
     const root = {
         currentTurn: 'blue',
@@ -272,12 +272,14 @@ test('search reuses root move ordering and orders minimizing replies by opponent
         }
     };
     const scoredStates = [];
-    const appliedReplies = [];
+    const searchedReplies = [];
+    let rootSimulations = 0;
+
     ai._generateMoves = (state, side) => side === 'red'
         ? [{ targetAreaId: 5 }, { targetAreaId: 4 }]
         : [];
     ai._simulateMove = (state, move, side) => {
-        if (side === 'red') appliedReplies.push(move.targetAreaId);
+        if (state === root) rootSimulations++;
         return {
             currentTurn: side === 'red' ? 'blue' : 'red',
             isGameOver: false,
@@ -287,8 +289,9 @@ test('search reuses root move ordering and orders minimizing replies by opponent
             }
         };
     };
-    ai._scoreMove = (state, move) => {
+    ai._scoreMove = (state, move, side, bases, next) => {
         scoredStates.push(state);
+        assert.ok(next, 'move ordering should score the already prepared child state');
         return move.targetAreaId;
     };
     ai._simulatePass = (state, side) => ({
@@ -298,14 +301,20 @@ test('search reuses root move ordering and orders minimizing replies by opponent
             return { currentTurn: this.currentTurn, lastMove: this.lastMove ?? null };
         }
     });
-    ai._evaluateState = state => state.lastMove || 0;
+    ai._evaluateState = state => {
+        if (state.currentTurn === 'blue' && state.lastMove !== 2) {
+            searchedReplies.push(state.lastMove);
+        }
+        return state.lastMove || 0;
+    };
 
     ai._searchHard(root, [
         { parentNodeId: 1, targetAreaId: 2, x: 0, y: 0, score: 10 }
     ], 'blue', { red: 6, blue: 1 });
 
+    assert.equal(rootSimulations, 1, 'root child state should be prepared once and reused across depths');
     assert.equal(scoredStates.includes(root), false, 'root actions should not be rescored');
-    assert.ok(appliedReplies.length >= 1);
-    assert.equal(appliedReplies[0], 5,
-        'the opponent-favorable reply must be searched first at a minimizing node');
+    assert.ok(searchedReplies.length >= 1);
+    assert.equal(searchedReplies[0], 5,
+        'the opponent-favorable reply must be traversed first at a minimizing node');
 });
