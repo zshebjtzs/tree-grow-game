@@ -73,6 +73,19 @@ const startGameBtn = document.getElementById('start-game-btn');
 const menuScreen = document.getElementById('menu-screen');
 const setupScreen = document.getElementById('setup-screen');
 const gameScreen = document.getElementById('game-screen');
+const fullscreenTip = document.getElementById('fullscreen-tip');
+function syncFullscreenTip() {
+    if (!fullscreenTip) return;
+    // F11 browser fullscreen usually resizes the page viewport without
+    // triggering the Fullscreen API's fullscreenchange event.
+    const viewportFillsScreen = window.screen
+        && window.innerHeight >= window.screen.height - 80
+        && window.innerWidth >= window.screen.width - 40;
+    fullscreenTip.hidden = Boolean(document.fullscreenElement) || Boolean(viewportFillsScreen);
+}
+window.addEventListener('resize', syncFullscreenTip, { passive: true });
+document.addEventListener('fullscreenchange', syncFullscreenTip);
+syncFullscreenTip();
 const resultScreen = document.getElementById('result-screen');
 const resultTitle = document.getElementById('result-title');
 const resultSubtitle = document.getElementById('result-subtitle');
