@@ -48,17 +48,26 @@ self.onmessage = function(event) {
 
         const snapshot = { ...gameStateData, redBaseId, blueBaseId };
         const ai = new AIController(difficulty, adjacency, areaCenters);
+        ai.onProgress = progress => postWorkerMessage({
+            requestId,
+            type: 'progress',
+            progress
+        });
+        postWorkerMessage({
+            requestId,
+            type: 'progress',
+            progress: { phase: 'starting' }
+        });
         const decision = ai.getBestMove(snapshot, playerSide);
 
-        if (decision) {
-            postWorkerMessage({
-                requestId,
-                parentNodeId: decision.parentNodeId,
-                targetAreaId: decision.targetAreaId
-            });
-        } else {
-            postWorkerMessage({ requestId, parentNodeId: null, targetAreaId: null });
-        }
+        postWorkerMessage({
+            requestId,
+            type: 'decision',
+            parentNodeId: decision?.parentNodeId ?? null,
+            targetAreaId: decision?.targetAreaId ?? null,
+            explanation: ai.lastDecisionExplanation,
+            searchStats: ai.lastSearchStats
+        });
     } catch (error) {
         console.error('❌【AI 计算过程报错】:', error);
         postWorkerMessage({
