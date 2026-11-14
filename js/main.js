@@ -9,6 +9,7 @@ import { PresentationController } from './presentation/PresentationController.js
 import { createCombatEvent } from './presentation/CombatEvent.js';
 import { AudioController } from './presentation/AudioController.js';
 import { MatchTracker } from './game/MatchTracker.js';
+import { createRematchConfig } from './app/RematchConfig.js';
 
 // 1. 初始化各模块
 const appState = new AppState();
@@ -79,6 +80,7 @@ const resultCombat = document.getElementById('result-combat');
 const resultEvents = document.getElementById('result-events');
 const resultEventsEmpty = document.getElementById('result-events-empty');
 const resultMenuBtn = document.getElementById('result-menu-btn');
+const resultRematchBtn = document.getElementById('result-rematch-btn');
 const newGameBtn = document.getElementById('new-game-btn');
 const continueGameBtn = document.getElementById('continue-game-btn');
 const loadMenuBtn = document.getElementById('load-menu-btn');
@@ -745,13 +747,20 @@ function persistLastMatch() {
     } catch (error) { console.warn('最近对局自动保存失败：', error); }
 }
 
-function beginNewMatch() {
+function beginNewMatch(configOverride = null) {
     lastMatchResult = null;
-    const config = Object.freeze({
+    const config = createRematchConfig(configOverride || {
         mode: modeSelect.value === 'pve' ? 'pve' : 'pvp',
         difficulty: difficultySelect.value,
         playerSide: 'red'
     });
+    modeSelect.value = config.mode;
+    difficultySelect.value = config.difficulty;
+    difficultyGroup.hidden = config.mode !== 'pve';
+    try { localStorage.removeItem(LAST_MATCH_KEY); } catch (error) { console.warn('清理上一局自动恢复记录失败：', error); }
+    if (feedbackTimeoutId !== null) { clearTimeout(feedbackTimeoutId); feedbackTimeoutId = null; }
+    if (actionFeedback) actionFeedback.hidden = true;
+    audio.stopAll();
     activeMatchConfig = config;
     appState.startMatch(config);
     isAIMode = config.mode === 'pve';
@@ -776,11 +785,18 @@ function beginNewMatch() {
     legalAreaIds = new Set();
     hoverAreaId = null;
     presentation.cancel();
+    audio.stopAll();
     dyingNodes = [];
     isAnimating = false;
     isAIThinking = false;
     isPaused = false;
     
+    // 重置地图视口与交互模式，避免上一局的缩放/拖动状态泄漏。
+    drawer.setMode('locked');
+    drawer.resetViewport();
+    updateViewportModeUI();
+    updateZoomUI();
+
     // 重新渲染地图
     drawer.renderMap(mapAreas);
     drawer.renderNodes(game.getAliveNodes(), selectedNodeId);
@@ -814,6 +830,10 @@ continueGameBtn.addEventListener('click', () => {
 loadMenuBtn.addEventListener('click', loadGame);
 startGameBtn.addEventListener('click', beginNewMatch);
 resultMenuBtn.addEventListener('click', () => { isPaused = false; showAppScreen('menu'); });
+resultRematchBtn.addEventListener('click', () => {
+    if (!activeMatchConfig) return;
+    beginNewMatch(activeMatchConfig);
+});
 
 // ==========================================
 // 画布点击事件
