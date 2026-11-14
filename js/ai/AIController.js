@@ -98,6 +98,7 @@ export class AIController {
         const enemyAreas = new Set(aliveNodes
             .filter(node => node.owner !== side)
             .map(node => node.areaId));
+        const growthContext = this.ruleEngine.createGrowthContext(game, side);
         const moves = [];
         for (const parent of game.getAliveNodesByOwner(side)) {
             if (parent.isFrozen) continue;
@@ -109,7 +110,8 @@ export class AIController {
                 if (!this.areaCenters[targetAreaId - 1] || occupiedBySide.has(targetAreaId)) continue;
                 const result = this.ruleEngine.canGrow(game, parent, targetAreaId, {
                     ownBaseId: bases[side],
-                    enemyBaseId: bases[this._enemy(side)]
+                    enemyBaseId: bases[this._enemy(side)],
+                    context: growthContext
                 });
                 if (!result.allowed) continue;
                 const center = this.areaCenters[targetAreaId - 1];
