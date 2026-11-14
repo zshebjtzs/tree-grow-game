@@ -365,3 +365,37 @@ test('search reuses prepared root states and orders opponent replies by their ow
     assert.equal(searchedReplies[0], 5,
         'the opponent-favorable reply must be traversed first at a minimizing node');
 });
+
+
+test('AI decision explanation reports measurable route and search evidence', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 6, 'red');
+    const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
+    const ai = new AIController('hard', line, centers);
+    const progress = [];
+    ai.onProgress = snapshot => progress.push(snapshot);
+
+    const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+    assert.ok(move);
+    assert.equal(move.parentNodeId, blueRoot.id);
+    assert.equal(ai.lastDecisionExplanation.title, 'AI 行动分析');
+    assert.ok(ai.lastDecisionExplanation.details.some(detail => detail.includes('图论距离')));
+    assert.ok(ai.lastDecisionExplanation.search.completedDepth > 0);
+    assert.ok(ai.lastDecisionExplanation.search.nodes > 0);
+    assert.ok(progress.some(item => item.phase === 'evaluating'));
+    assert.ok(progress.some(item => item.phase === 'search'));
+    assert.equal(progress.at(-1).phase, 'complete');
+});
+
+test('AI explains an immediate win as a verified tactical result', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    const blueRoot = game.addNode(null, 0, 0, 5, 'blue');
+    game.addNode(null, 0, 0, 6, 'red');
+    const ai = new AIController('easy', line, centers);
+    const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+    assert.equal(move.parentNodeId, blueRoot.id);
+    assert.equal(move.targetAreaId, 6);
+    assert.match(ai.lastDecisionExplanation.summary, /立即获胜/);
+});
