@@ -4,16 +4,17 @@ import { RuleEngine } from '../game/RuleEngine.js';
 import { resolveCombat } from '../game/CombatResolver.js';
 import { PositionEvaluator } from './PositionEvaluator.js';
 import { TacticalAnalyzer } from './TacticalAnalyzer.js';
+import { getDifficultyProfile, DIFFICULTY_LEVELS } from './DifficultyProfiles.js';
 
-const SEARCH_WIDTH = 7;
 const WIN_SCORE = 100000;
 
 export class AIController {
     constructor(difficulty = 'medium', adjacency, areaCenters) {
-        if (!['easy', 'medium', 'hard'].includes(difficulty)) {
+        if (!DIFFICULTY_LEVELS.includes(difficulty)) {
             throw new TypeError('AI 难度无效');
         }
         this.difficulty = difficulty;
+        this.profile = getDifficultyProfile(difficulty);
         this.adjacency = adjacency || {};
         this.areaCenters = areaCenters || [];
         this.ruleEngine = new RuleEngine({ adjacency: this.adjacency });
@@ -21,7 +22,8 @@ export class AIController {
         this.positionEvaluator = new PositionEvaluator({
             adjacency: this.adjacency,
             distanceToBase: (...args) => this._distanceToBase(...args),
-            simulateMove: (...args) => this._simulateMove(...args)
+            simulateMove: (...args) => this._simulateMove(...args),
+            profile: this.profile
         });
     }
 
@@ -61,11 +63,11 @@ export class AIController {
         const defenseSet = new Set(defenseMoves);
         const tacticallyRanked = ranked.filter(move => defenseSet.has(move));
 
-        if (this.difficulty === 'easy') {
+        if (this.profile.selection === 'varied') {
             const pool = tacticallyRanked.slice(0, Math.min(4, tacticallyRanked.length));
             return this._publicMove(pool[Math.floor(Math.random() * pool.length)]);
         }
-        if (this.difficulty === 'medium') {
+        if (this.profile.selection === 'weighted') {
             return this._publicMove(this._weightedChoice(tacticallyRanked));
         }
         return this._publicMove(this._searchHard(game, tacticallyRanked, playerSide, bases));
@@ -198,7 +200,7 @@ export class AIController {
     _searchHard(game, rankedMoves, side, bases) {
         // A bounded two-ply adversarial search: AI action, best opponent reply.
         // Candidate pruning keeps the worker responsive on the 50-area map.
-        const candidates = rankedMoves.slice(0, SEARCH_WIDTH);
+        const candidates = rankedMoves.slice(0, this.profile.searchWidth);
         let bestMove = candidates[0];
         let bestValue = -Infinity;
 
