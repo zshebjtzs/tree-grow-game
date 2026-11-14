@@ -257,12 +257,11 @@ export class AIController {
                         score: this._scoreMove(state, move, state.currentTurn, bases)
                     });
                 }
-                // Scores are always from the AI/root player's perspective.
-                // Min nodes must search low-valued replies first for stronger
-                // alpha-beta cutoffs.
-                scored.sort((a, b) => maximizing
-                    ? b.score - a.score
-                    : a.score - b.score);
+                // _scoreMove is from the side-to-move's own perspective.
+                // Both players' strongest actions therefore sort high-to-low:
+                // at min nodes this puts the opponent's most dangerous replies
+                // first, which is the correct ordering for root-side minimax.
+                scored.sort((a, b) => b.score - a.score);
                 return scored.map(item => item.move);
             }
         });
