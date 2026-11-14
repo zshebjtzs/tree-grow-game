@@ -196,6 +196,14 @@ export class AIController {
         return next;
     }
 
+    _simulatePass(game, side) {
+        const next = GameState.fromJSON(game.toJSON());
+        next.currentTurn = side;
+        for (const node of next.getAliveNodesByOwner(side)) node.isFrozen = false;
+        next.switchTurn();
+        return next;
+    }
+
     _evaluateState(game, perspective, bases) {
         return this.positionEvaluator.evaluateState(game, perspective, bases);
     }
@@ -213,6 +221,7 @@ export class AIController {
                 this._simulateMove(state, move, movingSide, bases),
             generateMoves: (state, movingSide) =>
                 this._generateMoves(state, movingSide, bases),
+            passTurn: (state, movingSide) => this._simulatePass(state, movingSide),
             evaluate: state => this._evaluateState(state, side, bases),
             orderMoves: (state, moves) => moves
                 .map(move => ({
