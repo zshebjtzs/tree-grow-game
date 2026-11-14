@@ -160,3 +160,23 @@ test('resizing the viewport recalculates fit while preserving the current zoom l
     assert.equal(canvas.style.width, '960px');
     assert.equal(canvas.style.height, '640px');
 });
+
+
+test('AI target areas receive a distinct amber overlay and border', () => {
+    const { drawer, calls, styleChanges } = createDrawer();
+    drawer.renderMap([{
+        id: 7,
+        vertices: [[0, 0], [80, 0], [80, 80], [0, 80]],
+        center: [40, 40]
+    }], null, null, [], new Set(), null, 7);
+
+    assert.ok(styleChanges.some(change =>
+        change.property === 'fillStyle' &&
+        change.value === 'rgba(236, 174, 65, 0.28)'
+    ));
+    assert.ok(styleChanges.some(change =>
+        change.property === 'strokeStyle' && change.value === '#d18a16'
+    ));
+    assert.equal(calls.filter(call => call.name === 'fill').length, 2,
+        'the normal area fill and AI target overlay are composited separately');
+});
