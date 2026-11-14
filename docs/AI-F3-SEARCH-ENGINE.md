@@ -121,11 +121,11 @@ On the 50-area, three-fixture benchmark (40 samples after 5 warmups), both modes
 
 | Fixture | Difficulty | Full-window alpha-beta mean | PVS mean | Nodes: alpha-beta → PVS |
 |---|---:|---:|---:|---:|
-| Sparse | Hard | 70.983 ms | 64.162 ms | 5,184 → 4,266 |
-| Sparse | Expert | 362.683 ms | 273.788 ms | 14,234 → 11,520 |
-| Branching | Hard | 2.924 ms | 2.954 ms | 400 → 400 |
-| Branching | Expert | 3.858 ms | 3.355 ms | 496 → 496 |
-| Combat | Hard | 0.591 ms | 0.587 ms | 62 → 62 |
-| Combat | Expert | 0.641 ms | 0.642 ms | 77 → 77 |
+| Sparse | Hard | 119.151 ms | 89.528 ms | 5,184 → 4,266 |
+| Sparse | Expert | 540.945 ms | 424.763 ms | 14,234 → 11,520 |
+| Branching | Hard | 4.904 ms | 4.899 ms | 400 → 400 |
+| Branching | Expert | 5.544 ms | 5.492 ms | 496 → 496 |
+| Combat | Hard | 1.206 ms | 1.099 ms | 62 → 62 |
+| Combat | Expert | 1.218 ms | 1.234 ms | 77 → 77 |
 
-The largest gains appear in the sparse fixture, where the search tree is substantially larger. Small fixtures show neutral or marginal timing differences, which is why PVS is restricted to nodes with at least four legal moves. These are shared-runner observations, not target-device guarantees.
+The largest gains appear in the sparse fixture, where the search tree is substantially larger. Branching and combat fixtures show mostly neutral or marginal timing differences; the four-move threshold avoids paying probe overhead at low-branching nodes. CI runner load causes noticeable timing variance, so these are observational comparisons, not target-device guarantees.
