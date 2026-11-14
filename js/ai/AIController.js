@@ -223,13 +223,18 @@ export class AIController {
                 this._generateMoves(state, movingSide, bases),
             passTurn: (state, movingSide) => this._simulatePass(state, movingSide),
             evaluate: state => this._evaluateState(state, side, bases),
-            orderMoves: (state, moves) => moves
-                .map(move => ({
-                    move,
-                    score: this._scoreMove(state, move, state.currentTurn, bases)
-                }))
-                .sort((a, b) => b.score - a.score)
-                .map(item => item.move)
+            orderMoves: (state, moves, maximizing, checkBudget) => {
+                const scored = [];
+                for (const move of moves) {
+                    checkBudget();
+                    scored.push({
+                        move,
+                        score: this._scoreMove(state, move, state.currentTurn, bases)
+                    });
+                }
+                scored.sort((a, b) => b.score - a.score);
+                return scored.map(item => item.move);
+            }
         });
         this.lastSearchStats = {
             difficulty: this.difficulty,
