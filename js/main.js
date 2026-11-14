@@ -94,7 +94,6 @@ document.addEventListener('pointerdown', () => { audio.unlock(); }, { capture: t
 document.addEventListener('keydown', event => {
     if (!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) audio.unlock();
 }, { capture: true });
-window.addEventListener('pagehide', () => audio.destroy(), { once: true });
 syncAudioControls();
 function showFeedback(message, type = 'info', duration = 1900) {
     if (!actionFeedback) return;
@@ -268,7 +267,7 @@ function processSuccessfulGrowth(newNode, owner) {
         if (nodesToDelete.length === 0) {
             if (freezeTargetId) {
                 const targetNode = game.getNode(freezeTargetId);
-                if (targetNode) targetNode.isFrozen = true;
+                if (targetNode) { targetNode.isFrozen = true; audio.play('freeze'); }
             }
             isAnimating = false;
             performTurnSwitch();
