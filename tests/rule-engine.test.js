@@ -28,11 +28,13 @@ test('fortress-occupied enemy area is rejected without consuming the turn', () =
     const game = new GameState();
     game.currentTurn = 'red';
     const redRoot = game.addNode(null, 0, 0, 1, 'red');
+    game.currentTurn = 'blue';
     const blueRoot = game.addNode(null, 0, 0, 6, 'blue');
     const fortress = game.addNode(blueRoot.id, 0, 0, 2, 'blue');
     game.addNode(fortress.id, 0, 0, 3, 'blue');
     game.addNode(fortress.id, 0, 0, 4, 'blue');
     game.addNode(fortress.id, 0, 0, 5, 'blue');
+    game.currentTurn = 'red';
 
     const nodeCount = game.getAliveNodes().length;
     const result = engine.canGrow(game, redRoot, 2, {
@@ -54,8 +56,10 @@ test('non-fortress enemy node remains a legal attack target', () => {
     const game = new GameState();
     game.currentTurn = 'red';
     const redRoot = game.addNode(null, 0, 0, 1, 'red');
+    game.currentTurn = 'blue';
     const blueRoot = game.addNode(null, 0, 0, 3, 'blue');
     game.addNode(blueRoot.id, 0, 0, 2, 'blue');
+    game.currentTurn = 'red';
 
     assert.equal(engine.canGrow(game, redRoot, 2, {
         ownBaseId: 1, enemyBaseId: 3
