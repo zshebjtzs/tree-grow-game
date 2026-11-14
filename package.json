@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --test",
+    "benchmark:ai": "node scripts/benchmark-ai.js",
     "verify:pages": "node scripts/verify-pages-build.js"
   },
   "dependencies": {
