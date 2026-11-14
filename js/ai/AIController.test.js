@@ -206,3 +206,14 @@ test('difficulty profiles encode distinct strategic priorities and expert search
     assert.ok(expert.searchWidth > hard.searchWidth);
     assert.throws(() => getDifficultyProfile('unknown'), /难度无效/);
 });
+
+
+test('hard and expert profiles configure bounded iterative search', async () => {
+    const { getDifficultyProfile } = await import('./DifficultyProfiles.js');
+    const hard = getDifficultyProfile('hard');
+    const expert = getDifficultyProfile('expert');
+    assert.equal(hard.maxDepth, 4);
+    assert.equal(expert.maxDepth, 5);
+    assert.ok(hard.searchBudgetMs > 0 && expert.searchBudgetMs > hard.searchBudgetMs);
+    assert.ok(hard.maxNodes > 0 && expert.maxNodes > hard.maxNodes);
+});
