@@ -56,10 +56,12 @@ for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
     }
 
     const samples = [];
+    const searchStats = [];
     for (let index = 0; index < ITERATIONS; index++) {
         const start = performance.now();
         ai.getBestMove(fixture.snapshot, 'blue');
         samples.push(performance.now() - start);
+        if (ai.lastSearchStats) searchStats.push(ai.lastSearchStats);
     }
     samples.sort((a, b) => a - b);
     results.push({
@@ -68,7 +70,17 @@ for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
         meanMs: Number((samples.reduce((sum, value) => sum + value, 0) / samples.length).toFixed(3)),
         p50Ms: Number(percentile(samples, 0.50).toFixed(3)),
         p95Ms: Number(percentile(samples, 0.95).toFixed(3)),
-        maxMs: Number(samples.at(-1).toFixed(3))
+        maxMs: Number(samples.at(-1).toFixed(3)),
+        meanNodes: searchStats.length
+            ? Math.round(searchStats.reduce((sum, item) => sum + item.nodes, 0) / searchStats.length)
+            : 0,
+        maxNodes: searchStats.length ? Math.max(...searchStats.map(item => item.nodes)) : 0,
+        completedDepthMin: searchStats.length
+            ? Math.min(...searchStats.map(item => item.completedDepth))
+            : 0,
+        completedDepthMax: searchStats.length
+            ? Math.max(...searchStats.map(item => item.completedDepth))
+            : 0
     });
 }
 
