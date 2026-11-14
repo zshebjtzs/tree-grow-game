@@ -14,6 +14,8 @@ const PROFILES = {
         structureWeight: 0.62,
         branchingWeight: 0.65,
         searchWidth: 0,
+        maxDepth: 0,
+        searchBudgetMs: 0,
         selection: 'varied'
     },
     medium: {
@@ -26,6 +28,8 @@ const PROFILES = {
         structureWeight: 1,
         branchingWeight: 1,
         searchWidth: 0,
+        maxDepth: 0,
+        searchBudgetMs: 0,
         selection: 'weighted'
     },
     hard: {
@@ -38,6 +42,8 @@ const PROFILES = {
         structureWeight: 1.18,
         branchingWeight: 1.15,
         searchWidth: 7,
+        maxDepth: 4,
+        searchBudgetMs: 700,
         selection: 'search'
     },
     expert: {
@@ -50,6 +56,8 @@ const PROFILES = {
         structureWeight: 1.48,
         branchingWeight: 1.42,
         searchWidth: 10,
+        maxDepth: 5,
+        searchBudgetMs: 1200,
         selection: 'search'
     }
 };
