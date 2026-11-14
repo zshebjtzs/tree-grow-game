@@ -57,7 +57,7 @@ test('search models a skipped turn and continues after freeze cleanup', () => {
         maxDepth: 3,
         timeBudgetMs: 100,
         getPositionKey: state => JSON.stringify(state),
-        applyMove: (state, move, side) => side === 'red'
+        applyMove: state => state.phase === 'root'
             ? { currentTurn: 'blue', isGameOver: false, phase: 'after-red', score: 0 }
             : { currentTurn: 'blue', isGameOver: false, phase: 'after-blue', score: 42 },
         generateMoves: state => state.currentTurn === 'blue' ? [] : ['reply'],
