@@ -72,3 +72,48 @@ test('search models a skipped turn and continues after freeze cleanup', () => {
     });
     assert.equal(result.value, 42);
 });
+
+
+test('alpha-beta result matches exhaustive minimax on a deterministic three-ply tree', () => {
+    const movesFor = state => state.ply < 3 ? [0, 1, 2] : [];
+    const apply = (state, move) => ({
+        currentTurn: state.currentTurn === 'red' ? 'blue' : 'red',
+        isGameOver: false,
+        ply: state.ply + 1,
+        path: [...state.path, move]
+    });
+    const evaluate = state => {
+        const [a = 0, b = 0, c = 0] = state.path;
+        return (a + 1) * 11 - b * 7 + c * 3 + (a === c ? 2 : 0);
+    };
+    const exhaustive = (state, depth, maximizing) => {
+        if (depth === 0) return evaluate(state);
+        const moves = movesFor(state);
+        if (!moves.length) return evaluate(state);
+        const values = moves.map(move => exhaustive(apply(state, move), depth - 1, !maximizing));
+        return maximizing ? Math.max(...values) : Math.min(...values);
+    };
+
+    const root = { currentTurn: 'red', isGameOver: false, ply: 0, path: [] };
+    const expected = [0, 1, 2].map(move => ({
+        move,
+        value: exhaustive(apply(root, move), 2, false)
+    })).sort((a, b) => b.value - a.value)[0];
+
+    const engine = new SearchEngine({ now: () => 0 });
+    const actual = engine.search({
+        rootState: root,
+        rootMoves: [0, 1, 2],
+        maxDepth: 3,
+        timeBudgetMs: 100,
+        getPositionKey: state => state.path.join(':') + ':' + state.currentTurn,
+        applyMove: apply,
+        generateMoves: movesFor,
+        evaluate,
+        orderMoves: (state, moves) => moves
+    });
+
+    assert.equal(actual.move, expected.move);
+    assert.equal(actual.value, expected.value);
+    assert.equal(actual.completedDepth, 3);
+});
