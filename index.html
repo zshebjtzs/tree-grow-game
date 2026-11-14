@@ -44,6 +44,15 @@
 </header>
 <div class="game-stage"><div class="stage-caption"><span class="stage-indicator"></span><span id="stage-caption-text">基地部署</span><span class="stage-caption-note">默认完整显示 · 可缩放查看细节</span><div class="map-zoom-controls"><button id="viewport-mode-btn" class="zoom-button viewport-mode-button" type="button" aria-pressed="false">解锁地图</button><button id="zoom-out-btn" class="zoom-button" aria-label="缩小地图">−</button><span id="zoom-level" class="zoom-level">100%</span><button id="zoom-in-btn" class="zoom-button" aria-label="放大地图">+</button><button id="fit-map-btn" class="zoom-button fit-button">适应窗口</button><button id="reset-viewport-btn" class="zoom-button fit-button" type="button">恢复默认</button></div></div><div id="canvas-container" data-viewport-mode="locked"><span id="viewport-mode-hint" class="viewport-mode-hint">锁定状态：点击地图进行游戏操作</span><canvas id="gameCanvas" width="1800" height="1200" aria-label="生长树对局地图，地图已锁定，可进行游戏操作"></canvas></div><div class="game-footer"><p id="game-hint" class="game-hint">点击地图区域，为红方选择基地。</p><div id="action-feedback" class="action-feedback" role="status" aria-live="polite" hidden></div><section id="combat-explanation" class="combat-explanation" aria-live="polite" hidden><div class="combat-explanation-heading"><span>最近战斗 · 规则解析</span><strong id="combat-explanation-title"></strong></div><p id="combat-explanation-detail"></p><small id="combat-explanation-meta"></small></section><div class="node-legend" aria-label="节点图例"><span><i class="legend-dot red"></i>红方</span><span><i class="legend-dot blue"></i>蓝方</span><span><i class="legend-ring branch"></i>分叉</span><span><i class="legend-ring fortress"></i>堡垒</span><span><i class="legend-ring frozen"></i>冻结</span></div></div></div>
 </section>
+<section id="result-screen" class="app-screen result-screen" hidden>
+<div class="result-shell">
+<header class="result-hero"><p class="eyebrow">MATCH COMPLETE</p><h1 id="result-title">对局结束</h1><p id="result-subtitle" class="result-subtitle"></p><div id="result-meta" class="result-meta"></div></header>
+<section class="result-panel result-overview-panel"><div class="result-section-heading"><h2>对局概览</h2><span>Match Overview</span></div><div id="result-overview" class="result-overview"></div></section>
+<section class="result-panel"><div class="result-section-heading"><h2>战略表现</h2><span>Strategic Performance</span></div><div id="result-strategy" class="result-comparison"></div></section>
+<section class="result-panel"><div class="result-section-heading"><h2>战斗表现</h2><span>Combat Performance</span></div><div id="result-combat" class="result-comparison"></div></section>
+<section class="result-panel"><div class="result-section-heading"><h2>关键事件</h2><span>最多展示 5 条</span></div><ol id="result-events" class="result-events"></ol><p id="result-events-empty" class="result-empty" hidden>本局没有记录到关键事件。</p></section>
+<footer class="result-actions"><button id="result-menu-btn" class="button button-secondary">返回主菜单</button></footer>
+</div></section>
 </main>
 <script type="module" src="./js/main.js"></script>
 </body></html>

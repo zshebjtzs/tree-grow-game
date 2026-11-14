@@ -14,6 +14,7 @@ import { MatchTracker } from './game/MatchTracker.js';
 const appState = new AppState();
 let activeMatchConfig = null;
 let matchTracker = null;
+let lastMatchResult = null;
 const LAST_MATCH_KEY = 'treeGrow:lastMatch:v1';
 let game = new GameState();
 const mapManager = new MapManager(1800, 1200);
@@ -68,6 +69,16 @@ const startGameBtn = document.getElementById('start-game-btn');
 const menuScreen = document.getElementById('menu-screen');
 const setupScreen = document.getElementById('setup-screen');
 const gameScreen = document.getElementById('game-screen');
+const resultScreen = document.getElementById('result-screen');
+const resultTitle = document.getElementById('result-title');
+const resultSubtitle = document.getElementById('result-subtitle');
+const resultMeta = document.getElementById('result-meta');
+const resultOverview = document.getElementById('result-overview');
+const resultStrategy = document.getElementById('result-strategy');
+const resultCombat = document.getElementById('result-combat');
+const resultEvents = document.getElementById('result-events');
+const resultEventsEmpty = document.getElementById('result-events-empty');
+const resultMenuBtn = document.getElementById('result-menu-btn');
 const newGameBtn = document.getElementById('new-game-btn');
 const continueGameBtn = document.getElementById('continue-game-btn');
 const loadMenuBtn = document.getElementById('load-menu-btn');
@@ -113,7 +124,50 @@ function showCombatExplanation(event) {
     combatExplanation.hidden = false;
 }
 function clearCombatExplanation() { if (combatExplanation) combatExplanation.hidden = true; }
-function finishMatch(winner, reason) { game.isGameOver = true; matchTracker?.finish(winner, reason, game); }
+function finishMatch(winner, reason) {
+    if (game.isGameOver) return;
+    game.isGameOver = true;
+    lastMatchResult = matchTracker?.finish(winner, reason, game) || null;
+    try { localStorage.removeItem(LAST_MATCH_KEY); } catch (error) { console.warn('清理已结束对局恢复记录失败：', error); }
+    if (lastMatchResult) { renderMatchResult(lastMatchResult); showAppScreen('result'); }
+}
+function formatMatchDuration(milliseconds) {
+    const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+    const hours = Math.floor(seconds / 3600), minutes = Math.floor((seconds % 3600) / 60), remainder = seconds % 60;
+    return hours ? hours + '小时 ' + minutes + '分' : minutes ? minutes + '分 ' + remainder + '秒' : remainder + '秒';
+}
+function formatRate(value) { return value === null || !Number.isFinite(value) ? '—' : (value * 100).toFixed(1) + '%'; }
+function resultSideLabel(side, result) { if (result.mode === 'pve') return side === 'red' ? '红方 · 玩家' : '蓝方 · AI'; return side === 'red' ? '红方' : '蓝方'; }
+function appendResultText(parent, tag, className, value) { const el = document.createElement(tag); if (className) el.className = className; el.textContent = String(value); parent.appendChild(el); return el; }
+function renderResultComparison(container, result, rows) {
+    container.replaceChildren(); const head = document.createElement('div'); head.className = 'result-compare-head';
+    appendResultText(head, 'span', '', '统计指标'); appendResultText(head, 'span', '', resultSideLabel('red', result)); appendResultText(head, 'span', '', resultSideLabel('blue', result)); container.appendChild(head);
+    for (const [label, getter] of rows) { const row = document.createElement('div'); row.className = 'result-compare-row'; appendResultText(row, 'span', '', label); appendResultText(row, 'strong', '', getter(result.players.red, 'red', result)); appendResultText(row, 'strong', '', getter(result.players.blue, 'blue', result)); container.appendChild(row); }
+}
+function describeMatchEvent(event, result) {
+    const side = resultSideLabel(event.side, result);
+    switch (event.type) {
+        case 'GROWTH': return { title: side + (event.isAttack ? ' 发起区域攻击' : ' 完成生长'), detail: '进入区域 #' + event.areaId };
+        case 'COMBAT': return { title: side + ' 触发战斗 · ' + event.destroyedNodes + ' 个节点被摧毁', detail: event.outcome === 'branch-cut' ? '切断目标枝条' : event.outcome === 'branch-destroyed' ? '摧毁分叉节点及其后代' : event.outcome === 'tree-destroyed' ? '摧毁整棵防守树' : '完成战斗结算' };
+        case 'FREEZE': return { title: side + ' 的节点被冻结', detail: '节点 #' + event.nodeId + ' · 由' + resultSideLabel(event.causedBy, result) + '的攻击造成' };
+        case 'ROOT_DESTROYED': return { title: side + ' 根节点被摧毁', detail: '本次损失 ' + event.count + ' 个，剩余 ' + event.remaining + ' 个' };
+        case 'VICTORY': return { title: side + ' 获胜', detail: event.reason === 'enemy_base_reached' ? '成功突入敌方基地' : '摧毁对方全部根节点' };
+        default: return null;
+    }
+}
+function renderMatchResult(result) {
+    const winnerLabel = resultSideLabel(result.winner, result);
+    resultTitle.textContent = result.mode === 'pve' ? (result.winner === 'red' ? '胜利' : '本局失败') : winnerLabel + '获胜';
+    resultSubtitle.textContent = result.winReason === 'enemy_base_reached' ? '胜利条件：成功突入敌方基地' : '胜利条件：摧毁对方全部根节点';
+    resultMeta.replaceChildren(); const meta = [result.mode === 'pve' ? '人机对战 · AI ' + ({easy:'简单',medium:'普通',hard:'困难'}[result.difficulty] || result.difficulty) : '双人对战', '获胜方：' + winnerLabel];
+    if (result.historyIncomplete) meta.push('部分历史数据不可用'); meta.forEach(value => appendResultText(resultMeta, 'span', '', value));
+    const overview = [['对局时长', formatMatchDuration(result.durationMs)], ['总回合数', result.totalTurns], ['红方最终存活', result.players.red.survivingNodes + ' 节点 / ' + result.players.red.survivingRoots + ' 根'], ['蓝方最终存活', result.players.blue.survivingNodes + ' 节点 / ' + result.players.blue.survivingRoots + ' 根']];
+    resultOverview.replaceChildren(); for (const [label, value] of overview) { const card = document.createElement('div'); card.className = 'result-overview-card'; appendResultText(card, 'small', '', label); appendResultText(card, 'strong', '', value); resultOverview.appendChild(card); }
+    renderResultComparison(resultStrategy, result, [['历史最大存活节点数', p => p.maxTreeSize], ['最大分支数', p => p.maxBranching], ['最大生长深度', p => p.maxDepth], ['历史覆盖区域数', p => p.uniqueAreas.length]]);
+    renderResultComparison(resultCombat, result, [['攻击次数', p => p.attackCount], ['造成摧毁的攻击次数', p => p.successfulAttackCount], ['攻击摧毁转化率', p => formatRate(p.attackConversionRate)], ['摧毁节点总数', p => p.destroyedNodes], ['单次最大摧毁规模', (p, side, r) => r.maxDestructionPerAttack[side]], ['冻结次数', p => p.freezeCount], ['根节点损失数', p => p.rootDestroyedCount]]);
+    resultEvents.replaceChildren(); const important = result.events.filter(e => e.type !== 'GROWTH' || e.isAttack).slice(-5).reverse(); resultEventsEmpty.hidden = important.length > 0;
+    important.forEach((event, index) => { const d = describeMatchEvent(event, result); if (!d) return; const item = document.createElement('li'); item.className = 'result-event'; appendResultText(item, 'span', 'result-event-index', String(index + 1).padStart(2, '0')); const content = document.createElement('div'); appendResultText(content, 'strong', '', d.title); appendResultText(content, 'small', '', '第 ' + event.turn + ' 回合 · ' + d.detail); item.appendChild(content); resultEvents.appendChild(item); });
+}
 function flashTurnIndicator() {
     if (!turnIndicator) return;
     turnIndicator.classList.remove('turn-flash');
@@ -570,6 +624,7 @@ async function loadGame() {
 }
 
 function applyLoadedGameData(data, sourceName = '存档') {
+        lastMatchResult = null;
         // 先在临时对象中完整验证存档，失败时不触碰当前游戏。
         if (!Array.isArray(data.mapSeeds) || data.mapSeeds.length !== 50 ||
             !data.mapSeeds.every(seed => Array.isArray(seed) && seed.length === 2 &&
@@ -658,6 +713,7 @@ function showAppScreen(screen) {
     menuScreen.hidden = screen !== 'menu';
     setupScreen.hidden = screen !== 'setup';
     gameScreen.hidden = screen !== 'game';
+    resultScreen.hidden = screen !== 'result';
     document.body.dataset.screen = screen;
     if (screen === 'game') requestAnimationFrame(() => fitGameCanvas());
     if (screen === 'menu') updateMenuUI();
@@ -690,6 +746,7 @@ function persistLastMatch() {
 }
 
 function beginNewMatch() {
+    lastMatchResult = null;
     const config = Object.freeze({
         mode: modeSelect.value === 'pve' ? 'pve' : 'pvp',
         difficulty: difficultySelect.value,
@@ -756,6 +813,7 @@ continueGameBtn.addEventListener('click', () => {
 });
 loadMenuBtn.addEventListener('click', loadGame);
 startGameBtn.addEventListener('click', beginNewMatch);
+resultMenuBtn.addEventListener('click', () => { isPaused = false; showAppScreen('menu'); });
 
 // ==========================================
 // 画布点击事件

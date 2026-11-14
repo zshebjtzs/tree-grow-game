@@ -5,7 +5,7 @@ export class AppState {
     }
 
     navigate(screen) {
-        if (!['menu', 'setup', 'game'].includes(screen)) {
+        if (!['menu', 'setup', 'game', 'result'].includes(screen)) {
             throw new TypeError(`Unknown application screen: ${screen}`);
         }
         this.screen = screen;
