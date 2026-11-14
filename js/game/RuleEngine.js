@@ -5,6 +5,26 @@ export class RuleEngine {
         this.adjacency = mapManager.adjacency || {};
     }
 
+    createGrowthContext(gameState, owner) {
+        const aliveNodes = gameState.getAliveNodes();
+        const ownNodes = aliveNodes.filter(node => node.owner === owner);
+        const enemyNodesByArea = new Map();
+        for (const node of aliveNodes) {
+            if (node.owner !== owner && !enemyNodesByArea.has(node.areaId)) {
+                enemyNodesByArea.set(node.areaId, node);
+            }
+        }
+        return {
+            gameState,
+            owner,
+            aliveNodes,
+            occupiedAreas: new Set(aliveNodes.map(node => node.areaId)),
+            ownAreas: new Set(ownNodes.map(node => node.areaId)),
+            ownAreaCount: new Set(ownNodes.map(node => node.areaId)).size,
+            enemyNodesByArea
+        };
+    }
+
     getAreaPath(startAreaId, endAreaId, blockedAreas = null) {
         if (startAreaId === endAreaId) return [startAreaId];
         if (!this.adjacency[startAreaId]) return null;
@@ -63,19 +83,36 @@ export class RuleEngine {
         }
         if (parentNode.areaId === childAreaId) return { allowed: false, reason: '不能在同一区域生长' };
 
-        const occupied = new Set(gameState.getAliveNodes().map(node => node.areaId));
-        // Find a legal route, not merely the graph's first shortest route:
-        // another equally short route may avoid occupied intermediate cells.
-        const blockedIntermediates = new Set(occupied);
-        blockedIntermediates.delete(parentNode.areaId);
-        blockedIntermediates.delete(childAreaId);
-        const path = this.getAreaPath(parentNode.areaId, childAreaId, blockedIntermediates);
+        const context = options.context?.gameState === gameState &&
+            options.context.owner === parentNode.owner
+            ? options.context
+            : null;
+        const aliveNodes = context?.aliveNodes || gameState.getAliveNodes();
+        const occupied = context?.occupiedAreas ||
+            new Set(aliveNodes.map(node => node.areaId));
+
+        // Directly adjacent targets have a known one-edge legal path; avoid
+        // allocating a BFS queue/map for the common ordinary-growth case.
+        // Root first branches and non-adjacent validation still use full BFS.
+        const directlyAdjacent = (this.adjacency[parentNode.areaId] || []).includes(childAreaId);
+        let path;
+        if (directlyAdjacent) {
+            path = [parentNode.areaId, childAreaId];
+        } else {
+            // Find a legal route, not merely the graph's first shortest route:
+            // another equally short route may avoid occupied intermediate cells.
+            const blockedIntermediates = new Set(occupied);
+            blockedIntermediates.delete(parentNode.areaId);
+            blockedIntermediates.delete(childAreaId);
+            path = this.getAreaPath(parentNode.areaId, childAreaId, blockedIntermediates);
+        }
         if (!path) return { allowed: false, reason: '目标区域与父节点不连通，或所有可用路径均经过已占据区域' };
         const distance = path.length - 1;
 
         const isFirstRootBranch = parentNode.isRoot && parentNode.childrenIds.length === 0;
         if (isFirstRootBranch) {
-            const ownedCount = this.getPlayerOccupiedAreasCount(gameState, parentNode.owner);
+            const ownedCount = context?.ownAreaCount ??
+                this.getPlayerOccupiedAreasCount(gameState, parentNode.owner);
             const maxDistance = Math.min(ownedCount, 2);
             if (distance > maxDistance) {
                 return { allowed: false, reason: `根节点第一枝最多跨越 ${maxDistance} 条边` };
@@ -86,14 +123,16 @@ export class RuleEngine {
 
         // Fortress attacks are illegal actions. Reject them before the
         // caller creates an invading node or advances the turn.
-        const enemyNode = gameState.getAliveNodes().find(node =>
-            node.owner !== parentNode.owner && node.areaId === childAreaId
-        );
+        const enemyNode = context
+            ? context.enemyNodesByArea.get(childAreaId)
+            : aliveNodes.find(node => node.owner !== parentNode.owner && node.areaId === childAreaId);
         if (enemyNode && enemyNode.getDegree() > 3) {
             return { allowed: false, reason: '堡垒节点不能作为攻击目标' };
         }
 
-        const targetOwn = gameState.getAliveNodesByOwner(parentNode.owner).some(node => node.areaId === childAreaId);
+        const targetOwn = context
+            ? context.ownAreas.has(childAreaId)
+            : gameState.getAliveNodesByOwner(parentNode.owner).some(node => node.areaId === childAreaId);
         if (targetOwn && childAreaId !== enemyBaseId) {
             return { allowed: false, reason: '己方普通区域只能有一个节点' };
         }
