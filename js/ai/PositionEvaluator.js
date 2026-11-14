@@ -7,11 +7,11 @@ const WIN_SCORE = 100000;
  * duplicates growth, combat, freeze, or turn-transition rules.
  */
 export class PositionEvaluator {
-    constructor({ adjacency, distanceToBase, simulateMove }) {
+    constructor({ adjacency, distanceToBase, simulateMove, profile }) {
         this.adjacency = adjacency || {};
         this.distanceToBase = distanceToBase;
         this.simulateMove = simulateMove;
-        this.profile = arguments[0].profile;
+        this.profile = profile;
     }
 
     scoreMove(game, move, side, bases) {
