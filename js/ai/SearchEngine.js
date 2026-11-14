@@ -83,7 +83,10 @@ export class SearchEngine {
                 if (!next) continue;
 
                 let childValue;
-                if (!principalVariationSearch || index === 0) {
+                // Narrow-window probes pay off mainly when a node has
+                // enough siblings to justify the extra bound checks. Keep
+                // low-branching nodes on ordinary alpha-beta to avoid overhead.
+                if (!principalVariationSearch || moves.length < 4 || index === 0) {
                     childValue = visit(next, depth - 1, alpha, beta, !maximizing);
                 } else if (maximizing) {
                     // A narrow window cheaply tests whether this move can beat
