@@ -73,7 +73,7 @@
 @media(max-width:650px){.result-screen{padding:12px}.result-hero{padding:18px 0 20px}.result-overview{grid-template-columns:repeat(2,minmax(0,1fr))}.result-panel{margin:10px 0;padding:15px}.result-compare-head,.result-compare-row{grid-template-columns:minmax(0,1fr) 64px 64px;gap:7px;padding-left:4px;padding-right:4px}.result-compare-row>span:first-child{font-size:10px}.result-compare-row>strong{font-size:11px}.result-section-heading h2{font-size:14px}}
 @media(prefers-reduced-motion:reduce){.result-screen *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 
-.ai-progress-detail{display:block;margin-top:3px;color:#8fc9b5;font-size:9px;font-weight:500;line-height:1.4;font-variant-numeric:tabular-nums}
+.ai-progress-detail{display:inline-block;max-width:240px;margin-left:7px;overflow:hidden;color:#8fc9b5;font-size:9px;font-weight:500;line-height:1.2;text-overflow:ellipsis;vertical-align:middle;white-space:nowrap;font-variant-numeric:tabular-nums}
 .ai-explanation{width:min(100%,560px);padding:7px 10px;border:1px solid rgba(117,181,211,.3);border-radius:7px;background:linear-gradient(120deg,rgba(37,78,103,.24),rgba(30,43,54,.5));color:#d6e3e8;font-size:10px;line-height:1.5}
 .ai-explanation-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:#91c7df;font-size:9px;letter-spacing:.04em}
 .ai-explanation-heading strong{color:#d6e7ed;font-size:10px;letter-spacing:0}
@@ -82,3 +82,5 @@
 .ai-explanation li{margin:1px 0}
 .ai-explanation small{color:#829ba7;font-size:9px;font-variant-numeric:tabular-nums}
 @media(max-width:900px){.ai-explanation{width:100%;order:4}}
+
+@media(max-width:520px){.ai-progress-detail{max-width:125px}}
