@@ -50,10 +50,14 @@ export class AIController {
         const moves = this._generateMoves(game, playerSide, bases);
         if (!moves.length) return null;
 
-        const ranked = moves.map(move => ({
-            ...move,
-            score: this._scoreMove(game, move, playerSide, bases)
-        })).sort((a, b) => b.score - a.score);
+        const ranked = moves.map(move => {
+            const nextState = this._simulateMove(game, move, playerSide, bases);
+            return {
+                ...move,
+                score: this._scoreMove(game, move, playerSide, bases, nextState),
+                _nextState: nextState
+            };
+        }).sort((a, b) => b.score - a.score);
 
         // A legal immediate win is never deliberately ignored, even on easy.
         const winningMove = this.tacticalAnalyzer.findImmediateWinningMove(ranked, playerSide, bases);
@@ -167,8 +171,8 @@ export class AIController {
         return best;
     }
 
-    _scoreMove(game, move, side, bases) {
-        return this.positionEvaluator.scoreMove(game, move, side, bases);
+    _scoreMove(game, move, side, bases, simulatedNext = null) {
+        return this.positionEvaluator.scoreMove(game, move, side, bases, simulatedNext);
     }
 
     _simulateMove(game, move, side, bases) {
@@ -232,6 +236,19 @@ export class AIController {
 
     _searchHard(game, rankedMoves, side, bases) {
         const rootMoves = rankedMoves.slice(0, this.profile.searchWidth);
+        const preparedChildren = new WeakMap();
+        const moveKey = move => `${move.parentNodeId}:${move.targetAreaId}`;
+
+        // Root candidates were already simulated while calculating their
+        // heuristic scores. Reuse those detached states across every
+        // iterative-deepening pass.
+        const rootChildren = new Map();
+        for (const move of rootMoves) {
+            const next = move._nextState || this._simulateMove(game, move, side, bases);
+            if (next) rootChildren.set(moveKey(move), next);
+        }
+        preparedChildren.set(game, rootChildren);
+
         const result = this.searchEngine.search({
             rootState: game,
             rootMoves,
@@ -239,31 +256,35 @@ export class AIController {
             timeBudgetMs: this.profile.searchBudgetMs,
             maxNodes: this.profile.maxNodes,
             getPositionKey: state => JSON.stringify(state.toJSON()),
-            applyMove: (state, move, movingSide) =>
-                this._simulateMove(state, move, movingSide, bases),
+            applyMove: (state, move, movingSide) => {
+                const cached = preparedChildren.get(state)?.get(moveKey(move));
+                return cached || this._simulateMove(state, move, movingSide, bases);
+            },
             generateMoves: (state, movingSide) =>
                 this._generateMoves(state, movingSide, bases),
             passTurn: (state, movingSide) => this._simulatePass(state, movingSide),
             evaluate: state => this._evaluateState(state, side, bases),
             orderMoves: (state, moves, maximizing, checkBudget) => {
-                // Root moves already carry the scores computed by getBestMove().
-                // Reusing their existing order avoids rescoring every root action
-                // once per iterative-deepening pass.
+                // Root moves already carry their scores and prepared child
+                // states, so every iteration can reuse both.
                 if (state === game) return moves;
 
                 const scored = [];
+                const children = new Map();
                 for (const move of moves) {
                     checkBudget();
+                    const next = this._simulateMove(state, move, state.currentTurn, bases);
+                    if (!next) continue;
+                    children.set(moveKey(move), next);
                     scored.push({
                         move,
-                        score: this._scoreMove(state, move, state.currentTurn, bases)
+                        score: this._scoreMove(state, move, state.currentTurn, bases, next)
                     });
                 }
-                // _scoreMove is from the side-to-move's own perspective.
-                // Both players' strongest actions therefore sort high-to-low:
-                // at min nodes this puts the opponent's most dangerous replies
-                // first, which is the correct ordering for root-side minimax.
+                // Scores are from the side-to-move's own perspective, so
+                // search that player's strongest replies first at every ply.
                 scored.sort((a, b) => b.score - a.score);
+                preparedChildren.set(state, children);
                 return scored.map(item => item.move);
             }
         });
