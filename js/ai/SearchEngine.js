@@ -21,7 +21,8 @@ export class SearchEngine {
         maxDepth,
         timeBudgetMs,
         maxNodes = Infinity,
-        principalVariationSearch = true
+        principalVariationSearch = true,
+        onProgress = () => {}
     }) {
         if (!Array.isArray(rootMoves) || !rootMoves.length) {
             return { move: null, value: evaluate(rootState), completedDepth: 0, nodes: 0, cutoffs: 0 };
@@ -154,6 +155,20 @@ export class SearchEngine {
                 bestValue = iterationValue;
                 preferredRootMoveKey = getMoveKey(iterationMove);
                 completedDepth = depth;
+                try {
+                    onProgress({
+                        phase: 'search',
+                        completedDepth,
+                        maxDepth,
+                        nodes: stats.nodes,
+                        cutoffs: stats.cutoffs,
+                        transpositionHits: stats.transpositionHits,
+                        value: bestValue,
+                        elapsedMs: Math.max(0, this.now() - startedAt)
+                    });
+                } catch (error) {
+                    // Telemetry must never alter search correctness.
+                }
             } catch (error) {
                 if (error !== SearchEngine.BUDGET_EXHAUSTED) throw error;
                 break;
