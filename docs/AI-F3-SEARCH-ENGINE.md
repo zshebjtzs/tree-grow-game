@@ -84,3 +84,15 @@
 | 战斗密集 | 专家 | 5 | 1.385 ms | 2.172 ms | 77 | 8 ply |
 
 简单与普通在这三个局面中的平均决策时间均低于 0.5 ms。与加入批量规则上下文前的最近一次同局面运行相比，困难/专家平均耗时分别下降约 24–54%，而节点数与完成深度保持不变；继续加入预计算子局面、跨迭代行动排序缓存、置换表键缓存和战术防守阶段的子局面复用后，又进一步降低了重复模拟、重复评分和重复序列化。由于 CI 环境存在波动，该比例仅作为观察结果。与首轮稀疏局面基线相比，困难平均耗时从 20.940 ms 降至 15.537 ms（约 25.8%），专家从 60.970 ms 降至 42.748 ms（约 29.9%）；对应节点数和完成深度保持不变。不同 CI 运行存在明显波动，本表只记录一次完整运行，不将单次耗时当作稳定保证。所有搜索难度在三个局面中均完成新的 7/8 ply 配置深度；最慢的稀疏专家局面 P95 约 607 ms，仍低于 1,200 ms 预算。这些数据不代表浏览器 Worker 端到端延迟，也不能代表随机地图上的最坏情况；仍需在目标设备实测。
+
+
+### Compact transposition keys
+
+- Search positions now use a compact deterministic key instead of calling
+  `GameState.toJSON()` followed by `JSON.stringify()` at every first visit.
+- The key includes side to move, game-over state, node ID counter, ownership,
+  parent/child topology, area IDs, and root/destroyed/frozen flags.
+- Render coordinates are omitted because they do not affect AI legality or
+  evaluation; if future AI logic starts using coordinates, the key must be extended.
+- A dedicated test verifies key stability and sensitivity to turn, ID counter,
+  and freeze-state changes, while ensuring no JSON snapshot is requested.
