@@ -94,7 +94,40 @@ const results = [];
 
 for (const fixture of fixtures) {
     for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
-        const ai = new AIController(difficulty, fixture.adjacency, fixture.areaCenters);
+        const variants = ['hard', 'expert'].includes(difficulty)
+            ? ['alpha-beta', 'pvs']
+            : ['heuristic'];
+        const createAI = variant => {
+            const ai = new AIController(difficulty, fixture.adjacency, fixture.areaCenters);
+            if (variant === 'alpha-beta') {
+                const search = ai.searchEngine.search.bind(ai.searchEngine);
+                ai.searchEngine.search = options => search({
+                    ...options,
+                    principalVariationSearch: false
+                });
+            }
+            return ai;
+        };
+        if (['hard', 'expert'].includes(difficulty)) {
+            const baselineAI = createAI('alpha-beta');
+            const optimizedAI = createAI('pvs');
+            const baselineMove = baselineAI.getBestMove(fixture.snapshot, 'blue');
+            const optimizedMove = optimizedAI.getBestMove(fixture.snapshot, 'blue');
+            const sameMove = baselineMove?.parentNodeId === optimizedMove?.parentNodeId &&
+                baselineMove?.targetAreaId === optimizedMove?.targetAreaId;
+            const baselineStats = baselineAI.lastSearchStats;
+            const optimizedStats = optimizedAI.lastSearchStats;
+            if (!sameMove || baselineStats.value !== optimizedStats.value ||
+                baselineStats.completedDepth !== optimizedStats.completedDepth) {
+                throw new Error(
+                    `PVS parity failed for ${fixture.name}/${difficulty}: ` +
+                    `baseline=${JSON.stringify({ baselineMove, baselineStats })}, ` +
+                    `optimized=${JSON.stringify({ optimizedMove, optimizedStats })}`
+                );
+            }
+        }
+        for (const variant of variants) {
+        const ai = createAI(variant);
         const probe = GameState.fromJSON(fixture.snapshot);
         probe.currentTurn = 'blue';
         const legalMoveCount = ai._generateMoves(probe, 'blue', {
@@ -123,6 +156,7 @@ for (const fixture of fixtures) {
             fixture: fixture.name,
             legalMoveCount,
             difficulty,
+            searchVariant: variant,
             samples: samples.length,
             meanMs: Number((samples.reduce((sum, value) => sum + value, 0) / samples.length).toFixed(3)),
             p50Ms: Number(percentile(samples, 0.50).toFixed(3)),
@@ -139,6 +173,7 @@ for (const fixture of fixtures) {
                 ? Math.max(...searchStats.map(item => item.completedDepth))
                 : 0
         });
+        }
     }
 }
 
