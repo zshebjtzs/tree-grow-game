@@ -51,7 +51,7 @@ export class AIController {
         if (!moves.length) return null;
 
         const ranked = moves.map(move => {
-            const nextState = this._simulateMove(game, move, playerSide, bases);
+            const nextState = this._simulateMove(game, move, playerSide, bases, { alreadyValidated: true });
             return {
                 ...move,
                 score: this._scoreMove(game, move, playerSide, bases, nextState),
@@ -175,16 +175,18 @@ export class AIController {
         return this.positionEvaluator.scoreMove(game, move, side, bases, simulatedNext);
     }
 
-    _simulateMove(game, move, side, bases) {
+    _simulateMove(game, move, side, bases, { alreadyValidated = false } = {}) {
         const next = game.clone();
         next.currentTurn = side;
         const parent = next.getNode(move.parentNodeId);
         if (!parent) return null;
-        const validation = this.ruleEngine.canGrow(next, parent, move.targetAreaId, {
-            ownBaseId: bases[side],
-            enemyBaseId: bases[this._enemy(side)]
-        });
-        if (!validation.allowed) return null;
+        if (!alreadyValidated) {
+            const validation = this.ruleEngine.canGrow(next, parent, move.targetAreaId, {
+                ownBaseId: bases[side],
+                enemyBaseId: bases[this._enemy(side)]
+            });
+            if (!validation.allowed) return null;
+        }
         const child = next.addNode(parent.id, move.x, move.y, move.targetAreaId, side);
         if (!child) return null;
 
@@ -267,7 +269,7 @@ export class AIController {
             },
             applyMove: (state, move, movingSide) => {
                 const cached = preparedChildren.get(state)?.get(moveKey(move));
-                return cached || this._simulateMove(state, move, movingSide, bases);
+                return cached || this._simulateMove(state, move, movingSide, bases, { alreadyValidated: true });
             },
             generateMoves: (state, movingSide) =>
                 this._generateMoves(state, movingSide, bases),
@@ -284,7 +286,7 @@ export class AIController {
                 const children = new Map();
                 for (const move of moves) {
                     checkBudget();
-                    const next = this._simulateMove(state, move, state.currentTurn, bases);
+                    const next = this._simulateMove(state, move, state.currentTurn, bases, { alreadyValidated: true });
                     if (!next) continue;
                     children.set(moveKey(move), next);
                     scored.push({
