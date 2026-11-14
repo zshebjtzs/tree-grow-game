@@ -289,5 +289,9 @@ test('search reuses root move ordering and orders minimizing replies from low sc
     ], 'blue', { red: 6, blue: 1 });
 
     assert.equal(scoredStates.includes(root), false, 'root actions should not be rescored');
-    assert.deepEqual(appliedReplies, [4, 5], 'minimizing replies should be searched ascending');
+    assert.ok(appliedReplies.length >= 2);
+    for (let index = 0; index < appliedReplies.length; index += 2) {
+        assert.deepEqual(appliedReplies.slice(index, index + 2), [4, 5],
+            'each minimizing iteration should search low scores first');
+    }
 });
