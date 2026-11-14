@@ -8,11 +8,17 @@ const WARMUP = 5;
 
 function createFixture() {
     const adjacency = {};
+    const edges = Array.from({ length: AREA_COUNT + 1 }, () => new Set());
+    const connect = (left, right) => {
+        edges[left].add(right);
+        edges[right].add(left);
+    };
     for (let area = 1; area <= AREA_COUNT; area++) {
-        const previous = area === 1 ? AREA_COUNT : area - 1;
-        const next = area === AREA_COUNT ? 1 : area + 1;
-        const chord = ((area + 12) % AREA_COUNT) + 1;
-        adjacency[area] = [...new Set([previous, next, chord])];
+        connect(area, area === AREA_COUNT ? 1 : area + 1);
+        connect(area, ((area + 12) % AREA_COUNT) + 1);
+    }
+    for (let area = 1; area <= AREA_COUNT; area++) {
+        adjacency[area] = [...edges[area]];
     }
     const areaCenters = Array.from({ length: AREA_COUNT }, (_, index) => [index * 10, 0]);
     const game = new GameState();
