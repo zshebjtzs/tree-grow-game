@@ -2,6 +2,8 @@
 import { GameState } from '../game/GameState.js';
 import { RuleEngine } from '../game/RuleEngine.js';
 import { resolveCombat } from '../game/CombatResolver.js';
+import { PositionEvaluator } from './PositionEvaluator.js';
+import { TacticalAnalyzer } from './TacticalAnalyzer.js';
 
 const SEARCH_WIDTH = 7;
 const WIN_SCORE = 100000;
@@ -15,6 +17,12 @@ export class AIController {
         this.adjacency = adjacency || {};
         this.areaCenters = areaCenters || [];
         this.ruleEngine = new RuleEngine({ adjacency: this.adjacency });
+        this.tacticalAnalyzer = new TacticalAnalyzer();
+        this.positionEvaluator = new PositionEvaluator({
+            adjacency: this.adjacency,
+            distanceToBase: (...args) => this._distanceToBase(...args),
+            simulateMove: (...args) => this._simulateMove(...args)
+        });
     }
 
     getBestMove(gameStateData, playerSide) {
@@ -40,17 +48,27 @@ export class AIController {
         })).sort((a, b) => b.score - a.score);
 
         // A legal immediate win is never deliberately ignored, even on easy.
-        const winningMove = ranked.find(move => move.targetAreaId === bases[this._enemy(playerSide)]);
+        const winningMove = this.tacticalAnalyzer.findImmediateWinningMove(ranked, playerSide, bases);
         if (winningMove) return this._publicMove(winningMove);
 
+        // When the opponent has a one-move win, prefer actions that eliminate
+        // the threat. If no action fully defends, minimize the remaining wins.
+        const defenseMoves = this.tacticalAnalyzer.rankDefenses(
+            game, ranked, playerSide, bases,
+            (state, move, side, matchBases) => this._simulateMove(state, move, side, matchBases),
+            (state, side, matchBases) => this._generateMoves(state, side, matchBases)
+        );
+        const defenseSet = new Set(defenseMoves);
+        const tacticallyRanked = ranked.filter(move => defenseSet.has(move));
+
         if (this.difficulty === 'easy') {
-            const pool = ranked.slice(0, Math.min(4, ranked.length));
+            const pool = tacticallyRanked.slice(0, Math.min(4, tacticallyRanked.length));
             return this._publicMove(pool[Math.floor(Math.random() * pool.length)]);
         }
         if (this.difficulty === 'medium') {
-            return this._publicMove(this._weightedChoice(ranked));
+            return this._publicMove(this._weightedChoice(tacticallyRanked));
         }
-        return this._publicMove(this._searchHard(game, ranked, playerSide, bases));
+        return this._publicMove(this._searchHard(game, tacticallyRanked, playerSide, bases));
     }
 
     _publicMove(move) {
@@ -123,38 +141,7 @@ export class AIController {
     }
 
     _scoreMove(game, move, side, bases) {
-        const enemy = this._enemy(side);
-        if (move.targetAreaId === bases[enemy]) return WIN_SCORE;
-
-        const beforeDistance = this._distanceToBase(game, side, bases[enemy]);
-        const next = this._simulateMove(game, move, side, bases);
-        if (!next) return -WIN_SCORE;
-
-        if (next.isGameOver) return next.getPlayerRootNodes(side).length ? WIN_SCORE : -WIN_SCORE;
-        const afterDistance = this._distanceToBase(next, side, bases[enemy]);
-        const progress = Number.isFinite(beforeDistance) && Number.isFinite(afterDistance)
-            ? beforeDistance - afterDistance
-            : (Number.isFinite(afterDistance) ? 1 : 0);
-
-        let score = progress * 95;
-        if (move.attacks) {
-            const beforeEnemyNodes = game.getAliveNodesByOwner(enemy).length;
-            const afterEnemyNodes = next.getAliveNodesByOwner(enemy).length;
-            score += (beforeEnemyNodes - afterEnemyNodes) * 85;
-            const beforeRoots = game.getPlayerRootNodes(enemy).length;
-            const afterRoots = next.getPlayerRootNodes(enemy).length;
-            score += (beforeRoots - afterRoots) * 900;
-        }
-
-        // Reward useful expansion, but keep it subordinate to concrete attacks
-        // and progress toward the opposing fortress.
-        const ownAreaGain = next.getAliveNodesByOwner(side).length -
-            game.getAliveNodesByOwner(side).length;
-        score += ownAreaGain * 8;
-
-        const ownThreat = this._distanceToBase(next, enemy, bases[side]);
-        if (Number.isFinite(ownThreat)) score -= Math.max(0, 5 - ownThreat) * 24;
-        return score;
+        return this.positionEvaluator.scoreMove(game, move, side, bases);
     }
 
     _simulateMove(game, move, side, bases) {
@@ -205,23 +192,7 @@ export class AIController {
     }
 
     _evaluateState(game, perspective, bases) {
-        const opponent = this._enemy(perspective);
-        const ownRoots = game.getPlayerRootNodes(perspective).length;
-        const enemyRoots = game.getPlayerRootNodes(opponent).length;
-        if (ownRoots === 0) return -WIN_SCORE;
-        if (enemyRoots === 0) return WIN_SCORE;
-        if (game.isGameOver) return 0;
-
-        const ownDistance = this._distanceToBase(game, perspective, bases[opponent]);
-        const enemyDistance = this._distanceToBase(game, opponent, bases[perspective]);
-        const ownNodes = game.getAliveNodesByOwner(perspective).length;
-        const enemyNodes = game.getAliveNodesByOwner(opponent).length;
-
-        const distanceValue = distance =>
-            Number.isFinite(distance) ? Math.max(-500, 180 - distance * 42) : -260;
-        return (distanceValue(ownDistance) - distanceValue(enemyDistance)) +
-            (ownNodes - enemyNodes) * 7 +
-            (ownRoots - enemyRoots) * 220;
+        return this.positionEvaluator.evaluateState(game, perspective, bases);
     }
 
     _searchHard(game, rankedMoves, side, bases) {
