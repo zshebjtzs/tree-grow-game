@@ -23,6 +23,7 @@ test('alpha-beta search chooses the maximin move', () => {
     assert.equal(result.move, 'a');
     assert.equal(result.value, 3);
     assert.equal(result.completedDepth, 2);
+    assert.ok(result.cutoffs > 0, 'alpha-beta should prune at least one reply');
 });
 
 test('budget exhaustion keeps the last fully completed iteration', () => {
