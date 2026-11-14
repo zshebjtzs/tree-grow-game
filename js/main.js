@@ -828,7 +828,7 @@ continueGameBtn.addEventListener('click', () => {
     }
 });
 loadMenuBtn.addEventListener('click', loadGame);
-startGameBtn.addEventListener('click', beginNewMatch);
+startGameBtn.addEventListener('click', () => beginNewMatch());
 resultMenuBtn.addEventListener('click', () => { isPaused = false; showAppScreen('menu'); });
 resultRematchBtn.addEventListener('click', () => {
     if (!activeMatchConfig) return;
