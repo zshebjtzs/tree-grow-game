@@ -36,7 +36,7 @@ test('root first branch can target map areas without a direct adjacency entry', 
 });
 
 test('all difficulties take an immediate legal winning move', () => {
-    for (const difficulty of ['easy', 'medium', 'hard']) {
+    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
         game.addNode(null, 0, 0, 6, 'red');
@@ -69,7 +69,7 @@ test('AI rejects an unsupported player side and invalid difficulty', () => {
 
 
 test('all three difficulty levels only return moves accepted by RuleEngine', () => {
-    for (const difficulty of ['easy', 'medium', 'hard']) {
+    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
         game.addNode(null, 0, 0, 6, 'red');
@@ -93,7 +93,7 @@ test('all AI difficulties reject a fortress as the only possible attack target',
         1: [2], 2: [1, 3, 4, 5, 6],
         3: [2], 4: [2], 5: [2], 6: [2]
     };
-    for (const difficulty of ['easy', 'medium', 'hard']) {
+    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
         const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
@@ -170,4 +170,39 @@ test('AI prioritizes a legal move that removes an immediate enemy base threat', 
     assert.ok(move);
     assert.equal(move.parentNodeId, redLeaf.id);
     assert.equal(move.targetAreaId, 4);
+});
+
+
+test('expert difficulty is accepted and returns a RuleEngine-legal move', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 6, 'red');
+    const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
+    const ai = new AIController('expert', line, centers);
+    const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+    assert.ok(move);
+    assert.equal(move.parentNodeId, blueRoot.id);
+    const restored = GameState.fromJSON(game.toJSON());
+    restored.currentTurn = 'blue';
+    const validation = new RuleEngine({ adjacency: line }).canGrow(
+        restored, restored.getNode(move.parentNodeId), move.targetAreaId,
+        { ownBaseId: 1, enemyBaseId: 6 }
+    );
+    assert.equal(validation.allowed, true);
+});
+
+test('difficulty profiles encode distinct strategic priorities and expert search breadth', async () => {
+    const { getDifficultyProfile, DIFFICULTY_LEVELS } = await import('./DifficultyProfiles.js');
+    assert.deepEqual(DIFFICULTY_LEVELS, ['easy', 'medium', 'hard', 'expert']);
+    const easy = getDifficultyProfile('easy');
+    const medium = getDifficultyProfile('medium');
+    const hard = getDifficultyProfile('hard');
+    const expert = getDifficultyProfile('expert');
+    assert.ok(easy.expansionWeight > medium.expansionWeight);
+    assert.ok(easy.attackWeight < medium.attackWeight);
+    assert.ok(hard.attackWeight > medium.attackWeight);
+    assert.ok(expert.safetyWeight > hard.safetyWeight);
+    assert.ok(expert.structureWeight > hard.structureWeight);
+    assert.ok(expert.searchWidth > hard.searchWidth);
+    assert.throws(() => getDifficultyProfile('unknown'), /难度无效/);
 });
