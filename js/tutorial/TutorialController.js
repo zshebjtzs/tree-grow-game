@@ -16,7 +16,7 @@ const LESSONS = [
     { chapter: '第二章 · 基本操作', title: '回合与行动顺序', body: '双方轮流行动。完成一次生长后，行动权交给另一方；冻结等状态也会随着回合推进而变化。你不能连续替双方行动。', instruction: '本节展示刚才行动后的回合变化。点击“继续”进入下一节。', mode: 'info' },
     { chapter: '第二章 · 基本操作', title: '根节点的首次生长', body: '根节点只能生长第一根枝条，之后不能再次作为分叉点。首次生长有特殊距离规则：最多跨越 min(己方已占据区域数, 2) 条边。开局只有一个己方区域，因此首次生长实际上只能跨一条边。', instruction: '记住：根节点只负责伸出第一根枝条，后续扩展从新节点继续。', mode: 'info' },
     { chapter: '第三章 · 战斗规则', title: '进入敌方基地', body: '攻击不是点击敌方节点本身，而是选择己方节点，再把目标区域设为敌方占据的区域。成功突入敌方基地即可获胜。堡垒节点不能被攻击。', instruction: '选中红色根节点，再点击紧邻的蓝色基地，完成一次突入。', mode: 'attack' },
-    { chapter: '第四章 · 结构与策略', title: '分叉、堡垒与冻结', body: '分叉节点至少有两个子节点；堡垒节点的度数大于 3，二者不是同一个概念。攻击叶节点或链节点时，战斗会沿祖先路径回溯；符合条件的非根分叉祖先可能被冻结。冻结节点暂时不能生长。', instruction: '重点区分“有两个子节点的分叉”和“度数大于 3 的堡垒”。', mode: 'info' },
+    { chapter: '第四章 · 结构与策略', title: '分叉、堡垒与冻结', body: '分叉节点至少有两个子节点；堡垒节点的度数大于 3，二者不是同一个概念。图中会同时展示普通分叉、堡垒和冻结节点。攻击叶节点或链节点时，战斗会沿祖先路径回溯；符合条件的非根分叉祖先可能被冻结。冻结节点暂时不能生长。', instruction: '观察地图中的节点结构，区分普通分叉、堡垒和冻结标记。', mode: 'structures' },
     { chapter: '第五章 · 毕业实战', title: '亲自完成一次决策', body: '现在把前面的知识串起来：观察己方节点、判断合法区域，再选择一个有战略价值的方向。不要只看眼前能不能生长，也要考虑对手下一步能否攻击你的结构。', instruction: '独立选择一个己方节点，并完成一次合法生长。', mode: 'practice' },
     { chapter: '教程完成', title: '你已经掌握基本操作', body: '你已经完成从认识棋盘、基本生长到攻击和结构规则的入门流程。正式对局中，胜利条件是突入敌方基地，或摧毁对方全部根节点。建议先进行一局双人或简单难度的人机对战。', instruction: '点击“完成教程”返回主菜单。', mode: 'finish' }
 ];
@@ -37,20 +37,53 @@ function buildScenario(mode, id) {
     const mapManager = new MapManager(WIDTH, HEIGHT);
     const mapSeeds = createSeeds();
     const areas = mapManager.loadMapFromSeeds(mapSeeds);
-    const redBaseId = 1;
-    const neighbor = mapManager.adjacency[redBaseId]?.[0];
-    if (!neighbor) throw new Error('教程地图无法生成基地相邻区域');
-    const blueBaseId = mode === 'attack' ? neighbor : areas.length;
     const game = new GameState();
-    game.addNode(null, ...areas[redBaseId - 1].center, redBaseId, 'red');
-    game.addNode(null, ...areas[blueBaseId - 1].center, blueBaseId, 'blue');
-    return {
-        id,
-        mapSeeds,
-        gameState: game.toJSON(),
-        redBaseId,
-        blueBaseId
-    };
+    let redBaseId = 1;
+    let blueBaseId = areas.length;
+
+    if (mode === 'structures') {
+        let layout = null;
+        for (const fortressId of areas.map(area => area.id)) {
+            const fortressNeighbors = mapManager.adjacency[fortressId] || [];
+            if (fortressNeighbors.length < 4) continue;
+            for (const branchId of fortressNeighbors) {
+                const branchNeighbors = mapManager.adjacency[branchId] || [];
+                const parentId = branchNeighbors.find(id => id !== fortressId);
+                const siblingId = branchNeighbors.find(id => id !== fortressId && id !== parentId);
+                const fortressChildren = fortressNeighbors.filter(id =>
+                    id !== branchId && id !== parentId && id !== siblingId
+                );
+                if (parentId && siblingId && fortressChildren.length >= 3) {
+                    layout = { parentId, branchId, fortressId, siblingId, children: fortressChildren.slice(0, 3) };
+                    break;
+                }
+            }
+            if (layout) break;
+        }
+        if (!layout) throw new Error('教程地图无法构造分叉与堡垒示例');
+        const used = new Set([layout.parentId, layout.branchId, layout.fortressId, layout.siblingId, ...layout.children]);
+        blueBaseId = areas.map(area => area.id).find(id => !used.has(id));
+        if (!blueBaseId) throw new Error('教程地图缺少蓝方基地区域');
+        redBaseId = layout.parentId;
+        const add = (parentId, areaId, owner = 'red') =>
+            game.addNode(parentId, ...areas[areaId - 1].center, areaId, owner);
+        const root = add(null, layout.parentId);
+        const branch = add(root.id, layout.branchId);
+        const fortress = add(branch.id, layout.fortressId);
+        const frozenExample = add(branch.id, layout.siblingId);
+        for (const childAreaId of layout.children) add(fortress.id, childAreaId);
+        frozenExample.isFrozen = true;
+        add(null, blueBaseId, 'blue');
+    } else {
+        const redBase = 1;
+        const neighbor = mapManager.adjacency[redBase]?.[0];
+        if (!neighbor) throw new Error('教程地图无法生成基地相邻区域');
+        redBaseId = redBase;
+        blueBaseId = mode === 'attack' ? neighbor : areas.length;
+        game.addNode(null, ...areas[redBaseId - 1].center, redBaseId, 'red');
+        game.addNode(null, ...areas[blueBaseId - 1].center, blueBaseId, 'blue');
+    }
+    return { id, mapSeeds, gameState: game.toJSON(), redBaseId, blueBaseId };
 }
 
 export class TutorialController {
@@ -107,7 +140,7 @@ export class TutorialController {
     startLesson() {
         const lesson = LESSONS[this.index];
         this.selectedNodeId = null;
-        this.completed = ['info', 'finish'].includes(lesson.mode);
+        this.completed = ['info', 'structures', 'finish'].includes(lesson.mode);
         this.session?.exit();
         const scenario = buildScenario(lesson.mode, 'lesson-' + this.index);
         this.session = new TutorialSession(scenario, { width: WIDTH, height: HEIGHT });
