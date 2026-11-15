@@ -50,9 +50,9 @@ export function createTutorialScenario(scenario, { width = 1800, height = 1200 }
     }
     if (lessonTargetAreaId !== null &&
         (!Number.isInteger(lessonTargetAreaId) || !areaIds.has(lessonTargetAreaId) ||
-            !blueRoots.some(root => game.getAliveNodesByOwner('blue').some(node =>
+            !game.getAliveNodesByOwner('blue').some(node =>
                 node.areaId === lessonTargetAreaId
-            )) ||
+            ) ||
             !(mapManager.adjacency[redBaseId] || []).includes(lessonTargetAreaId))) {
         throw new TypeError('教学目标必须是红方根节点可直接攻击的蓝方占据区域');
     }
