@@ -254,7 +254,7 @@ export class TutorialController {
                 return;
             }
             this.selectedNodeId = clickedNode.id;
-            this.feedback.textContent = '已选中红色根节点。现在点击绿色高亮区域。';
+            this.feedback.textContent = '已选中红色节点。现在点击绿色高亮区域。';
             this.render();
             return;
         }
