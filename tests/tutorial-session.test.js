@@ -112,7 +112,7 @@ test('tutorial session validates a base invasion through the shared rules and co
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.action.isAttack, true);
+    // Entering the enemy base is the direct-victory action, not an ordinary area attack.\n    assert.equal(result.action.isAttack, false);
     const defender = session.runtime.game.getAliveNodes().find(node =>
         node.owner === 'blue' && node.areaId === targetAreaId
     );
