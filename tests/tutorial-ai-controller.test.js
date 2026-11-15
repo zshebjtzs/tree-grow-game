@@ -52,3 +52,69 @@ test('tutorial AI disposal terminates its dedicated worker and rejects future re
     assert.equal(worker.terminated, true);
     assert.throws(() => controller.request(createRuntime()), /已经释放/);
 });
+
+test('tutorial AI reports worker failures and permits a later request', () => {
+    const errors = [];
+    const controller = new TutorialAIController({
+        WorkerClass: FakeWorker,
+        onError: error => errors.push(error)
+    });
+    const firstRequestId = controller.request(createRuntime());
+    controller.worker.onerror({ message: 'worker crashed' });
+    assert.deepEqual(errors, ['worker crashed']);
+    assert.equal(controller.pending, false);
+
+    const secondRequestId = controller.request(createRuntime());
+    assert.ok(secondRequestId > firstRequestId);
+    controller.dispose();
+});
+
+test('production AI can make a legal blue response after a red practice move', async () => {
+    const { AIController } = await import('../js/ai/AIController.js');
+    const { TutorialSession } = await import('../js/tutorial/TutorialSession.js');
+    const { buildScenario } = await import('../js/tutorial/TutorialController.js');
+    const session = new TutorialSession(buildScenario('practice', 'tutorial-ai-practice'));
+    const runtime = session.runtime;
+    const redRoot = runtime.game.getPlayerRootNodes('red')[0];
+    const legalAreas = runtime.ruleEngine.getLegalGrowthAreas(
+        runtime.game,
+        redRoot,
+        runtime.mapAreas.map(area => area.id),
+        { ownBaseId: runtime.redBaseId, enemyBaseId: runtime.blueBaseId }
+    );
+    const targetAreaId = legalAreas.find(areaId =>
+        !runtime.game.getAliveNodes().some(node => node.areaId === areaId)
+    );
+    assert.ok(targetAreaId, 'red should have an empty legal growth area');
+
+    const redAction = session.performGrowth({
+        parentNodeId: redRoot.id,
+        targetAreaId,
+        owner: 'red'
+    });
+    assert.equal(redAction.ok, true);
+    runtime.game.switchTurn();
+    assert.equal(runtime.game.currentTurn, 'blue');
+
+    const ai = new AIController(
+        'easy',
+        runtime.ruleEngine.adjacency,
+        runtime.mapAreas.map(area => area.center)
+    );
+    const move = ai.getBestMove({
+        ...runtime.game.toJSON(),
+        redBaseId: runtime.redBaseId,
+        blueBaseId: runtime.blueBaseId
+    }, 'blue');
+
+    assert.ok(move, 'blue AI should find a response');
+    const parent = runtime.game.getNode(move.parentNodeId);
+    assert.ok(parent);
+    assert.equal(parent.owner, 'blue');
+    const validation = runtime.ruleEngine.canGrow(runtime.game, parent, move.targetAreaId, {
+        ownBaseId: runtime.blueBaseId,
+        enemyBaseId: runtime.redBaseId
+    });
+    assert.equal(validation.allowed, true);
+    session.exit();
+});
