@@ -243,3 +243,10 @@ AI 不会因为难度不同而获得额外行动或规则特权。它选择的�
 读取存档时，游戏会检查地图、节点编号、阵营、父子连接和冻结状态等数据。如果存档无效，当前正在进行的对局不会被替换。
 
 战斗动画或 AI 思考尚未结束时，不能保存；需要等当前流程完成后再操作。
+
+
+## 11. 文档许可与内容来源
+
+本规则说明中由本项目贡献者原创且有权许可的文字表达，采用 **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International（CC BY-NC-SA 4.0）** 许可。许可全文见仓库根目录的 LICENSE-DOCUMENTATION，法律文本及简明说明见 [Creative Commons 官方页面](https://creativecommons.org/licenses/by-nc-sa/4.0/)。
+
+本许可不覆盖其他作者享有权利的作品内容，也不表示本项目有权代表其他作者授权。游戏玩法灵感来源于 B 站 UP 主“浩辰-_-”的原创纸上游戏《生长树》；本项目对该来源的致谢不构成对原作内容的再许可。CC BY-NC-SA 4.0 仅适用于本项目贡献者有权许可的原创文档表达。
