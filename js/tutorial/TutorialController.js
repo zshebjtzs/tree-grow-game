@@ -160,7 +160,6 @@ export class TutorialController {
 
     open() {
         this.screen.hidden = false;
-        this.ensureAIController();
         this.startLesson();
         requestAnimationFrame(() => this.fit());
     }
