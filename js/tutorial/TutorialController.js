@@ -134,6 +134,7 @@ export class TutorialController {
         this.feedback = document.getElementById('tutorial-feedback');
         this.nextButton = document.getElementById('tutorial-next');
         this.resetButton = document.getElementById('tutorial-reset');
+        this.retryButton = document.getElementById('tutorial-retry');
         this.exitButton = document.getElementById('tutorial-exit');
         this.index = this.loadProgress();
         this.session = null;
@@ -146,6 +147,7 @@ export class TutorialController {
         this.matchResult = null;
         this.nextButton.addEventListener('click', () => this.advance());
         this.resetButton.addEventListener('click', () => this.reset());
+        this.retryButton.addEventListener('click', () => this.retryLesson());
         this.exitButton.addEventListener('click', () => this.exit());
         this.canvas.addEventListener('click', event => this.handleCanvasClick(event));
         window.addEventListener('resize', () => this.fit(), { passive: true });
@@ -180,6 +182,7 @@ export class TutorialController {
         this.aiThinking = false;
         this.matchEnded = false;
         this.matchResult = null;
+        this.retryButton.hidden = true;
         this.selectedNodeId = null;
         this.completed = ['info', 'structures', 'finish'].includes(lesson.mode);
         this.session?.exit();
@@ -432,6 +435,7 @@ export class TutorialController {
     finishTutorialMatch(winner, reason) {
         this.matchEnded = true;
         this.matchResult = { winner, reason };
+        this.retryButton.hidden = winner === 'red';
         this.completed = true;
         this.aiThinking = false;
         this.nextButton.disabled = false;
@@ -455,6 +459,11 @@ export class TutorialController {
     reset() {
         this.index = 0;
         this.saveProgress();
+        this.startLesson();
+    }
+
+    retryLesson() {
+        if (!this.matchEnded) return;
         this.startLesson();
     }
 
