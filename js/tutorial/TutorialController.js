@@ -288,12 +288,16 @@ export class TutorialController {
                 onDecision: decision => this.handleAIResponse(decision),
                 onError: error => {
                     this.aiThinking = false;
-                    this.feedback.textContent = '蓝方 AI 暂时无法行动：' + error + '。可以重置本节后重试。';
+                    this.completed = true;
+                    this.nextButton.disabled = false;
+                    this.feedback.textContent = '蓝方 AI 暂时无法行动：' + error + '。本节可以继续，或重置后重试。';
                     this.render();
                 }
             });
         } catch (error) {
-            this.feedback.textContent = '当前环境无法启动教程 AI：' + (error?.message || String(error));
+            this.completed = true;
+            this.nextButton.disabled = false;
+            this.feedback.textContent = '当前环境无法启动教程 AI：' + (error?.message || String(error)) + '。你可以继续教程。';
         }
     }
 
@@ -310,7 +314,9 @@ export class TutorialController {
         try { this.aiController.request(runtime, 'easy'); }
         catch (error) {
             this.aiThinking = false;
-            this.feedback.textContent = '蓝方 AI 请求失败：' + (error?.message || String(error));
+            this.completed = true;
+            this.nextButton.disabled = false;
+            this.feedback.textContent = '蓝方 AI 请求失败：' + (error?.message || String(error)) + '。你可以继续教程。';
         }
     }
 
@@ -326,7 +332,9 @@ export class TutorialController {
         }
         const result = this.session.performGrowth({ parentNodeId, targetAreaId, owner: 'blue' });
         if (!result.ok) {
-            this.feedback.textContent = '蓝方 AI 行动未通过规则验证：' + result.reason;
+            this.completed = true;
+            this.nextButton.disabled = false;
+            this.feedback.textContent = '蓝方 AI 行动未通过规则验证：' + result.reason + '。本节可以继续，建议记录此问题。';
             this.render();
             return;
         }
