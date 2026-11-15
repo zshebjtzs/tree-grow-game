@@ -446,8 +446,13 @@ export class TutorialController {
         this.nextButton.disabled = false;
         const winnerLabel = winner === 'red' ? '你（红方）' : '蓝方 AI';
         const reasonLabel = reason === 'enemy_base_reached' ? '成功突入敌方基地' : '摧毁对方全部根节点';
-        this.feedback.textContent = '对局结束：' + winnerLabel + '获胜。结束原因：' + reasonLabel + '。你可以继续教程，不需要重新开始。';
-        this.instruction.textContent = '实战已结束。观察本局胜负原因，然后继续完成教程。';
+        const deviationFeedback = winner === 'blue' && this.pendingLessonFeedback
+            ? '此前的行动虽然符合规则，但偏离了本节目标。' + this.pendingLessonFeedback + ' 蓝方随后取得胜利。'
+            : '';
+        this.pendingLessonFeedback = null;
+        this.feedback.textContent = '对局结束：' + winnerLabel + '获胜。结束原因：' + reasonLabel + '。' +
+            deviationFeedback + '你可以继续教程，也可以选择重试本节。';
+        this.instruction.textContent = '本局已经结束。观察胜负原因与行动后果，再决定继续教程或重试本节。';
     }
     advance() {
         if (!this.completed) return;
