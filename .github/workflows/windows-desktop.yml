@@ -92,6 +92,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path release/TreeGrow/www | Out-Null
           Copy-Item dist/* release/TreeGrow/www/ -Recurse -Force
           Copy-Item build/desktop/out/TreeGrow.exe release/TreeGrow/TreeGrow.exe -Force
+          Copy-Item LICENSE, LICENSE-DOCUMENTATION, THIRD_PARTY_NOTICES.md, GAME-RULES.md, README.md release/TreeGrow/
           Compress-Archive -Path release/TreeGrow -DestinationPath release/TreeGrow-Windows-x64.zip -Force
 
       - name: Run WebView2 page and module Worker smoke test
