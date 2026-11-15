@@ -28,7 +28,9 @@ export function resolveCombat(gameState, invadingNode, defenderNode) {
     let stopNode = null;
     let cursor = defenderNode;
     while (cursor) {
-        if (cursor.childrenIds.length >= 2) {
+        // A branching point protects its sibling branches, but a root is
+        // never a valid stopping point: reaching it destroys the whole tree.
+        if (!cursor.isRoot && cursor.childrenIds.length >= 2) {
             stopNode = cursor;
             break;
         }
