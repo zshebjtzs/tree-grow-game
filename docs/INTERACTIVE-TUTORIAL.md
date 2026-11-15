@@ -16,7 +16,7 @@
 
 ## 实现约束
 
-- TutorialController 只负责教学界面、步骤推进、输入解释和进度保存。
+- TutorialController 负责教学界面、步骤推进、输入解释、教程回合编排和进度保存；AI Worker 生命周期由 TutorialAIController 独立管理。
 - TutorialSession 独立持有教程运行时；重置时从场景定义重新构建状态。
 - TutorialScenarioFactory 使用固定种子重建地图，并校验基地、节点区域和坐标引用。
 - 所有教学生长行动都通过 TutorialSession.performGrowth()，最终调用共享 executeGrowthAction() 与 RuleEngine。
