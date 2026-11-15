@@ -15,6 +15,7 @@ const LESSONS = [
     { chapter: '第二章 · 基本操作', title: '完成第一次生长', body: '一次行动分两步：先点击己方可行动节点，再点击地图上高亮的合法区域。普通生长只能进入与父节点区域直接相邻的空区域。', instruction: '先选中红色根节点，再点击任意绿色高亮区域。', mode: 'grow' },
     { chapter: '第二章 · 基本操作', title: '回合与行动顺序', body: '双方轮流行动。完成一次生长后，行动权交给另一方；冻结等状态也会随着回合推进而变化。你不能连续替双方行动。', instruction: '本节展示刚才行动后的回合变化。点击“继续”进入下一节。', mode: 'info' },
     { chapter: '第二章 · 基本操作', title: '根节点的首次生长', body: '根节点只能生长第一根枝条，之后不能再次作为分叉点。首次生长有特殊距离规则：最多跨越 min(己方已占据区域数, 2) 条边。开局只有一个己方区域，因此首次生长实际上只能跨一条边。', instruction: '记住：根节点只负责伸出第一根枝条，后续扩展从新节点继续。', mode: 'info' },
+    { chapter: '第三章 · 战斗规则', title: '攻击与战斗结算', body: '当你把新节点生长到对方占据的普通区域时，会触发战斗。战斗可能摧毁目标枝条；如果攻击叶节点或链节点，规则还会沿父链回溯，找到最近的分叉祖先，并可能使这个非根分叉节点冻结。', instruction: '选中红色根节点，再点击地图上高亮的蓝色节点区域，观察枝条被摧毁和分叉冻结。', mode: 'combat' },
     { chapter: '第三章 · 战斗规则', title: '进入敌方基地', body: '攻击不是点击敌方节点本身，而是选择己方节点，再把目标区域设为敌方占据的区域。成功突入敌方基地即可获胜。堡垒节点不能被攻击。', instruction: '选中红色根节点，再点击紧邻的蓝色基地，完成一次突入。', mode: 'attack' },
     { chapter: '第四章 · 结构与策略', title: '分叉、堡垒与冻结', body: '分叉节点至少有两个子节点；堡垒节点的度数大于 3，二者不是同一个概念。图中会同时展示普通分叉、堡垒和冻结节点。攻击叶节点或链节点时，战斗会沿祖先路径回溯；符合条件的非根分叉祖先可能被冻结。冻结节点暂时不能生长。', instruction: '观察地图中的节点结构，区分普通分叉、堡垒和冻结标记。', mode: 'structures' },
     { chapter: '第五章 · 毕业实战', title: '亲自完成一次决策', body: '现在把前面的知识串起来：观察己方节点、判断合法区域，再选择一个有战略价值的方向。不要只看眼前能不能生长，也要考虑对手下一步能否攻击你的结构。', instruction: '独立选择一个己方节点，并完成一次合法生长。', mode: 'practice' },
@@ -74,6 +75,32 @@ export function buildScenario(mode, id) {
         for (const childAreaId of layout.children) add(fortress.id, childAreaId);
         frozenExample.isFrozen = true;
         add(null, blueBaseId, 'blue');
+    } else if (mode === 'combat') {
+        const redBase = 1;
+        let layout = null;
+        for (const attackAreaId of mapManager.adjacency[redBase] || []) {
+            for (const branchId of mapManager.adjacency[attackAreaId] || []) {
+                if (branchId === redBase) continue;
+                const neighbors = mapManager.adjacency[branchId] || [];
+                const rootAreaId = neighbors.find(id => id !== attackAreaId && id !== redBase);
+                const siblingAreaId = neighbors.find(id => id !== attackAreaId && id !== redBase && id !== rootAreaId);
+                if (rootAreaId && siblingAreaId) {
+                    layout = { attackAreaId, branchId, rootAreaId, siblingAreaId };
+                    break;
+                }
+            }
+            if (layout) break;
+        }
+        if (!layout) throw new Error('教程地图无法构造战斗与冻结示例');
+        redBaseId = redBase;
+        blueBaseId = layout.rootAreaId;
+        game.addNode(null, ...areas[redBaseId - 1].center, redBaseId, 'red');
+        game.currentTurn = 'blue';
+        const blueRoot = game.addNode(null, ...areas[blueBaseId - 1].center, blueBaseId, 'blue');
+        const branch = game.addNode(blueRoot.id, ...areas[layout.branchId - 1].center, layout.branchId, 'blue');
+        game.addNode(branch.id, ...areas[layout.attackAreaId - 1].center, layout.attackAreaId, 'blue');
+        game.addNode(branch.id, ...areas[layout.siblingAreaId - 1].center, layout.siblingAreaId, 'blue');
+        game.currentTurn = 'red';
     } else {
         const redBase = 1;
         const neighbor = mapManager.adjacency[redBase]?.[0];
@@ -171,14 +198,14 @@ export class TutorialController {
         }
         this.drawer.renderMap(runtime.mapAreas, runtime.redBaseId, runtime.blueBaseId,
             runtime.mapManager.shortEdges || [], this.legalAreaIds, null,
-            LESSONS[this.index].mode === 'attack' ? runtime.blueBaseId : null);
+            ['attack', 'combat'].includes(LESSONS[this.index].mode) ? (LESSONS[this.index].mode === 'attack' ? runtime.blueBaseId : runtime.mapManager.adjacency[runtime.redBaseId].find(id => runtime.game.getAliveNodes().some(node => node.owner === 'blue' && node.areaId === id))) : null);
         this.drawer.renderNodes(runtime.game.getAliveNodes(), this.selectedNodeId, [],
             runtime.mapManager.portals);
     }
 
     handleCanvasClick(event) {
         const lesson = LESSONS[this.index];
-        if (this.completed || !['grow', 'attack', 'practice'].includes(lesson.mode)) return;
+        if (this.completed || !['grow', 'combat', 'attack', 'practice'].includes(lesson.mode)) return;
         const point = this.drawer.getLogicalPoint(event.clientX, event.clientY);
         if (!point) return;
         const runtime = this.session.runtime;
@@ -211,7 +238,7 @@ export class TutorialController {
             this.feedback.textContent = '这一步不合法：' + result.reason + ' 请按提示重新选择。';
             return;
         }
-        if (lesson.mode === 'attack') {
+        if (lesson.mode === 'attack' || lesson.mode === 'combat') {
             const defender = nodes.find(node => node.owner === 'blue' && node.areaId === areaId);
             if (defender) {
                 const combat = resolveCombat(runtime.game, result.node, defender);
@@ -220,8 +247,10 @@ export class TutorialController {
                     const frozen = runtime.game.getNode(combat.freezeTargetId);
                     if (frozen) frozen.isFrozen = true;
                 }
+                this.feedback.textContent = lesson.mode === 'attack'
+                    ? '突入成功！进入敌方基地即可直接获胜。'
+                    : '战斗结算完成：目标枝条被摧毁，最近的非根分叉祖先被冻结。';
             }
-            this.feedback.textContent = '突入成功！进入敌方基地即可直接获胜。';
         } else {
             runtime.game.switchTurn();
             this.feedback.textContent = '生长成功。行动权已切换给蓝方，双方按回合轮流行动。';
