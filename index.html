@@ -16,6 +16,7 @@
 <p class="menu-subtitle">生长你的树，连接你的领地，寻找对手结构中的弱点。</p>
 <nav class="menu-actions" aria-label="主菜单">
 <button id="new-game-btn" class="button button-primary">开始新游戏 <span>→</span></button>
+<button id="tutorial-menu-btn" class="button button-secondary">交互式教程 <span>↗</span></button>
 <button id="continue-game-btn" class="button button-secondary" disabled>继续游戏</button>
 <button id="load-menu-btn" class="button button-secondary">读取存档</button>
 <button id="rules-menu-btn" class="button button-text">游戏说明</button>
@@ -28,6 +29,25 @@
 </section>
 <p class="menu-footer">TREE GROW · STRATEGY / GRAPH THEORY</p>
 </div></section>
+<section id="tutorial-screen" class="tutorial-screen" hidden>
+<header class="tutorial-header">
+<div><p class="eyebrow">INTERACTIVE TUTORIAL</p><h1>从零学会生长树</h1></div>
+<div class="tutorial-header-actions"><span id="tutorial-progress">第 1 / 9 节</span><button id="tutorial-exit" class="toolbar-button">退出教程</button></div>
+</header>
+<div class="tutorial-layout">
+<div id="tutorial-canvas-container" class="tutorial-canvas-container">
+<canvas id="tutorialCanvas" width="1800" height="1200" aria-label="交互式教程地图"></canvas>
+</div>
+<aside class="tutorial-card">
+<p id="tutorial-chapter" class="tutorial-chapter"></p>
+<h2 id="tutorial-title"></h2>
+<p id="tutorial-body" class="tutorial-body"></p>
+<div class="tutorial-task"><strong>现在请这样做</strong><p id="tutorial-instruction"></p></div>
+<p id="tutorial-feedback" class="tutorial-feedback" role="status" aria-live="polite"></p>
+<div class="tutorial-actions"><button id="tutorial-reset" class="button button-secondary">从头开始</button><button id="tutorial-next" class="button button-primary">继续 →</button></div>
+</aside>
+</div>
+</section>
 <section id="setup-screen" class="app-screen setup-screen" hidden>
 <div class="setup-card">
 <button id="back-to-menu-btn" class="back-link">← 返回主菜单</button>
