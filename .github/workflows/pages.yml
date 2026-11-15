@@ -23,6 +23,10 @@ jobs:
       - run: npm run build
         env:
           GITHUB_ACTIONS: true
+      - name: Include license and source notices in Pages artifact
+        run: |
+          cp LICENSE LICENSE-DOCUMENTATION THIRD_PARTY_NOTICES.md GAME-RULES.md README.md dist/
+          cp -R docs dist/docs
       - name: Verify GitHub Pages build output
         run: npm run verify:pages
       - uses: actions/configure-pages@v5
