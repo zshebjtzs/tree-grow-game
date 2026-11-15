@@ -14,30 +14,47 @@ test('grow lesson accepts a legal action from the red root', () => {
     assert.equal(result.accepted, true);
 });
 
-test('operational lessons reject non-root parents with retry feedback', () => {
-    for (const mode of ['grow', 'combat', 'attack']) {
-        const engine = new TutorialLessonEngine({ mode }, scenario);
-        const result = engine.validateParent({ owner: 'red', isRoot: false });
-        assert.equal(result.accepted, false, mode);
-        assert.match(result.feedback, /根节点/);
+test('only the basic growth lesson requires the root as its first parent', () => {
+    const node = { owner: 'red', isRoot: false, isDestroyed: false };
+    assert.equal(new TutorialLessonEngine({ mode: 'grow' }, scenario).validateParent(node).accepted, false);
+    for (const mode of ['combat', 'attack', 'practice']) {
+        assert.equal(new TutorialLessonEngine({ mode }, scenario).validateParent(node).accepted, true, mode);
     }
 });
 
-test('combat lesson rejects a legal but irrelevant target without mutating the game', () => {
+test('combat lesson allows a legal strategic deviation and explains the missed objective', () => {
     const engine = new TutorialLessonEngine({ mode: 'combat' }, scenario);
     const result = engine.evaluateAction({
         parentNode: { owner: 'red', isRoot: true },
         targetAreaId: 8,
         ruleResult: { allowed: true }
     });
-    assert.equal(result.accepted, false);
-    assert.match(result.feedback, /战斗回溯/);
+    assert.equal(result.accepted, true);
+    assert.equal(result.strategyDeviation, true);
+    assert.match(result.feedback, /蓝方如何回应/);
 });
 
-test('attack lesson only accepts the enemy base as its teaching objective', () => {
+test('attack lesson allows a legal non-base move so the opponent can respond', () => {
     const engine = new TutorialLessonEngine({ mode: 'attack' }, scenario);
-    assert.equal(engine.validateTarget(19).accepted, false);
-    assert.equal(engine.validateTarget(20).accepted, true);
+    const result = engine.evaluateAction({
+        parentNode: { owner: 'red', isRoot: true },
+        targetAreaId: 19,
+        ruleResult: { allowed: true }
+    });
+    assert.equal(result.accepted, true);
+    assert.equal(result.strategyDeviation, true);
+    assert.match(result.feedback, /蓝方将正常回应/);
+});
+
+test('combat objective action is not classified as a strategic deviation', () => {
+    const engine = new TutorialLessonEngine({ mode: 'combat' }, scenario);
+    const result = engine.evaluateAction({
+        parentNode: { owner: 'red', isRoot: true },
+        targetAreaId: 7,
+        ruleResult: { allowed: true }
+    });
+    assert.equal(result.accepted, true);
+    assert.equal(result.strategyDeviation, false);
 });
 
 test('rule-invalid actions are rejected with the authoritative rule reason', () => {
