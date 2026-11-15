@@ -4,6 +4,7 @@ import { GameState } from '../game/GameState.js';
 import { RuleEngine } from '../game/RuleEngine.js';
 import { TutorialSession } from './TutorialSession.js';
 import { resolveCombat } from '../game/CombatResolver.js';
+import { TutorialAIController } from './TutorialAIController.js';
 
 const WIDTH = 1800;
 const HEIGHT = 1200;
@@ -135,6 +136,10 @@ export class TutorialController {
         this.selectedNodeId = null;
         this.legalAreaIds = new Set();
         this.completed = false;
+        this.aiController = null;
+        this.aiThinking = false;
+        this.matchEnded = false;
+        this.matchResult = null;
         this.nextButton.addEventListener('click', () => this.advance());
         this.resetButton.addEventListener('click', () => this.reset());
         this.exitButton.addEventListener('click', () => this.exit());
@@ -155,6 +160,7 @@ export class TutorialController {
 
     open() {
         this.screen.hidden = false;
+        this.ensureAIController();
         this.startLesson();
         requestAnimationFrame(() => this.fit());
     }
@@ -167,8 +173,12 @@ export class TutorialController {
 
     startLesson() {
         const lesson = LESSONS[this.index];
+        this.aiController?.cancel();
+        this.aiThinking = false;
+        this.matchEnded = false;
+        this.matchResult = null;
         this.selectedNodeId = null;
-        this.completed = ['info', 'turn', 'structures', 'finish'].includes(lesson.mode);
+        this.completed = ['info', 'structures', 'finish'].includes(lesson.mode);
         this.session?.exit();
         const scenario = buildScenario(lesson.mode, 'lesson-' + this.index);
         this.session = new TutorialSession(scenario, { width: WIDTH, height: HEIGHT });
@@ -176,11 +186,13 @@ export class TutorialController {
         this.title.textContent = lesson.title;
         this.body.textContent = lesson.body;
         this.instruction.textContent = lesson.instruction;
-        this.feedback.textContent = lesson.mode === 'turn' ? '当前回合：蓝方。红方需要等待蓝方完成行动。' :
+        this.feedback.textContent = lesson.mode === 'turn' ? '蓝方 AI 即将行动，请观察回合交替。' :
             lesson.mode === 'info' || lesson.mode === 'structures' ? '阅读本节内容后继续。' :
-            lesson.mode === 'finish' ? '教程已完成。' : '等待你的操作。';
+            lesson.mode === 'finish' ? '教程已完成。' :
+            lesson.mode === 'practice' ? '你执红方先手。完成行动后，蓝方 AI 会自动回应。' : '等待你的操作。';
         this.nextButton.textContent = lesson.mode === 'finish' ? '完成教程' : '继续 →';
         this.nextButton.disabled = !this.completed;
+        if (lesson.mode === 'turn' && this.session.runtime.game.currentTurn === 'blue') this.requestAIAction();
         this.progress.textContent = '第 ' + (this.index + 1) + ' / ' + LESSONS.length + ' 节';
         this.render();
     }
@@ -189,7 +201,7 @@ export class TutorialController {
         if (!this.session?.runtime) return;
         const runtime = this.session.runtime;
         this.legalAreaIds = new Set();
-        if (this.selectedNodeId !== null && !this.completed) {
+        if (this.selectedNodeId !== null && !this.completed && !this.aiThinking && runtime.game.currentTurn === 'red') {
             const parent = runtime.game.getNode(this.selectedNodeId);
             if (parent) {
                 this.legalAreaIds = new Set(runtime.ruleEngine.getLegalGrowthAreas(
@@ -207,7 +219,8 @@ export class TutorialController {
 
     handleCanvasClick(event) {
         const lesson = LESSONS[this.index];
-        if (this.completed || !['grow', 'combat', 'attack', 'practice'].includes(lesson.mode)) return;
+        if (this.completed || this.aiThinking || !['grow', 'combat', 'attack', 'practice'].includes(lesson.mode)) return;
+        if (this.session.runtime.game.currentTurn !== 'red') return;
         const point = this.drawer.getLogicalPoint(event.clientX, event.clientY);
         if (!point) return;
         const runtime = this.session.runtime;
@@ -243,29 +256,151 @@ export class TutorialController {
             this.feedback.textContent = '这一步不合法：' + result.reason + ' 请按提示重新选择。';
             return;
         }
-        if (lesson.mode === 'attack' || lesson.mode === 'combat') {
-            const defender = nodes.find(node => node.owner === 'blue' && node.areaId === areaId);
-            if (defender) {
-                const combat = resolveCombat(runtime.game, result.node, defender);
-                runtime.game.deleteNodes(combat.nodesToDelete);
-                if (combat.freezeTargetId !== null) {
-                    const frozen = runtime.game.getNode(combat.freezeTargetId);
-                    if (frozen) frozen.isFrozen = true;
-                }
-                this.feedback.textContent = lesson.mode === 'attack'
-                    ? '突入成功！进入敌方基地即可直接获胜。'
-                    : '战斗结算完成：目标枝条被摧毁，最近的非根分叉祖先被冻结。';
-            }
-        } else {
-            runtime.game.switchTurn();
-            this.feedback.textContent = '生长成功。行动权已切换给蓝方，双方按回合轮流行动。';
-        }
         this.selectedNodeId = null;
-        this.completed = true;
-        this.nextButton.disabled = false;
+        const outcome = this.resolveTutorialAction(result, 'red');
+        if (outcome.ended) {
+            this.render();
+            return;
+        }
+        if (lesson.mode === 'practice') {
+            this.finishTutorialTurn('red');
+            this.requestAIAction();
+            this.feedback.textContent = '你的行动已完成。蓝方 AI 正在思考……';
+        } else if (lesson.mode === 'attack' || lesson.mode === 'combat') {
+            this.completed = true;
+            this.feedback.textContent = lesson.mode === 'attack'
+                ? '突入成功！本节目标已完成。'
+                : '战斗结算完成：观察目标枝条被摧毁，以及分叉祖先的冻结状态。';
+            this.nextButton.disabled = false;
+        } else {
+            this.finishTutorialTurn('red');
+            this.completed = true;
+            this.feedback.textContent = '生长成功。行动权已切换给蓝方，双方按回合轮流行动。';
+            this.nextButton.disabled = false;
+        }
         this.render();
     }
 
+    ensureAIController() {
+        if (this.aiController) return;
+        try {
+            this.aiController = new TutorialAIController({
+                onDecision: decision => this.handleAIResponse(decision),
+                onError: error => {
+                    this.aiThinking = false;
+                    this.feedback.textContent = '蓝方 AI 暂时无法行动：' + error + '。可以重置本节后重试。';
+                    this.render();
+                }
+            });
+        } catch (error) {
+            this.feedback.textContent = '当前环境无法启动教程 AI：' + (error?.message || String(error));
+        }
+    }
+
+    requestAIAction() {
+        const runtime = this.session?.runtime;
+        if (!runtime || runtime.game.isGameOver || runtime.game.currentTurn !== 'blue' || this.aiThinking || this.completed) return;
+        this.ensureAIController();
+        if (!this.aiController) return;
+        this.aiThinking = true;
+        this.selectedNodeId = null;
+        this.nextButton.disabled = true;
+        this.feedback.textContent = '蓝方 AI 正在分析当前局面……';
+        this.render();
+        try { this.aiController.request(runtime, 'easy'); }
+        catch (error) {
+            this.aiThinking = false;
+            this.feedback.textContent = '蓝方 AI 请求失败：' + (error?.message || String(error));
+        }
+    }
+
+    handleAIResponse(decision) {
+        const runtime = this.session?.runtime;
+        if (!runtime || this.screen.hidden || runtime.game.isGameOver) return;
+        this.aiThinking = false;
+        const { parentNodeId, targetAreaId } = decision;
+        if (parentNodeId === null && targetAreaId === null) {
+            this.finishTutorialTurn('blue');
+            this.afterBlueTurn();
+            return;
+        }
+        const result = this.session.performGrowth({ parentNodeId, targetAreaId, owner: 'blue' });
+        if (!result.ok) {
+            this.feedback.textContent = '蓝方 AI 行动未通过规则验证：' + result.reason;
+            this.render();
+            return;
+        }
+        const outcome = this.resolveTutorialAction(result, 'blue');
+        if (!outcome.ended) this.finishTutorialTurn('blue');
+        this.afterBlueTurn();
+    }
+
+    resolveTutorialAction(result, owner) {
+        const runtime = this.session.runtime;
+        const game = runtime.game;
+        const enemyBaseId = owner === 'red' ? runtime.blueBaseId : runtime.redBaseId;
+        if (result.node.areaId === enemyBaseId) {
+            game.isGameOver = true;
+            this.finishTutorialMatch(owner, 'enemy_base_reached');
+            return { ended: true };
+        }
+        const defender = game.getAliveNodes().find(node => node.id !== result.node.id && node.owner !== owner && node.areaId === result.node.areaId);
+        if (defender) {
+            const combat = resolveCombat(game, result.node, defender);
+            game.deleteNodes(combat.nodesToDelete);
+            if (combat.freezeTargetId !== null) {
+                const frozen = game.getNode(combat.freezeTargetId);
+                if (frozen) frozen.isFrozen = true;
+            }
+        }
+        const enemy = owner === 'red' ? 'blue' : 'red';
+        if (game.getPlayerRootNodes(enemy).length === 0) {
+            game.isGameOver = true;
+            this.finishTutorialMatch(owner, 'all_roots_destroyed');
+            return { ended: true };
+        }
+        if (game.getPlayerRootNodes(owner).length === 0) {
+            game.isGameOver = true;
+            this.finishTutorialMatch(enemy, 'all_roots_destroyed');
+            return { ended: true };
+        }
+        return { ended: false };
+    }
+
+    finishTutorialTurn(owner) {
+        const game = this.session?.runtime?.game;
+        if (!game || game.isGameOver) return;
+        for (const node of game.getAliveNodesByOwner(owner)) node.isFrozen = false;
+        game.switchTurn();
+    }
+
+    afterBlueTurn() {
+        const lesson = LESSONS[this.index];
+        const game = this.session?.runtime?.game;
+        if (!game) return;
+        this.render();
+        if (game.isGameOver) return;
+        if (lesson.mode === 'turn') {
+            this.completed = true;
+            this.nextButton.disabled = false;
+            this.feedback.textContent = '蓝方 AI 已完成行动。现在轮到红方，双方按回合交替行动。';
+        } else if (lesson.mode === 'practice') {
+            this.feedback.textContent = '蓝方 AI 已完成行动。现在轮到你，请继续选择红色节点并生长。';
+            this.nextButton.disabled = true;
+        }
+    }
+
+    finishTutorialMatch(winner, reason) {
+        this.matchEnded = true;
+        this.matchResult = { winner, reason };
+        this.completed = true;
+        this.aiThinking = false;
+        this.nextButton.disabled = false;
+        const winnerLabel = winner === 'red' ? '你（红方）' : '蓝方 AI';
+        const reasonLabel = reason === 'enemy_base_reached' ? '成功突入敌方基地' : '摧毁对方全部根节点';
+        this.feedback.textContent = '对局结束：' + winnerLabel + '获胜。结束原因：' + reasonLabel + '。你可以继续教程，不需要重新开始。';
+        this.instruction.textContent = '实战已结束。观察本局胜负原因，然后继续完成教程。';
+    }
     advance() {
         if (!this.completed) return;
         if (LESSONS[this.index].mode === 'finish') {
@@ -285,6 +420,9 @@ export class TutorialController {
     }
 
     exit() {
+        this.aiController?.dispose();
+        this.aiController = null;
+        this.aiThinking = false;
         this.session?.exit();
         this.session = null;
         this.screen.hidden = true;
