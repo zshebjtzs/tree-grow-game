@@ -150,11 +150,14 @@ tree-grow-game/
 │   ├── core/               # 地图生成及拓扑数据
 │   ├── game/               # 游戏状态、节点、规则与战斗结算
 │   ├── renderer/            # Canvas 2D 渲染
+│   ├── tutorial/            # 独立教程会话、场景与教学流程
 │   └── main.js              # 游戏入口与流程协调
 ├── scripts/
 │   └── Start-Game.ps1      # Windows 离线启动脚本
 ├── tests/                   # 集成测试
-├── docs/\n│   └── INTERACTIVE-TUTORIAL.md # 教程流程与实现说明\n├── GAME-RULES.md            # 完整游戏规则
+├── docs/
+│   └── INTERACTIVE-TUTORIAL.md # 教程流程与实现说明
+├── GAME-RULES.md            # 完整游戏规则
 ├── README-OFFLINE.txt       # 离线发行包使用说明
 ├── index.html               # 页面入口
 ├── package.json             # 依赖与 npm 脚本
