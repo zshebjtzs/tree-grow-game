@@ -13,6 +13,7 @@ export class TutorialAIController {
         this.worker = new WorkerClass(new URL('../ai/AIWorker.js', import.meta.url), { type: 'module' });
         this.worker.onmessage = event => this.handleMessage(event.data);
         this.worker.onerror = event => {
+            if (!this.pending || this.disposed) return;
             this.pending = false;
             this.onError?.(event.message || '教程 AI Worker 运行失败');
         };
