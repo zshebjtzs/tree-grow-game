@@ -171,7 +171,7 @@ export class TutorialController {
         }
         this.drawer.renderMap(runtime.mapAreas, runtime.redBaseId, runtime.blueBaseId,
             runtime.mapManager.shortEdges || [], this.legalAreaIds, null,
-            this.session.scenarioDefinition.blueBaseId);
+            LESSONS[this.index].mode === 'attack' ? runtime.blueBaseId : null);
         this.drawer.renderNodes(runtime.game.getAliveNodes(), this.selectedNodeId, [],
             runtime.mapManager.portals);
     }
