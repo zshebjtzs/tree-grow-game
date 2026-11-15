@@ -68,3 +68,26 @@ test('uninterrupted chain attack removes the defender root tree', () => {
     assert.deepEqual(new Set(result.nodesToDelete), new Set([blueRoot.id, child.id, leaf.id]));
     assert.equal(result.freezeTargetId, null);
 });
+
+test('chain destruction does not stop at a branching root and removes its entire tree', () => {
+    const game = new GameState();
+    const redRoot = game.addNode(null, 0, 0, 1, 'red');
+    const attacker = addChild(game, redRoot, 2, 'red');
+    const blueRoot = game.addNode(null, 0, 0, 3, 'blue');
+    const attackedBranch = addChild(game, blueRoot, 4, 'blue');
+    const defender = addChild(game, attackedBranch, 5, 'blue');
+    const siblingBranch = addChild(game, blueRoot, 6, 'blue');
+    const siblingLeaf = addChild(game, siblingBranch, 7, 'blue');
+
+    const result = resolveCombat(game, attacker, defender);
+    assert.deepEqual(
+        new Set(result.nodesToDelete),
+        new Set([blueRoot.id, attackedBranch.id, defender.id, siblingBranch.id, siblingLeaf.id])
+    );
+    assert.equal(result.freezeTargetId, null);
+
+    game.deleteNodes(result.nodesToDelete);
+    assert.equal(game.getNode(blueRoot.id), undefined);
+    assert.equal(game.getPlayerRootNodes('blue').length, 0);
+    assert.equal(game.getAliveNodesByOwner('blue').length, 0);
+});
