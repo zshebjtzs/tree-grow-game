@@ -90,4 +90,5 @@ test('chain destruction does not stop at a branching root and removes its entire
     assert.equal(game.getNode(blueRoot.id), undefined);
     assert.equal(game.getPlayerRootNodes('blue').length, 0);
     assert.equal(game.getAliveNodesByOwner('blue').length, 0);
+    assert.equal(game.addNode(blueRoot.id, 80, 80, 8, 'blue'), null, 'destroyed AI root cannot be used for further growth');
 });
