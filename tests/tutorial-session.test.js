@@ -93,17 +93,9 @@ test('tutorial session rejects actions after exit', () => {
 
 test('tutorial session validates a base invasion through the shared rules and combat resolver', async () => {
     const { resolveCombat } = await import('../js/game/CombatResolver.js');
-    const scenario = createScenario();
-    const mapManager = new MapManager(1800, 1200);
-    const areas = mapManager.loadMapFromSeeds(scenario.mapSeeds);
-    const targetAreaId = mapManager.adjacency[scenario.redBaseId][0];
-    assert.ok(targetAreaId);
-    scenario.blueBaseId = targetAreaId;
-    const blueRoot = scenario.gameState.nodes.find(node => node.owner === 'blue');
-    blueRoot.areaId = targetAreaId;
-    blueRoot.x = areas[targetAreaId - 1].center[0];
-    blueRoot.y = areas[targetAreaId - 1].center[1];
-
+    const { buildScenario } = await import('../js/tutorial/TutorialController.js');
+    const scenario = buildScenario('attack', 'base-invasion-lesson');
+    const targetAreaId = scenario.blueBaseId;
     const session = new TutorialSession(scenario);
     const result = session.performGrowth({
         parentNodeId: 1,
