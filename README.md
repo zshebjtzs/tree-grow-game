@@ -165,6 +165,10 @@ tree-grow-game/
 ├── docs/
 │   └── INTERACTIVE-TUTORIAL.md # 教程流程与实现说明
 ├── GAME-RULES.md            # 完整游戏规则
+├── LICENSE                  # 源代码许可证：GPL-3.0-or-later
+├── LICENSE-DOCUMENTATION    # 文档许可证：CC BY-NC-SA 4.0
+├── THIRD_PARTY_NOTICES.md   # 第三方组件许可证声明
+├── CONTRIBUTING.md          # 贡献指南
 ├── README-OFFLINE.txt       # 离线发行包使用说明
 ├── index.html               # 页面入口
 ├── package.json             # 依赖与 npm 脚本
@@ -173,7 +177,15 @@ tree-grow-game/
 
 ## 许可证
 
-本项目采用 [MIT License](./LICENSE)。
+本项目采用分层许可：
+
+- **软件源代码**：采用 [GNU GPL-3.0-or-later](./LICENSE)。你可以使用、研究、修改和分发代码；分发受 GPL 覆盖的修改版本时，必须遵守 GPL 的相应义务。
+- **项目文档与玩法设计文本**：README.md、GAME-RULES.md、docs/ 下的 Markdown 文档、README-OFFLINE.txt 和 CONTRIBUTING.md 中由项目贡献者原创且有权许可的内容，采用 [CC BY-NC-SA 4.0](./LICENSE-DOCUMENTATION)。允许非商业分享和改编，但须署名、标明修改，并以相同或兼容许可分享改编内容。
+- **第三方组件**：不纳入上述重新许可范围，继续适用各自原许可证。已识别组件及其许可证见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
+
+本项目早期版本曾以 MIT License 发布。本次变更不撤销此前版本已经授予的 MIT 权利；旧版本仍可依据其发布时附带的许可证使用。当前版本中由项目贡献者有权许可的源代码按 GPL-3.0-or-later 发布。
+
+文档许可仅覆盖项目贡献者有权许可的原创表达，不代表项目取得或转授其他作者的作品权利，也不对抽象玩法、规则思想或游戏机制本身作版权许可。项目玩法灵感来源见下方致谢。
 
 ## 致谢
 
