@@ -161,3 +161,13 @@ test('combat lesson fixture demonstrates branch-backtracking freeze with product
     assert.equal(runtime.game.getNode(frozenId).isRoot, false);
     assert.equal(runtime.game.getNode(frozenId).childrenIds.length, 1);
 });
+
+test('all non-combat tutorial lesson scenarios rebuild with the intended turn state', async () => {
+    const { buildScenario } = await import('../js/tutorial/TutorialController.js');
+    for (const mode of ['info', 'grow', 'turn', 'practice', 'finish']) {
+        const runtime = createTutorialScenario(buildScenario(mode, 'lesson-' + mode));
+        assert.equal(runtime.game.getPlayerRootNodes('red').length, 1, mode);
+        assert.equal(runtime.game.getPlayerRootNodes('blue').length, 1, mode);
+        assert.equal(runtime.game.currentTurn, mode === 'turn' ? 'blue' : 'red', mode);
+    }
+});
