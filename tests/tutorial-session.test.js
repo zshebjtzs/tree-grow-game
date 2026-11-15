@@ -90,3 +90,34 @@ test('tutorial session rejects actions after exit', () => {
     assert.match(result.reason, /活动状态/);
     assert.equal(session.runtime, null);
 });
+
+test('tutorial session validates a base invasion through the shared rules and combat resolver', async () => {
+    const { resolveCombat } = await import('../js/game/CombatResolver.js');
+    const scenario = createScenario();
+    const mapManager = new MapManager(1800, 1200);
+    const areas = mapManager.loadMapFromSeeds(scenario.mapSeeds);
+    const targetAreaId = mapManager.adjacency[scenario.redBaseId][0];
+    assert.ok(targetAreaId);
+    scenario.blueBaseId = targetAreaId;
+    const blueRoot = scenario.gameState.nodes.find(node => node.owner === 'blue');
+    blueRoot.areaId = targetAreaId;
+    blueRoot.x = areas[targetAreaId - 1].center[0];
+    blueRoot.y = areas[targetAreaId - 1].center[1];
+
+    const session = new TutorialSession(scenario);
+    const result = session.performGrowth({
+        parentNodeId: 1,
+        targetAreaId,
+        owner: 'red'
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.action.isAttack, true);
+    const defender = session.runtime.game.getAliveNodes().find(node =>
+        node.owner === 'blue' && node.areaId === targetAreaId
+    );
+    const combat = resolveCombat(session.runtime.game, result.node, defender);
+    session.runtime.game.deleteNodes(combat.nodesToDelete);
+    assert.equal(session.runtime.game.getAliveNodes().some(node => node.owner === 'blue'), false);
+    assert.equal(session.runtime.game.getAliveNodes().some(node => node.id === result.node.id), true);
+});
