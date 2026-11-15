@@ -32,4 +32,4 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}" tree-grow-game-windows-offline.zip \
             --title "Tree Grow Game ${GITHUB_REF_NAME}" \
-            --notes "Windows offline package. Extract the archive and run Start-Game.ps1. No Node.js or network connection is required at runtime."
+            --notes-file .github/releases/v1.2.0.md
