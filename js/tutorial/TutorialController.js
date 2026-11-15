@@ -5,6 +5,7 @@ import { RuleEngine } from '../game/RuleEngine.js';
 import { TutorialSession } from './TutorialSession.js';
 import { resolveCombat } from '../game/CombatResolver.js';
 import { TutorialAIController } from './TutorialAIController.js';
+import { TutorialLessonEngine } from './TutorialLessonEngine.js';
 
 const WIDTH = 1800;
 const HEIGHT = 1200;
@@ -42,6 +43,7 @@ export function buildScenario(mode, id) {
     const game = new GameState();
     let redBaseId = 1;
     let blueBaseId = areas.length;
+    let lessonTargetAreaId = null;
 
     if (mode === 'structures') {
         let layout = null;
@@ -95,6 +97,7 @@ export function buildScenario(mode, id) {
         if (!layout) throw new Error('教程地图无法构造战斗与冻结示例');
         redBaseId = redBase;
         blueBaseId = layout.rootAreaId;
+        lessonTargetAreaId = layout.attackAreaId;
         game.addNode(null, ...areas[redBaseId - 1].center, redBaseId, 'red');
         game.currentTurn = 'blue';
         const blueRoot = game.addNode(null, ...areas[blueBaseId - 1].center, blueBaseId, 'blue');
@@ -108,11 +111,12 @@ export function buildScenario(mode, id) {
         if (!neighbor) throw new Error('教程地图无法生成基地相邻区域');
         redBaseId = redBase;
         blueBaseId = mode === 'attack' ? neighbor : areas.length;
+        if (mode === 'attack') lessonTargetAreaId = blueBaseId;
         game.addNode(null, ...areas[redBaseId - 1].center, redBaseId, 'red');
         game.addNode(null, ...areas[blueBaseId - 1].center, blueBaseId, 'blue');
         game.currentTurn = mode === 'turn' ? 'blue' : 'red';
     }
-    return { id, mapSeeds, gameState: game.toJSON(), redBaseId, blueBaseId };
+    return { id, mapSeeds, gameState: game.toJSON(), redBaseId, blueBaseId, lessonTargetAreaId };
 }
 
 export class TutorialController {
@@ -180,6 +184,7 @@ export class TutorialController {
         this.completed = ['info', 'structures', 'finish'].includes(lesson.mode);
         this.session?.exit();
         const scenario = buildScenario(lesson.mode, 'lesson-' + this.index);
+        this.lessonEngine = new TutorialLessonEngine(lesson, scenario);
         this.session = new TutorialSession(scenario, { width: WIDTH, height: HEIGHT });
         this.chapter.textContent = lesson.chapter;
         this.title.textContent = lesson.title;
@@ -211,7 +216,7 @@ export class TutorialController {
         }
         this.drawer.renderMap(runtime.mapAreas, runtime.redBaseId, runtime.blueBaseId,
             runtime.mapManager.shortEdges || [], this.legalAreaIds, null,
-            ['attack', 'combat'].includes(LESSONS[this.index].mode) ? (LESSONS[this.index].mode === 'attack' ? runtime.blueBaseId : runtime.mapManager.adjacency[runtime.redBaseId].find(id => runtime.game.getAliveNodes().some(node => node.owner === 'blue' && node.areaId === id))) : null);
+            ['attack', 'combat'].includes(LESSONS[this.index].mode) ? runtime.scenario?.lessonTargetAreaId ?? (LESSONS[this.index].mode === 'attack' ? runtime.blueBaseId : null) : null);
         this.drawer.renderNodes(runtime.game.getAliveNodes(), this.selectedNodeId, [],
             runtime.mapManager.portals);
     }
@@ -237,13 +242,32 @@ export class TutorialController {
                 this.feedback.textContent = '这是蓝方节点。请选择红色己方节点作为生长起点。';
                 return;
             }
+            const parentCheck = this.lessonEngine.validateParent(clickedNode);
+            if (!parentCheck.accepted) {
+                this.feedback.textContent = parentCheck.feedback;
+                return;
+            }
             this.selectedNodeId = clickedNode.id;
-            this.feedback.textContent = '已选中红色节点。现在点击绿色高亮区域。';
+            this.feedback.textContent = '已选中红色根节点。现在点击绿色高亮区域。';
             this.render();
             return;
         }
         if (this.selectedNodeId === null) {
             this.feedback.textContent = '请先点击红色根节点。';
+            return;
+        }
+        const parentNode = runtime.game.getNode(this.selectedNodeId);
+        const ruleResult = runtime.ruleEngine.canGrow(runtime.game, parentNode, areaId, {
+            ownBaseId: runtime.redBaseId,
+            enemyBaseId: runtime.blueBaseId
+        });
+        const teachingDecision = this.lessonEngine.evaluateAction({
+            parentNode,
+            targetAreaId: areaId,
+            ruleResult
+        });
+        if (!teachingDecision.accepted) {
+            this.feedback.textContent = teachingDecision.feedback;
             return;
         }
         const result = this.session.performGrowth({
