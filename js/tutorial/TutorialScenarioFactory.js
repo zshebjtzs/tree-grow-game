@@ -48,6 +48,14 @@ export function createTutorialScenario(scenario, { width = 1800, height = 1200 }
         !blueRoots.some(node => node.areaId === blueBaseId)) {
         throw new TypeError('教学场景必须在双方基地中分别包含至少一个存活根节点');
     }
+    if (lessonTargetAreaId !== null &&
+        (!Number.isInteger(lessonTargetAreaId) || !areaIds.has(lessonTargetAreaId) ||
+            !blueRoots.some(root => game.getAliveNodesByOwner('blue').some(node =>
+                node.areaId === lessonTargetAreaId
+            )) ||
+            !(mapManager.adjacency[redBaseId] || []).includes(lessonTargetAreaId))) {
+        throw new TypeError('教学目标必须是红方根节点可直接攻击的蓝方占据区域');
+    }
 
     return {
         sessionType: 'tutorial',
