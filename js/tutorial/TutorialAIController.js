@@ -10,12 +10,22 @@ export class TutorialAIController {
         this.requestId = 0;
         this.pending = false;
         this.disposed = false;
-        this.worker = new WorkerClass(new URL('../ai/AIWorker.js', import.meta.url), { type: 'module' });
+
+        // Keep the production Worker expression statically analyzable by Vite.
+        // A dynamic WorkerClass constructor is retained only for unit-test injection.
+        this.worker = WorkerClass === globalThis.Worker
+            ? new Worker(new URL('../ai/AIWorker.js', import.meta.url), { type: 'module' })
+            : new WorkerClass(new URL('../ai/AIWorker.js', import.meta.url), { type: 'module' });
+
         this.worker.onmessage = event => this.handleMessage(event.data);
         this.worker.onerror = event => {
             if (!this.pending || this.disposed) return;
             this.pending = false;
-            this.onError?.(event.message || '教程 AI Worker 运行失败');
+            const location = event.filename
+                ? ` (${event.filename}${event.lineno ? ':' + event.lineno : ''})`
+                : '';
+            const message = event.message || '教程 AI Worker 运行失败';
+            this.onError?.(message + location);
         };
     }
 
