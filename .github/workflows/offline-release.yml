@@ -23,6 +23,7 @@ jobs:
           cp -R dist release/tree-grow-game/
           cp scripts/Start-Game.ps1 release/tree-grow-game/
           cp README-OFFLINE.txt release/tree-grow-game/
+          cp LICENSE LICENSE-DOCUMENTATION THIRD_PARTY_NOTICES.md GAME-RULES.md README.md release/tree-grow-game/
           cd release
           zip -r ../tree-grow-game-windows-offline.zip tree-grow-game
       - name: Publish GitHub Release
