@@ -13,3 +13,8 @@
 - 不需要安装 Node.js、npm、Python 或其他运行时。
 - 不要直接双击 dist/index.html；浏览器会限制 file:// 下的 ES Modules 和 Web Worker。
 - 默认使用本机回环地址，不对局域网开放。
+
+许可证与第三方声明
+- 游戏源代码采用 GNU GPL-3.0-or-later，详见随包提供的 LICENSE。
+- 游戏规则和项目文档中的原创内容采用 CC BY-NC-SA 4.0，详见 LICENSE-DOCUMENTATION。
+- 第三方组件继续适用各自许可证，详见 THIRD_PARTY_NOTICES.md。
