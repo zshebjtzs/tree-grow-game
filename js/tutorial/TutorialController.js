@@ -216,7 +216,7 @@ export class TutorialController {
         }
         this.drawer.renderMap(runtime.mapAreas, runtime.redBaseId, runtime.blueBaseId,
             runtime.mapManager.shortEdges || [], this.legalAreaIds, null,
-            ['attack', 'combat'].includes(LESSONS[this.index].mode) ? runtime.scenario?.lessonTargetAreaId ?? (LESSONS[this.index].mode === 'attack' ? runtime.blueBaseId : null) : null);
+            ['attack', 'combat'].includes(LESSONS[this.index].mode) ? runtime.lessonTargetAreaId ?? (LESSONS[this.index].mode === 'attack' ? runtime.blueBaseId : null) : null);
         this.drawer.renderNodes(runtime.game.getAliveNodes(), this.selectedNodeId, [],
             runtime.mapManager.portals);
     }
