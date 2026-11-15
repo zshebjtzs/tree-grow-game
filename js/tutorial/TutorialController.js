@@ -182,6 +182,7 @@ export class TutorialController {
         this.aiThinking = false;
         this.matchEnded = false;
         this.matchResult = null;
+        this.pendingLessonFeedback = null;
         this.retryButton.hidden = true;
         this.selectedNodeId = null;
         this.completed = ['info', 'structures', 'finish'].includes(lesson.mode);
@@ -299,10 +300,9 @@ export class TutorialController {
                 this.feedback.textContent = '战斗教学目标完成。观察目标枝条的清除结果，以及分叉祖先是否被冻结。';
                 this.nextButton.disabled = false;
             } else {
+                this.pendingLessonFeedback = teachingDecision.feedback || null;
                 this.finishTutorialTurn('red');
                 this.requestAIAction();
-                this.feedback.textContent = teachingDecision.feedback ||
-                    '你的行动已完成。蓝方 AI 正在思考……';
             }
         } else {
             this.finishTutorialTurn('red');
@@ -425,9 +425,14 @@ export class TutorialController {
             this.nextButton.disabled = false;
             this.feedback.textContent = '蓝方 AI 已完成行动。现在轮到红方，双方按回合交替行动。';
         } else if (['practice', 'combat', 'attack'].includes(lesson.mode)) {
-            this.feedback.textContent = lesson.mode === 'practice'
-                ? '蓝方 AI 已完成行动。现在轮到你，请继续选择红色节点并生长。'
-                : '蓝方 AI 已经回应。观察局面变化，继续尝试完成本节教学目标。';
+            if (lesson.mode === 'practice') {
+                this.feedback.textContent = '蓝方 AI 已完成行动。现在轮到你，请继续选择红色节点并生长。';
+            } else {
+                const explanation = this.pendingLessonFeedback;
+                this.pendingLessonFeedback = null;
+                this.feedback.textContent = (explanation ? explanation + ' ' : '') +
+                    '蓝方 AI 已完成回应。观察局面变化，继续尝试完成本节教学目标。';
+            }
             this.nextButton.disabled = true;
         }
     }
