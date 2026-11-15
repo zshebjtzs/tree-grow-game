@@ -4,6 +4,7 @@ import { AppState } from './app/AppState.js';
 import { MapManager } from './core/MapManager.js';
 import { CanvasDrawer } from './renderer/CanvasDrawer.js';
 import { RuleEngine } from './game/RuleEngine.js';
+import { executeGrowthAction } from './game/GrowthActionService.js';
 import { resolveCombat } from './game/CombatResolver.js';
 import { PresentationController } from './presentation/PresentationController.js';
 import { createCombatEvent } from './presentation/CombatEvent.js';
@@ -294,28 +295,21 @@ if (aiWorker) {
             return;
         }
 
-        const parentNode = game.getNode(parentNodeId);
-        const targetArea = mapAreas.find(area => area.id === targetAreaId);
-        if (!parentNode || !targetArea) {
-            failAITurn('AI 返回的父节点或目标区域已不存在');
-            return;
-        }
-
-        const validation = ruleEngine.canGrow(game, parentNode, targetAreaId, {
+        const growthResult = executeGrowthAction({
+            gameState: game,
+            ruleEngine,
+            mapAreas,
+            parentNodeId,
+            targetAreaId,
+            owner: 'blue',
             ownBaseId: blueBaseId,
             enemyBaseId: redBaseId
         });
-        if (!validation.allowed) {
-            failAITurn(`AI 落子未通过主线程规则复核：${validation.reason}`);
+        if (!growthResult.ok) {
+            failAITurn(`AI 行动未通过统一规则验证：${growthResult.reason}`);
             return;
         }
-
-        const [x, y] = targetArea.center;
-        const newNode = game.addNode(parentNodeId, x, y, targetAreaId, 'blue');
-        if (!newNode) {
-            failAITurn('AI 落子通过规则复核，但节点创建失败');
-            return;
-        }
+        const newNode = growthResult.node;
 
         console.log(`【AI执行】父节点 ${parentNodeId} -> 新节点 ${newNode.id} (区域 ${targetAreaId})`);
         showAIExplanation(e.data.explanation);
@@ -1069,39 +1063,27 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
         return;
     }
 
-    const parentNode = aliveNodes.find(n => n.id === selectedNodeId);
-    if (!parentNode || parentNode.owner !== game.currentTurn) { selectedNodeId = null; renderGame(); return; }
-
-    const currentBaseId = game.currentTurn === 'red' ? redBaseId : blueBaseId;
-    const enemyBaseId = game.currentTurn === 'red' ? blueBaseId : redBaseId;
-    const result = ruleEngine.canGrow(game, parentNode, clickedAreaId, { ownBaseId: currentBaseId, enemyBaseId });
-    if (!result.allowed) { showFeedback(`无法生长：${result.reason}`, 'warning'); return; }
-
-    // 除了己方基地，一个区域只能容纳一个节点
-    // 1. 绝对禁止向己方基地区域生长（防止绕回老巢）
-    if (clickedAreaId === currentBaseId) {
-        showFeedback('不能向己方基地所在区域生长。', 'warning');
+    const owner = game.currentTurn;
+    const ownBaseId = owner === 'red' ? redBaseId : blueBaseId;
+    const enemyBaseId = owner === 'red' ? blueBaseId : redBaseId;
+    const growthResult = executeGrowthAction({
+        gameState: game,
+        ruleEngine,
+        mapAreas,
+        parentNodeId: selectedNodeId,
+        targetAreaId: clickedAreaId,
+        owner,
+        ownBaseId,
+        enemyBaseId
+    });
+    if (!growthResult.ok) {
+        showFeedback(`无法生长：${growthResult.reason}`, 'warning');
         return;
     }
 
-    // 2. 普通区域和敌方基地的节点碰撞限制
-    // 敌方基地必须是特例，因为它要用来触发“突入获胜”的胜利条件。
-    // 如果不是敌方基地，且区域内已经有存活节点，则禁止堆叠生长。
-    if (clickedAreaId !== enemyBaseId) {
-        // 必须只查找己方节点，敌方节点不禁止，用来触发进攻！
-        const hasOwnNodeInArea = game.getAliveNodesByOwner(game.currentTurn).some(n => n.areaId === clickedAreaId);
-        if (hasOwnNodeInArea) {
-            showFeedback('该区域已有己方节点，不能重复占据。', 'warning');
-            return; // 阻止生长
-        }
-    }
-
-    // 第三步：执行生长
-    const newNode = game.addNode(parentNode.id, x, y, clickedAreaId, game.currentTurn);
-    if (newNode) {
-        console.log(`【生长成功】父节点 ID: ${parentNode.id}，新节点 ID: ${newNode.id}，位于区域 ${clickedAreaId}`);
-        processSuccessfulGrowth(newNode, game.currentTurn);
-    }
+    const newNode = growthResult.node;
+    console.log(`【生长成功】父节点 ID: ${growthResult.action.parentNodeId}，新节点 ID: ${newNode.id}，位于区域 ${clickedAreaId}`);
+    processSuccessfulGrowth(newNode, owner);
 });
 
 pauseBtn.addEventListener('click', () => {
