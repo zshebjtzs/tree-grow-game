@@ -244,7 +244,9 @@ export class TutorialController {
             }
             const parentCheck = this.lessonEngine.validateParent(clickedNode);
             if (!parentCheck.accepted) {
+                this.selectedNodeId = null;
                 this.feedback.textContent = parentCheck.feedback;
+                this.render();
                 return;
             }
             this.selectedNodeId = clickedNode.id;
