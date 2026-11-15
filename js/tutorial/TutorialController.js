@@ -13,7 +13,7 @@ const LESSONS = [
     { chapter: '第一章 · 认识棋盘', title: '先认识这张地图', body: '整张地图由许多区域组成。每个区域有自己的编号，区域之间以共享边界连接。你的目标不是随意铺满地图，而是沿着连接关系扩展自己的树。', instruction: '观察地图上的区域编号与红、蓝双方基地。', mode: 'info' },
     { chapter: '第一章 · 认识棋盘', title: '节点与连接', body: '圆点是节点，线段表示父子关系。每个新节点都必须从己方已有节点生长出来，因此你的结构始终是一棵树，而不是任意连线的网络。', instruction: '观察双方根节点。红色是你，蓝色是对手。', mode: 'info' },
     { chapter: '第二章 · 基本操作', title: '完成第一次生长', body: '一次行动分两步：先点击己方可行动节点，再点击地图上高亮的合法区域。普通生长只能进入与父节点区域直接相邻的空区域。', instruction: '先选中红色根节点，再点击任意绿色高亮区域。', mode: 'grow' },
-    { chapter: '第二章 · 基本操作', title: '回合与行动顺序', body: '双方轮流行动。完成一次生长后，行动权交给另一方；冻结等状态也会随着回合推进而变化。你不能连续替双方行动。', instruction: '本节展示刚才行动后的回合变化。点击“继续”进入下一节。', mode: 'info' },
+    { chapter: '第二章 · 基本操作', title: '回合与行动顺序', body: '双方轮流行动。完成一次生长后，行动权交给另一方；冻结等状态也会随着回合推进而变化。你不能连续替双方行动。', instruction: '本节展示刚才行动后的回合变化。点击“继续”进入下一节。', mode: 'turn' },
     { chapter: '第二章 · 基本操作', title: '根节点的首次生长', body: '根节点只能生长第一根枝条，之后不能再次作为分叉点。首次生长有特殊距离规则：最多跨越 min(己方已占据区域数, 2) 条边。开局只有一个己方区域，因此首次生长实际上只能跨一条边。', instruction: '记住：根节点只负责伸出第一根枝条，后续扩展从新节点继续。', mode: 'info' },
     { chapter: '第三章 · 战斗规则', title: '攻击与战斗结算', body: '当你把新节点生长到对方占据的普通区域时，会触发战斗。战斗可能摧毁目标枝条；如果攻击叶节点或链节点，规则还会沿父链回溯，找到最近的分叉祖先，并可能使这个非根分叉节点冻结。', instruction: '选中红色根节点，再点击地图上高亮的蓝色节点区域，观察枝条被摧毁和分叉冻结。', mode: 'combat' },
     { chapter: '第三章 · 战斗规则', title: '进入敌方基地', body: '攻击不是点击敌方节点本身，而是选择己方节点，再把目标区域设为敌方占据的区域。成功突入敌方基地即可获胜。堡垒节点不能被攻击。', instruction: '选中红色根节点，再点击紧邻的蓝色基地，完成一次突入。', mode: 'attack' },
@@ -109,6 +109,7 @@ export function buildScenario(mode, id) {
         blueBaseId = mode === 'attack' ? neighbor : areas.length;
         game.addNode(null, ...areas[redBaseId - 1].center, redBaseId, 'red');
         game.addNode(null, ...areas[blueBaseId - 1].center, blueBaseId, 'blue');
+        game.currentTurn = mode === 'turn' ? 'blue' : 'red';
     }
     return { id, mapSeeds, gameState: game.toJSON(), redBaseId, blueBaseId };
 }
@@ -167,7 +168,7 @@ export class TutorialController {
     startLesson() {
         const lesson = LESSONS[this.index];
         this.selectedNodeId = null;
-        this.completed = ['info', 'structures', 'finish'].includes(lesson.mode);
+        this.completed = ['info', 'turn', 'structures', 'finish'].includes(lesson.mode);
         this.session?.exit();
         const scenario = buildScenario(lesson.mode, 'lesson-' + this.index);
         this.session = new TutorialSession(scenario, { width: WIDTH, height: HEIGHT });
@@ -175,7 +176,8 @@ export class TutorialController {
         this.title.textContent = lesson.title;
         this.body.textContent = lesson.body;
         this.instruction.textContent = lesson.instruction;
-        this.feedback.textContent = lesson.mode === 'info' ? '阅读本节内容后继续。' :
+        this.feedback.textContent = lesson.mode === 'turn' ? '当前回合：蓝方。红方需要等待蓝方完成行动。' :
+            lesson.mode === 'info' || lesson.mode === 'structures' ? '阅读本节内容后继续。' :
             lesson.mode === 'finish' ? '教程已完成。' : '等待你的操作。';
         this.nextButton.textContent = lesson.mode === 'finish' ? '完成教程' : '继续 →';
         this.nextButton.disabled = !this.completed;
