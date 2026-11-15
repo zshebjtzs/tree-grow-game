@@ -121,3 +121,19 @@ test('tutorial session validates a base invasion through the shared rules and co
     assert.equal(session.runtime.game.getAliveNodes().some(node => node.owner === 'blue'), false);
     assert.equal(session.runtime.game.getAliveNodes().some(node => node.id === result.node.id), true);
 });
+
+test('visual structure lesson builds a valid branch, fortress, and frozen node fixture', async () => {
+    const { buildScenario } = await import('../js/tutorial/TutorialController.js');
+    const scenario = buildScenario('structures', 'structure-lesson');
+    const runtime = createTutorialScenario(scenario);
+    const redNodes = runtime.game.getAliveNodesByOwner('red');
+    const branch = redNodes.find(node => node.childrenIds.length === 2);
+    const fortress = redNodes.find(node => node.getDegree() > 3);
+    const frozen = redNodes.find(node => node.isFrozen);
+
+    assert.ok(branch, 'lesson should contain a non-fortress branching point');
+    assert.ok(fortress, 'lesson should contain a fortress');
+    assert.ok(frozen, 'lesson should contain a frozen node');
+    assert.equal(branch.getDegree(), 3);
+    assert.equal(fortress.getDegree(), 4);
+});
