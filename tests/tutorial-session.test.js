@@ -137,3 +137,35 @@ test('visual structure lesson builds a valid branch, fortress, and frozen node f
     assert.equal(branch.getDegree(), 3);
     assert.equal(fortress.getDegree(), 4);
 });
+
+test('combat lesson fixture demonstrates branch-backtracking freeze with production resolver', async () => {
+    const { buildScenario } = await import('../js/tutorial/TutorialController.js');
+    const { resolveCombat } = await import('../js/game/CombatResolver.js');
+    const session = new TutorialSession(buildScenario('combat', 'combat-lesson'));
+    const runtime = session.runtime;
+    const targetAreaId = runtime.mapManager.adjacency[runtime.redBaseId].find(id =>
+        runtime.game.getAliveNodes().some(node => node.owner === 'blue' && node.areaId === id)
+    );
+    assert.ok(targetAreaId, 'the blue defender should be adjacent to the red root');
+
+    const result = session.performGrowth({
+        parentNodeId: runtime.game.getPlayerRootNodes('red')[0].id,
+        targetAreaId,
+        owner: 'red'
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.action.isAttack, true);
+
+    const defender = runtime.game.getAliveNodes().find(node =>
+        node.owner === 'blue' && node.areaId === targetAreaId
+    );
+    const combat = resolveCombat(runtime.game, result.node, defender);
+    assert.ok(combat.freezeTargetId, 'the combat should identify the non-root branching ancestor');
+    const frozenId = combat.freezeTargetId;
+    runtime.game.deleteNodes(combat.nodesToDelete);
+    runtime.game.getNode(frozenId).isFrozen = true;
+
+    assert.equal(runtime.game.getNode(frozenId).isFrozen, true);
+    assert.equal(runtime.game.getNode(frozenId).isRoot, false);
+    assert.equal(runtime.game.getNode(frozenId).childrenIds.length, 1);
+});
