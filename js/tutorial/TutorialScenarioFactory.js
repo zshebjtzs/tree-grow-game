@@ -26,7 +26,7 @@ export function createTutorialScenario(scenario, { width = 1800, height = 1200 }
     }
 
     const areaIds = new Set(mapAreas.map(area => area.id));
-    const { redBaseId, blueBaseId } = scenario;
+    const { redBaseId, blueBaseId, lessonTargetAreaId = null } = scenario;
     if (!Number.isInteger(redBaseId) || !areaIds.has(redBaseId) ||
         !Number.isInteger(blueBaseId) || !areaIds.has(blueBaseId) ||
         redBaseId === blueBaseId) {
@@ -58,6 +58,7 @@ export function createTutorialScenario(scenario, { width = 1800, height = 1200 }
         game,
         ruleEngine: new RuleEngine(mapManager),
         redBaseId,
-        blueBaseId
+        blueBaseId,
+        lessonTargetAreaId
     };
 }
