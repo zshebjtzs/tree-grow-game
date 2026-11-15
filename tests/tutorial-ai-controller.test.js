@@ -19,6 +19,20 @@ function createRuntime() {
     };
 }
 
+test('default browser Worker uses the statically analyzable production worker entry', () => {
+    const originalWorker = globalThis.Worker;
+    globalThis.Worker = FakeWorker;
+    try {
+        const controller = new TutorialAIController();
+        assert.ok(controller.worker.url instanceof URL);
+        assert.match(controller.worker.url.href, /js\/ai\/AIWorker\.js$/);
+        assert.equal(controller.worker.options.type, 'module');
+        controller.dispose();
+    } finally {
+        globalThis.Worker = originalWorker;
+    }
+});
+
 test('tutorial AI sends the production worker request schema and forwards decisions', () => {
     let decision = null;
     const controller = new TutorialAIController({ WorkerClass: FakeWorker, onDecision: value => { decision = value; } });
@@ -53,15 +67,15 @@ test('tutorial AI disposal terminates its dedicated worker and rejects future re
     assert.throws(() => controller.request(createRuntime()), /已经释放/);
 });
 
-test('tutorial AI reports worker failures and permits a later request', () => {
+test('tutorial AI reports worker failures with available location details and permits a later request', () => {
     const errors = [];
     const controller = new TutorialAIController({
         WorkerClass: FakeWorker,
         onError: error => errors.push(error)
     });
     const firstRequestId = controller.request(createRuntime());
-    controller.worker.onerror({ message: 'worker crashed' });
-    assert.deepEqual(errors, ['worker crashed']);
+    controller.worker.onerror({ message: 'worker crashed', filename: 'https://example.test/worker.js', lineno: 42 });
+    assert.deepEqual(errors, ['worker crashed (https://example.test/worker.js:42)']);
     assert.equal(controller.pending, false);
 
     const secondRequestId = controller.request(createRuntime());
