@@ -12,6 +12,7 @@ import { AudioController } from './presentation/AudioController.js';
 import { MatchTracker } from './game/MatchTracker.js';
 import { createRematchConfig } from './app/RematchConfig.js';
 import { getDifficultyLabel, DIFFICULTY_LEVELS } from './ai/DifficultyProfiles.js';
+import { TutorialController } from './tutorial/TutorialController.js';
 
 // 1. 初始化各模块
 const appState = new AppState();
@@ -897,6 +898,17 @@ continueGameBtn.addEventListener('click', () => {
 });
 loadMenuBtn.addEventListener('click', loadGame);
 startGameBtn.addEventListener('click', () => beginNewMatch());
+
+const tutorialController = new TutorialController({
+    onExit: () => showAppScreen('menu')
+});
+document.getElementById('tutorial-menu-btn').addEventListener('click', () => {
+    rulesPanel.hidden = true;
+    showAppScreen('menu');
+    menuScreen.hidden = true;
+    tutorialController.open();
+});
+
 resultMenuBtn.addEventListener('click', () => { isPaused = false; showAppScreen('menu'); });
 resultRematchBtn.addEventListener('click', () => {
     if (!activeMatchConfig) return;
