@@ -212,9 +212,12 @@ export class TutorialController {
         const areaId = runtime.mapManager.getAreaAtPoint(point.x, point.y);
         if (!areaId) return;
         const nodes = runtime.game.getAliveNodes();
-        const clickedNode = [...nodes].reverse().find(node =>
+        let clickedNode = [...nodes].reverse().find(node =>
             Math.hypot(node.x - point.x, node.y - point.y) <= 22
         );
+        // An enemy-occupied legal destination is an attack target, not a selectable parent.
+        if (clickedNode && clickedNode.owner !== 'red' && this.selectedNodeId !== null &&
+            this.legalAreaIds.has(clickedNode.areaId)) clickedNode = null;
         if (clickedNode) {
             if (clickedNode.owner !== 'red') {
                 this.feedback.textContent = '这是蓝方节点。请选择红色己方节点作为生长起点。';
