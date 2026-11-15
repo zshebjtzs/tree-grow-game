@@ -183,3 +183,9 @@ test('combat and attack lesson targets survive tutorial runtime construction', a
     const attackRuntime = createTutorialScenario(attackScenario);
     assert.equal(attackRuntime.lessonTargetAreaId, attackRuntime.blueBaseId);
 });
+
+test('tutorial scenario factory rejects an invalid or non-adjacent lesson target', () => {
+    const scenario = createScenario();
+    scenario.lessonTargetAreaId = 999;
+    assert.throws(() => createTutorialScenario(scenario), /教学目标必须是红方根节点可直接攻击的蓝方占据区域/);
+});
