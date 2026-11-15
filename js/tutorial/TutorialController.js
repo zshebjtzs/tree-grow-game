@@ -33,7 +33,7 @@ function createSeeds() {
     return seeds;
 }
 
-function buildScenario(mode, id) {
+export function buildScenario(mode, id) {
     const mapManager = new MapManager(WIDTH, HEIGHT);
     const mapSeeds = createSeeds();
     const areas = mapManager.loadMapFromSeeds(mapSeeds);
