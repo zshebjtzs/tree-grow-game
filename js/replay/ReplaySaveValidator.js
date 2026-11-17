@@ -127,21 +127,49 @@ export class ReplaySaveValidator {
             validateSnapshot(actionRecord.after, mapManager, areaIds, rawData.redBaseId, rawData.blueBaseId);
 
             const action = actionRecord.action;
+            const beforeGame = GameState.fromJSON(actionRecord.before.gameState);
+            const afterGame = GameState.fromJSON(actionRecord.after.gameState);
+            const nextSide = actionRecord.side === 'red' ? 'blue' : 'red';
+            if (beforeGame.isGameOver || beforeGame.currentTurn !== actionRecord.side) {
+                throw new TypeError(`棋谱第 ${index + 1} 步的行动方与行动前回合不一致`);
+            }
+            if (!afterGame.isGameOver && afterGame.currentTurn !== nextSide) {
+                throw new TypeError(`棋谱第 ${index + 1} 步结束后没有正确切换行动方`);
+            }
             if (action.type === 'growth') {
                 if (!Number.isInteger(action.parentNodeId) || action.parentNodeId < 1 ||
                     !Number.isInteger(action.targetAreaId) || !areaIds.has(action.targetAreaId) ||
                     !Number.isInteger(action.nodeId) || action.nodeId < 1 ||
                     typeof action.isAttack !== 'boolean' ||
-                    (action.path != null && (!Array.isArray(action.path) ||
+                    (action.path != null && (!Array.isArray(action.path) || action.path.length < 2 ||
                         !action.path.every(id => Number.isInteger(id) && areaIds.has(id))))) {
                     throw new TypeError(`棋谱第 ${index + 1} 步的生长行动字段无效`);
                 }
-                const beforeGame = GameState.fromJSON(actionRecord.before.gameState);
                 const parent = beforeGame.getNode(action.parentNodeId);
-                if (!parent || parent.owner !== actionRecord.side) {
-                    throw new TypeError(`棋谱第 ${index + 1} 步引用了无效的父节点`);
+                if (!parent || parent.owner !== actionRecord.side || parent.isDestroyed ||
+                    action.nodeId !== beforeGame.nodeIdCounter + 1 ||
+                    afterGame.nodeIdCounter !== action.nodeId) {
+                    throw new TypeError(`棋谱第 ${index + 1} 步引用了无效的父节点或新节点编号`);
                 }
-            } else if (action.type !== 'skip') {
+                if (action.path != null) {
+                    if (action.path[0] !== parent.areaId ||
+                        action.path[action.path.length - 1] !== action.targetAreaId) {
+                        throw new TypeError(`棋谱第 ${index + 1} 步的生长路径端点无效`);
+                    }
+                    for (let pathIndex = 1; pathIndex < action.path.length; pathIndex++) {
+                        const from = action.path[pathIndex - 1];
+                        const to = action.path[pathIndex];
+                        if (!(mapManager.adjacency[from] || []).includes(to)) {
+                            throw new TypeError(`棋谱第 ${index + 1} 步包含不连通的地图路径`);
+                        }
+                    }
+                }
+            } else if (action.type === 'skip') {
+                if (afterGame.nodeIdCounter !== beforeGame.nodeIdCounter ||
+                    afterGame.isGameOver || afterGame.currentTurn !== nextSide) {
+                    throw new TypeError(`棋谱第 ${index + 1} 步的跳过回合状态无效`);
+                }
+            } else {
                 throw new TypeError(`棋谱第 ${index + 1} 步包含未知行动类型`);
             }
             previousSnapshot = actionRecord.after;
