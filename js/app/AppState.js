@@ -5,7 +5,7 @@ export class AppState {
     }
 
     navigate(screen) {
-        if (!['menu', 'setup', 'game', 'result'].includes(screen)) {
+        if (!['menu', 'setup', 'game', 'result', 'replay'].includes(screen)) {
             throw new TypeError(`Unknown application screen: ${screen}`);
         }
         this.screen = screen;
@@ -14,6 +14,10 @@ export class AppState {
 
     openSetup() {
         return this.navigate('setup');
+    }
+
+    openReplay() {
+        return this.navigate('replay');
     }
 
     startMatch(config) {

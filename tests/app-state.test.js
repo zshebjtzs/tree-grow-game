@@ -39,11 +39,12 @@ test('returning to the menu does not mutate the match configuration', () => {
     assert.equal(app.matchConfig.mode, 'pvp');
 });
 
-test('result screen is a valid application navigation state', () => {
+test('result and replay are valid navigation states', () => {
     const app = new AppState();
     app.startMatch({ mode: 'pvp', difficulty: 'medium', playerSide: 'red' });
     assert.equal(app.navigate('result'), 'result');
-    assert.equal(app.screen, 'result');
+    assert.equal(app.openReplay(), 'replay');
+    assert.equal(app.screen, 'replay');
     assert.throws(() => app.navigate('unknown'), TypeError);
 });
 
