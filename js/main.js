@@ -1088,7 +1088,9 @@ function renderReplayPosition(snapshot, step) {
         ? formatReplayAction(record, replayMetadata).title
         : (replaySession.historyIncomplete ? '历史起点（不完整）' : '开局初始局面');
     replayPositionMeta.textContent = `第 ${step} / ${replaySession.totalSteps} 步 · ${replayGame.currentTurn === 'red' ? '红方' : '蓝方'}行动`;
-    replayDetailStep.textContent = step === 0 ? '开局' : '第 ' + step + ' 步';
+    replayDetailStep.textContent = step === 0
+        ? (replaySession.historyIncomplete ? '历史起点' : '开局')
+        : '第 ' + step + ' 步';
     replayCurrentStep.textContent = String(step);
     replayTotalSteps.textContent = String(replaySession.totalSteps);
     replayProgress.max = String(replaySession.totalSteps);
@@ -1161,6 +1163,7 @@ function openReplayFromSave(rawData, fileName = '存档') {
     replayMetadata = validated.metadata;
     replayDrawer.setMode('locked');
     replayDrawer.resetViewport();
+    replaySpeedSelect.value = '1';
     replayContent.hidden = false;
     replayEmpty.hidden = true;
     replayError.hidden = true;
