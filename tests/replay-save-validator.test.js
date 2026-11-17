@@ -115,6 +115,7 @@ test('rejects a growth record whose path or node sequence is inconsistent', () =
 
 test('rejects a history action recorded for the wrong side to move', () => {
     const wrongTurn = createFixture().data;
+    wrongTurn.matchHistory.initialSnapshot.gameState.currentTurn = 'blue';
     wrongTurn.matchHistory.actions[0].before.gameState.currentTurn = 'blue';
     assert.throws(() => ReplaySaveValidator.validate(wrongTurn), /行动方与行动前回合不一致/);
 });
