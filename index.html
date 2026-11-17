@@ -18,6 +18,7 @@
 <button id="new-game-btn" class="button button-primary">开始新游戏 <span>→</span></button>
 <button id="tutorial-menu-btn" class="button button-secondary">新手教程 <span>↗</span></button>
 <button id="continue-game-btn" class="button button-secondary" disabled>继续游戏</button>
+<button id="replay-menu-btn" class="button button-secondary">对局回放</button>
 <button id="load-menu-btn" class="button button-secondary">读取存档</button>
 <button id="rules-menu-btn" class="button button-text">游戏说明</button>
 </nav>
@@ -90,6 +91,71 @@
 <section class="result-panel"><div class="result-section-heading"><h2>关键事件</h2><span>最多展示 5 条</span></div><ol id="result-events" class="result-events"></ol><p id="result-events-empty" class="result-empty" hidden>本局没有记录到关键事件。</p></section>
 <footer class="result-actions"><button id="result-save-btn" class="button button-secondary">保存对局存档</button><button id="result-undo-red-btn" class="button button-secondary undo-button" type="button" hidden>红方悔棋</button><button id="result-undo-blue-btn" class="button button-secondary undo-button" type="button" hidden>蓝方悔棋</button><button id="result-undo-player-btn" class="button button-secondary undo-button" type="button" hidden>悔棋并继续</button><button id="result-rematch-btn" class="button button-primary">再来一局 <span>↻</span></button><button id="result-menu-btn" class="button button-secondary">返回主菜单</button></footer>
 </div></section>
+<section id="replay-screen" class="replay-screen" hidden>
+<header class="replay-header">
+    <div class="replay-header-brand">
+        <button id="replay-menu-btn-top" class="toolbar-button" type="button">← 主菜单</button>
+        <div><strong>对局回放</strong><small>READ-ONLY MATCH REVIEW</small></div>
+    </div>
+    <div class="replay-header-actions">
+        <span id="replay-file-name">尚未导入存档</span>
+        <button id="replay-import-btn" class="button button-primary" type="button">导入 .sav 存档</button>
+        <input id="replay-file-input" type="file" accept=".sav,.json,application/json" hidden>
+    </div>
+</header>
+<div id="replay-empty" class="replay-empty">
+    <div class="replay-empty-mark">↗</div>
+    <h1>导入一份对局存档</h1>
+    <p>回放模式只读取存档中的棋谱，不会修改正式对局，也不会执行 AI。</p>
+    <button id="replay-empty-import-btn" class="button button-primary" type="button">选择存档文件</button>
+</div>
+<div id="replay-error" class="replay-error" role="alert" hidden></div>
+<div id="replay-content" class="replay-content" hidden>
+    <section class="replay-board-column">
+        <div class="replay-board-heading">
+            <div><strong id="replay-position-title">开局</strong><span id="replay-position-meta">第 0 / 0 步</span></div>
+            <span class="replay-readonly-tag">只读回放</span>
+        </div>
+        <div id="replay-canvas-container" class="replay-canvas-container">
+            <canvas id="replayCanvas" width="1800" height="1200" aria-label="只读对局回放棋盘"></canvas>
+        </div>
+        <div class="replay-control-panel">
+            <div class="replay-transport">
+                <button id="replay-first-btn" class="toolbar-button" type="button" aria-label="回到开局" title="回到开局">|◀</button>
+                <button id="replay-prev-btn" class="toolbar-button" type="button">上一步</button>
+                <button id="replay-play-btn" class="toolbar-button toolbar-primary" type="button">播放</button>
+                <button id="replay-next-btn" class="toolbar-button" type="button">下一步</button>
+                <button id="replay-last-btn" class="toolbar-button" type="button" aria-label="跳到终局" title="跳到终局">▶|</button>
+                <label class="replay-speed-label" for="replay-speed-select">速度</label>
+                <select id="replay-speed-select" class="replay-speed-select">
+                    <option value="0.5">0.5×</option><option value="1" selected>1×</option>
+                    <option value="2">2×</option><option value="4">4×</option>
+                </select>
+            </div>
+            <div class="replay-progress-row">
+                <span id="replay-current-step">0</span>
+                <input id="replay-progress" type="range" min="0" max="0" value="0" step="1" aria-label="回放进度">
+                <span id="replay-total-steps">0</span>
+            </div>
+        </div>
+    </section>
+    <aside class="replay-sidebar">
+        <section class="replay-panel replay-summary-panel">
+            <div class="replay-panel-heading"><h2>对局信息</h2><span id="replay-action-count">0 步</span></div>
+            <div id="replay-metadata" class="replay-metadata"></div>
+            <p id="replay-warning" class="replay-warning" hidden></p>
+        </section>
+        <section class="replay-panel replay-timeline-panel">
+            <div class="replay-panel-heading"><h2>行动记录</h2><span>选择任意步骤</span></div>
+            <ol id="replay-action-list" class="replay-action-list"></ol>
+        </section>
+        <section class="replay-panel replay-detail-panel">
+            <div class="replay-panel-heading"><h2>当前局面</h2><span id="replay-detail-step">开局</span></div>
+            <div id="replay-action-detail" class="replay-action-detail"></div>
+        </section>
+    </aside>
+</div>
+</section>
 </main>
 <script type="module" src="./js/main.js"></script>
 </body></html>

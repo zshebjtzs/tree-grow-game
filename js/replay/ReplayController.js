@@ -34,15 +34,21 @@ export class ReplayController {
     }
 
     next() {
-        if (!this.canGoNext) return this.session.getCurrentSnapshot();
-        const snapshot = this.session.goTo(this.currentStep + 1);
+        this.pause();
+        return this.#advance();
+    }
+
+    previous() {
+        this.pause();
+        if (!this.canGoPrevious) return this.session.getCurrentSnapshot();
+        const snapshot = this.session.goTo(this.currentStep - 1);
         this.#notify('step', snapshot);
         return snapshot;
     }
 
-    previous() {
-        if (!this.canGoPrevious) return this.session.getCurrentSnapshot();
-        const snapshot = this.session.goTo(this.currentStep - 1);
+    #advance() {
+        if (!this.canGoNext) return this.session.getCurrentSnapshot();
+        const snapshot = this.session.goTo(this.currentStep + 1);
         this.#notify('step', snapshot);
         return snapshot;
     }
@@ -90,7 +96,7 @@ export class ReplayController {
                 this.pause();
                 return;
             }
-            this.next();
+            this.#advance();
             if (!this.canGoNext) this.pause();
         }, 1000 / this.speed);
     }

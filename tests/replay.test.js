@@ -101,6 +101,28 @@ test('controller playback advances at selected speed and stops at the end', () =
     assert.equal(controller.play(), false);
 });
 
+test('manual next/previous navigation interrupts automatic playback', () => {
+    const session = new ReplaySession(saveData());
+    const scheduled = new Map();
+    let nextId = 1;
+    const scheduler = {
+        setInterval(callback) { const id = nextId++; scheduled.set(id, callback); return id; },
+        clearInterval(id) { scheduled.delete(id); }
+    };
+    const controller = new ReplayController(session, { scheduler });
+    controller.play();
+    assert.equal(controller.isPlaying, true);
+    controller.next();
+    assert.equal(controller.currentStep, 1);
+    assert.equal(controller.isPlaying, false);
+    assert.equal(scheduled.size, 0);
+    controller.play();
+    controller.previous();
+    assert.equal(controller.currentStep, 0);
+    assert.equal(controller.isPlaying, false);
+    assert.equal(scheduled.size, 0);
+});
+
 test('controller rejects unsupported playback speeds and disposes its timer', () => {
     const session = new ReplaySession(saveData());
     const scheduled = new Map();
