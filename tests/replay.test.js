@@ -138,3 +138,45 @@ test('controller rejects unsupported playback speeds and disposes its timer', ()
     assert.equal(controller.isPlaying, false);
     assert.equal(scheduled.size, 0);
 });
+
+test('changing speed during playback reschedules the timer without changing position', () => {
+    const session = new ReplaySession(saveData());
+    const scheduled = new Map();
+    let nextId = 1;
+    const scheduler = {
+        setInterval(callback, delay) {
+            const id = nextId++;
+            scheduled.set(id, { callback, delay });
+            return id;
+        },
+        clearInterval(id) { scheduled.delete(id); }
+    };
+    const controller = new ReplayController(session, { scheduler });
+    controller.play();
+    assert.equal([...scheduled.values()][0].delay, 1000);
+    controller.setSpeed(4);
+    assert.equal(controller.currentStep, 0);
+    assert.equal(scheduled.size, 1);
+    assert.equal([...scheduled.values()][0].delay, 250);
+    controller.dispose();
+    assert.equal(scheduled.size, 0);
+});
+
+test('arbitrary timeline seeking interrupts playback and end boundaries remain stable', () => {
+    const session = new ReplaySession(saveData());
+    const scheduled = new Map();
+    let nextId = 1;
+    const scheduler = {
+        setInterval(callback) { const id = nextId++; scheduled.set(id, callback); return id; },
+        clearInterval(id) { scheduled.delete(id); }
+    };
+    const controller = new ReplayController(session, { scheduler });
+    controller.play();
+    controller.goTo(2);
+    assert.equal(controller.isPlaying, false);
+    assert.equal(controller.currentStep, 2);
+    assert.equal(scheduled.size, 0);
+    assert.equal(controller.next().gameState.marker, 2);
+    assert.equal(controller.previous().gameState.marker, 1);
+    assert.equal(controller.currentStep, 1);
+});
