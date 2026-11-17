@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ReplaySession } from '../js/replay/ReplaySession.js';
 import { ReplayController } from '../js/replay/ReplayController.js';
+import { formatReplaySide, formatReplayAction, formatReplayEvent } from '../js/replay/ReplayFormatter.js';
 
 const snapshot = value => ({
     gameState: { marker: value },
@@ -179,4 +180,30 @@ test('arbitrary timeline seeking interrupts playback and end boundaries remain s
     assert.equal(controller.next().gameState.marker, 2);
     assert.equal(controller.previous().gameState.marker, 1);
     assert.equal(controller.currentStep, 1);
+});
+
+test('PVE replay labels correctly identify a blue human player and red AI', () => {
+    const context = { mode: 'pve', playerSide: 'blue' };
+    assert.equal(formatReplaySide('blue', context), '蓝方 · 玩家');
+    assert.equal(formatReplaySide('red', context), '红方 · AI');
+    assert.equal(formatReplayAction({
+        side: 'blue',
+        action: { type: 'skip', owner: 'blue' }
+    }, context).title, '蓝方 · 玩家跳过回合');
+});
+
+test('replay event formatting preserves combat, freeze, root-loss, and victory details', () => {
+    const context = { mode: 'pvp' };
+    assert.match(formatReplayEvent({
+        type: 'COMBAT', side: 'red', destroyedNodes: 3, outcome: 'tree-destroyed'
+    }, context).title, /摧毁 3 个节点/);
+    assert.match(formatReplayEvent({
+        type: 'FREEZE', side: 'blue', nodeId: 17
+    }, context).detail, /17/);
+    assert.match(formatReplayEvent({
+        type: 'ROOT_DESTROYED', side: 'red', count: 2, remaining: 1
+    }, context).detail, /损失 2 个/);
+    assert.equal(formatReplayEvent({
+        type: 'VICTORY', side: 'blue', reason: 'enemy_base_reached'
+    }, context).title, '蓝方获胜');
 });
