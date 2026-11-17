@@ -1018,6 +1018,19 @@ function renderReplayMetadata(fileName, warnings) {
     replayActionCount.textContent = replaySession.totalSteps + ' 步';
 }
 
+function summarizeReplayEvents(record) {
+    const previousIds = new Set((record.before.matchTracker?.events || []).map(event => event.id));
+    const events = (record.after.matchTracker?.events || []).filter(event => !previousIds.has(event.id));
+    const summaries = [];
+    for (const event of events) {
+        if (event.type === 'COMBAT' && event.destroyedNodes > 0) summaries.push(`摧毁 ${event.destroyedNodes} 个节点`);
+        else if (event.type === 'FREEZE') summaries.push(`冻结节点 #${event.nodeId}`);
+        else if (event.type === 'ROOT_DESTROYED') summaries.push(`根节点损失 ${event.count} 个`);
+        else if (event.type === 'VICTORY') summaries.push(`${event.side === 'red' ? '红方' : '蓝方'}获胜`);
+    }
+    return summaries.join(' · ');
+}
+
 function renderReplayTimeline() {
     replayActionList.replaceChildren();
     const addItem = (step, title, detail) => {
@@ -1047,13 +1060,18 @@ function renderReplayTimeline() {
     for (let step = 1; step <= replaySession.totalSteps; step++) {
         const record = replaySession.getActionAt(step);
         const formatted = formatReplayAction(record, replayMetadata);
-        addItem(step, formatted.title, formatted.detail);
+        const eventSummary = summarizeReplayEvents(record);
+        addItem(step, formatted.title, [formatted.detail, eventSummary].filter(Boolean).join(' · '));
     }
 }
 
-function renderReplayStats(gameState) {
+function renderReplayStats(gameState, snapshot) {
     const redNodes = gameState.getAliveNodesByOwner('red');
     const blueNodes = gameState.getAliveNodesByOwner('blue');
+    const aliveNodes = [...redNodes, ...blueNodes];
+    const occupiedAreas = new Set(aliveNodes.map(node => node.areaId)).size;
+    const frozenNodes = aliveNodes.filter(node => node.isFrozen).length;
+    const winner = snapshot?.lastMatchResult?.winner;
     const stats = document.createElement('div');
     stats.className = 'replay-stats';
     const values = [
@@ -1061,8 +1079,10 @@ function renderReplayStats(gameState) {
         ['蓝方节点', blueNodes.length],
         ['红方根节点', gameState.getPlayerRootNodes('red').length],
         ['蓝方根节点', gameState.getPlayerRootNodes('blue').length],
+        ['占据区域', occupiedAreas],
+        ['冻结节点', frozenNodes],
         ['当前行动方', gameState.currentTurn === 'red' ? '红方' : '蓝方'],
-        ['对局状态', gameState.isGameOver ? '已结束' : '进行中']
+        ['对局状态', winner ? (winner === 'red' ? '红方获胜' : '蓝方获胜') : gameState.isGameOver ? '已结束' : '进行中']
     ];
     for (const [label, value] of values) {
         const item = document.createElement('div');
@@ -1121,7 +1141,7 @@ function renderReplayPosition(snapshot, step) {
             ? '该存档没有完整的开局记录，无法还原此历史段之前的行动。'
             : '这是棋谱记录的第一个可恢复局面。';
     }
-    replayActionDetail.append(title, subtitle, renderReplayStats(replayGame));
+    replayActionDetail.append(title, subtitle, renderReplayStats(replayGame, snapshot));
 
     if (record) {
         const previousEvents = record.before.matchTracker?.events || [];
