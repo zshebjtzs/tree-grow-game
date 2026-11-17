@@ -20,7 +20,7 @@ function createFixture({ includeHistory = true } = {}) {
     const history = MatchHistory.start(before);
     history.recordAction({
         side: 'red',
-        action: { type: 'growth', owner: 'red', parentNodeId: 1, targetAreaId: 3, nodeId: child.id, isAttack: false, path: [1, 3] },
+        action: { type: 'growth', owner: 'red', parentNodeId: 1, targetAreaId: 3, nodeId: child.id, isAttack: false },
         beforeSnapshot: before,
         afterSnapshot: after,
         completedAt: 10
@@ -101,4 +101,20 @@ test('skip actions are retained as timeline steps without requiring a map change
     const result = ReplaySaveValidator.validate(data);
     assert.equal(result.history.actionCount, 2);
     assert.equal(result.history.actions[1].action.type, 'skip');
+});
+
+test('rejects a growth record whose path or node sequence is inconsistent', () => {
+    const disconnectedPath = createFixture().data;
+    disconnectedPath.matchHistory.actions[0].action.path = [1, 1, 3];
+    assert.throws(() => ReplaySaveValidator.validate(disconnectedPath), /不连通的地图路径/);
+
+    const invalidNodeSequence = createFixture().data;
+    invalidNodeSequence.matchHistory.actions[0].action.nodeId = 9;
+    assert.throws(() => ReplaySaveValidator.validate(invalidNodeSequence), /新节点编号/);
+});
+
+test('rejects a history action recorded for the wrong side to move', () => {
+    const wrongTurn = createFixture().data;
+    wrongTurn.matchHistory.actions[0].before.gameState.currentTurn = 'blue';
+    assert.throws(() => ReplaySaveValidator.validate(wrongTurn), /行动方与行动前回合不一致/);
 });
