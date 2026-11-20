@@ -1,4 +1,4 @@
-const MAGIC = 'TGSV\\u0001\\n';
+const MAGIC = 'TGSV\u0001\n';
 const SAVE_MIME = 'application/octet-stream';
 
 function hasCompressionSupport() {

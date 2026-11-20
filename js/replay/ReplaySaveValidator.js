@@ -195,7 +195,7 @@ export class ReplaySaveValidator {
 
         // ReplaySession only consumes the normalized history and metadata.
         // Shallow-copy the top-level save instead of duplicating every map and
-        // current-position field; the history remains detached via toJSON().
+        // current-position field. The validated history is passed separately.
         const normalizedData = {
             ...rawData,
             // The validated MatchHistory instance is returned separately. Keeping
