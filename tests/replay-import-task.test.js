@@ -36,3 +36,13 @@ test('rejects corrupt history without returning partial replay data', async () =
     const data = createSave(); data.matchHistory.actions = [{ id: 1 }];
     await assert.rejects(() => runReplayImport(new Blob([JSON.stringify(data)])), /棋谱行动记录无效/);
 });
+
+test('imports a valid legacy JSON replay larger than 20 MiB without a size rejection', async () => {
+    const data = createSave();
+    data.largeUnusedField = 'x'.repeat(20 * 1024 * 1024 + 128);
+    const file = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    assert.ok(file.size > 20 * 1024 * 1024);
+    const result = await runReplayImport(file);
+    assert.equal(result.metadata.mode, 'pve');
+    assert.equal(result.data.matchHistory.actions.length, 0);
+});
