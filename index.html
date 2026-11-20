@@ -110,6 +110,11 @@
     <button id="replay-empty-import-btn" class="button button-primary" type="button">选择存档文件</button>
 </div>
 <div id="replay-error" class="replay-error" role="alert" hidden></div>
+<div id="replay-import-progress" class="replay-import-progress" role="status" aria-live="polite" hidden>
+    <progress id="replay-import-progress-bar" max="100" value="0"></progress>
+    <span id="replay-import-progress-text">准备导入</span>
+    <button id="replay-import-cancel-btn" class="toolbar-button" type="button">取消导入</button>
+</div>
 <div id="replay-content" class="replay-content" hidden>
     <section class="replay-board-column">
         <div class="replay-board-heading">

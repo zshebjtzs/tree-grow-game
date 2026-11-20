@@ -21,6 +21,7 @@ import { ReplayController } from './replay/ReplayController.js';
 import { ReplaySaveValidator } from './replay/ReplaySaveValidator.js';
 import { encodeSaveFile, decodeSaveFile } from './storage/SaveCodec.js';
 import { formatReplayAction, formatReplayEvent } from './replay/ReplayFormatter.js';
+import { computeTimelineWindow } from './replay/ReplayTimelineWindow.js';
 
 // 1. 初始化各模块
 const appState = new AppState();
@@ -40,6 +41,10 @@ let replayController = null;
 let replayMapManager = null;
 let replayMapAreas = [];
 let replayMetadata = null;
+let replayImportWorker = null;
+let replayImportRequestId = 0;
+let replayTimelineEntries = [];
+const REPLAY_TIMELINE_ROW_HEIGHT = 44;
 let presentation;
 let hoverAreaId = null;
 let feedbackTimeoutId = null;
@@ -120,6 +125,10 @@ const replayFileName = document.getElementById('replay-file-name');
 const replayEmpty = document.getElementById('replay-empty');
 const replayContent = document.getElementById('replay-content');
 const replayError = document.getElementById('replay-error');
+const replayImportProgress = document.getElementById('replay-import-progress');
+const replayImportProgressBar = document.getElementById('replay-import-progress-bar');
+const replayImportProgressText = document.getElementById('replay-import-progress-text');
+const replayImportCancelBtn = document.getElementById('replay-import-cancel-btn');
 const replayWarning = document.getElementById('replay-warning');
 const replayMetadataPanel = document.getElementById('replay-metadata');
 const replayActionCount = document.getElementById('replay-action-count');
@@ -1021,11 +1030,9 @@ function renderReplayMetadata(fileName, warnings) {
     replayActionCount.textContent = replaySession.totalSteps + ' 步';
 }
 
-function summarizeReplayEvents(record) {
-    const previousIds = new Set((record.before.matchTracker?.events || []).map(event => event.id));
-    const events = (record.after.matchTracker?.events || []).filter(event => !previousIds.has(event.id));
+function summarizeReplayEvents(events) {
     const summaries = [];
-    for (const event of events) {
+    for (const event of events || []) {
         if (event.type === 'COMBAT' && event.destroyedNodes > 0) summaries.push(`摧毁 ${event.destroyedNodes} 个节点`);
         else if (event.type === 'FREEZE') summaries.push(`冻结节点 #${event.nodeId}`);
         else if (event.type === 'ROOT_DESTROYED') summaries.push(`根节点损失 ${event.count} 个`);
@@ -1033,41 +1040,69 @@ function summarizeReplayEvents(record) {
     }
     return summaries.join(' · ');
 }
-
-function renderReplayTimeline() {
+function renderReplayTimelineWindow() {
+    if (!replaySession || replayTimelineEntries.length === 0) return;
+    const range = computeTimelineWindow(replayTimelineEntries.length, replayActionList.scrollTop,
+        replayActionList.clientHeight || REPLAY_TIMELINE_ROW_HEIGHT * 8, REPLAY_TIMELINE_ROW_HEIGHT, 8);
     replayActionList.replaceChildren();
-    const addItem = (step, title, detail) => {
+    const spacer = height => {
+        if (height <= 0) return;
+        const li = document.createElement('li');
+        li.className = 'replay-timeline-spacer';
+        li.setAttribute('aria-hidden', 'true');
+        li.style.height = height + 'px';
+        replayActionList.appendChild(li);
+    };
+    spacer(range.top);
+    for (let index = range.start; index < range.end; index++) {
+        const entry = replayTimelineEntries[index];
         const li = document.createElement('li');
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'replay-action-item';
-        button.dataset.step = String(step);
-        const index = document.createElement('span');
-        index.className = 'replay-action-index';
-        index.textContent = step === 0 ? 'START' : String(step).padStart(3, '0');
+        button.className = 'replay-action-item' + (entry.step === replaySession.currentStep ? ' active' : '');
+        button.dataset.step = String(entry.step);
+        const stepLabel = document.createElement('span');
+        stepLabel.className = 'replay-action-index';
+        stepLabel.textContent = entry.step === 0 ? 'START' : String(entry.step).padStart(3, '0');
         const copy = document.createElement('span');
         copy.className = 'replay-action-copy';
         const heading = document.createElement('strong');
-        heading.textContent = title;
+        heading.textContent = entry.title;
         const sub = document.createElement('small');
-        sub.textContent = detail;
+        sub.textContent = entry.detail;
         copy.append(heading, sub);
-        button.append(index, copy);
-        button.addEventListener('click', () => replayController?.goTo(step));
+        button.append(stepLabel, copy);
+        button.addEventListener('click', () => replayController?.goTo(entry.step));
         li.appendChild(button);
         replayActionList.appendChild(li);
-    };
-    addItem(0,
-        replaySession.historyIncomplete ? '可恢复历史起点' : '开局初始局面',
-        replaySession.historyIncomplete ? '此存档仅保留该历史段及之后的行动' : '双方基地与根节点部署完成');
-    for (let step = 1; step <= replaySession.totalSteps; step++) {
-        const record = replaySession.getActionAt(step);
-        const formatted = formatReplayAction(record, replayMetadata);
-        const eventSummary = summarizeReplayEvents(record);
-        addItem(step, formatted.title, [formatted.detail, eventSummary].filter(Boolean).join(' · '));
     }
+    spacer(range.bottom);
 }
-
+function ensureReplayTimelineStepVisible(step) {
+    const top = step * REPLAY_TIMELINE_ROW_HEIGHT;
+    const bottom = top + REPLAY_TIMELINE_ROW_HEIGHT;
+    if (top < replayActionList.scrollTop) replayActionList.scrollTop = top;
+    else if (bottom > replayActionList.scrollTop + replayActionList.clientHeight)
+        replayActionList.scrollTop = Math.max(0, bottom - replayActionList.clientHeight);
+    renderReplayTimelineWindow();
+}
+function renderReplayTimeline() {
+    replayTimelineEntries = [{
+        step: 0,
+        title: replaySession.historyIncomplete ? '可恢复历史起点' : '开局初始局面',
+        detail: replaySession.historyIncomplete ? '此存档仅保留该历史段及之后的行动' : '双方基地与根节点部署完成'
+    }];
+    for (let step = 1; step <= replaySession.totalSteps; step++) {
+        const entry = replaySession.getTimelineEntryAt(step);
+        const formatted = formatReplayAction({ side: entry.side, action: entry.action }, replayMetadata);
+        replayTimelineEntries.push({
+            step, title: formatted.title,
+            detail: [formatted.detail, summarizeReplayEvents(entry.events)].filter(Boolean).join(' · ')
+        });
+    }
+    replayActionList.scrollTop = 0;
+    renderReplayTimelineWindow();
+}
 function renderReplayStats(gameState, snapshot) {
     const redNodes = gameState.getAliveNodesByOwner('red');
     const blueNodes = gameState.getAliveNodesByOwner('blue');
@@ -1103,10 +1138,9 @@ function renderReplayStats(gameState, snapshot) {
 function renderReplayPosition(snapshot, step) {
     if (!replaySession || !replayMapManager || !replayMetadata) return;
     const replayGame = GameState.fromJSON(snapshot.gameState);
-    replayDrawer.renderMap(replayMapAreas, replayMetadata.redBaseId, replayMetadata.blueBaseId);
     replayDrawer.renderNodes(replayGame.getAliveNodes(), null, [], replayMapManager.portals);
-
-    const record = step > 0 ? replaySession.getActionAt(step) : null;
+    const record = step > 0 ? replaySession.getActionViewAt(step) : null;
+    const timelineEntry = step > 0 ? replaySession.getTimelineEntryAt(step) : null;
     replayPositionTitle.textContent = record
         ? formatReplayAction(record, replayMetadata).title
         : (replaySession.historyIncomplete ? '历史起点（不完整）' : '开局初始局面');
@@ -1125,9 +1159,7 @@ function renderReplayPosition(snapshot, step) {
     replayPlayBtn.disabled = step >= replaySession.totalSteps && !replayController?.isPlaying;
     replayPlayBtn.textContent = replayController?.isPlaying ? '暂停' : '播放';
 
-    for (const button of replayActionList.querySelectorAll('.replay-action-item')) {
-        button.classList.toggle('active', Number(button.dataset.step) === step);
-    }
+    ensureReplayTimelineStepVisible(step);
 
     replayActionDetail.replaceChildren();
     const title = document.createElement('p');
@@ -1147,10 +1179,7 @@ function renderReplayPosition(snapshot, step) {
     replayActionDetail.append(title, subtitle, renderReplayStats(replayGame, snapshot));
 
     if (record) {
-        const previousEvents = record.before.matchTracker?.events || [];
-        const previousIds = new Set(previousEvents.map(event => event.id));
-        const events = (record.after.matchTracker?.events || [])
-            .filter(event => !previousIds.has(event.id));
+        const events = timelineEntry?.events || [];
         const eventList = document.createElement('ul');
         eventList.className = 'replay-event-list';
         if (events.length === 0) {
@@ -1177,8 +1206,7 @@ function renderReplayPosition(snapshot, step) {
     }
 }
 
-function openReplayFromSave(rawData, fileName = '存档') {
-    const validated = ReplaySaveValidator.validate(rawData);
+function installValidatedReplay(validated, fileName = '存档') {
     replayController?.dispose();
     replaySession = new ReplaySession(validated.data, { history: validated.history });
     replayMapManager = validated.mapManager;
@@ -1186,6 +1214,7 @@ function openReplayFromSave(rawData, fileName = '存档') {
     replayMetadata = validated.metadata;
     replayDrawer.setMode('locked');
     replayDrawer.resetViewport();
+    replayDrawer.renderMap(replayMapAreas, replayMetadata.redBaseId, replayMetadata.blueBaseId);
     replaySpeedSelect.value = '1';
     replayContent.hidden = false;
     replayEmpty.hidden = true;
@@ -1198,24 +1227,95 @@ function openReplayFromSave(rawData, fileName = '存档') {
     replayController.goTo(0);
     requestAnimationFrame(() => fitReplayCanvas());
 }
-
+function openReplayFromSave(rawData, fileName = '存档') {
+    installValidatedReplay(ReplaySaveValidator.validate(rawData), fileName);
+}
+function setReplayImportProgress(progress, message) {
+    replayImportProgress.hidden = false;
+    replayImportProgressBar.value = Math.max(0, Math.min(100, progress));
+    replayImportProgressText.textContent = message;
+}
+function finishReplayImport() {
+    replayImportWorker?.terminate();
+    replayImportWorker = null;
+    replayImportProgress.hidden = true;
+    replayImportCancelBtn.disabled = false;
+}
+function cancelReplayImport() {
+    if (!replayImportWorker) return;
+    replayImportRequestId++;
+    finishReplayImport();
+    replayImportProgressText.textContent = '已取消导入';
+}
+function installWorkerValidatedReplay(result, fileName) {
+    const history = MatchHistory.fromJSON(result.data.matchHistory);
+    const mapManager = new MapManager(1800, 1200);
+    const mapAreas = mapManager.loadMapFromSeeds(result.data.mapSeeds);
+    installValidatedReplay({
+        data: result.data, history, mapManager, mapAreas,
+        warnings: result.warnings || [], metadata: result.metadata
+    }, fileName);
+}
 async function importReplayFile(file) {
     if (!file) return;
     replayController?.pause();
+    cancelReplayImport();
+    const requestId = ++replayImportRequestId;
+    replayError.hidden = true;
+    replayImportCancelBtn.disabled = false;
+    setReplayImportProgress(3, '正在启动后台导入…');
     try {
+        if (typeof Worker === 'function') {
+            const worker = new Worker(new URL('./replay/ReplayImportWorker.js', import.meta.url), { type: 'module' });
+            replayImportWorker = worker;
+            worker.onmessage = event => {
+                if (requestId !== replayImportRequestId || replayImportWorker !== worker) return;
+                const message = event.data || {};
+                if (message.type === 'progress') {
+                    setReplayImportProgress(message.progress, message.message);
+                    return;
+                }
+                finishReplayImport();
+                if (message.type === 'complete') {
+                    try {
+                        installWorkerValidatedReplay(message.result, file.name);
+                        replayImportProgressText.textContent = '导入完成';
+                    } catch (error) {
+                        replayError.textContent = '导入失败：' + (error?.message || '无法创建回放会话');
+                        replayError.hidden = false;
+                    }
+                } else {
+                    replayError.textContent = '导入失败：' + (message.error || '存档格式无效');
+                    replayError.hidden = false;
+                }
+            };
+            worker.onerror = event => {
+                if (requestId !== replayImportRequestId) return;
+                finishReplayImport();
+                replayError.textContent = '后台导入失败：' + (event.message || 'Worker 执行异常');
+                replayError.hidden = false;
+            };
+            worker.postMessage({ type: 'import', file });
+            return;
+        }
+        setReplayImportProgress(15, '当前环境不支持后台线程，正在主线程解析存档…');
         const data = await decodeSaveFile(file);
+        setReplayImportProgress(35, '正在验证棋谱…');
         openReplayFromSave(data, file.name);
+        replayImportProgressText.textContent = '导入完成';
     } catch (error) {
+        finishReplayImport();
         console.error('导入回放存档失败：', error);
         replayError.textContent = '导入失败：' + (error?.message || '存档格式无效');
         replayError.hidden = false;
     }
 }
-
 replayMenuBtn?.addEventListener('click', () => showAppScreen('replay'));
 replayMenuBtnTop?.addEventListener('click', () => showAppScreen('menu'));
 replayImportBtn?.addEventListener('click', () => replayFileInput?.click());
 replayEmptyImportBtn?.addEventListener('click', () => replayFileInput?.click());
+replayImportCancelBtn?.addEventListener('click', cancelReplayImport);
+replayActionList?.addEventListener('scroll', renderReplayTimelineWindow, { passive: true });
 replayFileInput?.addEventListener('change', event => {
     const file = event.target.files?.[0] || null;
     event.target.value = '';

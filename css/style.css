@@ -303,3 +303,11 @@
 .replay-event-list strong{display:block;color:#cfe4db;font-size:9px}.replay-event-list small{display:block;margin-top:2px;color:#8197a1;font-size:9px}
 @media(max-width:900px){.replay-screen{height:auto;min-height:100vh;min-height:100dvh;overflow:visible}.replay-content{flex:initial;grid-template-columns:minmax(0,1fr);min-height:0}.replay-board-column{height:68vh;min-height:400px}.replay-canvas-container{min-height:0}.replay-sidebar{overflow:visible;display:grid;grid-template-columns:1fr 1fr;align-items:stretch}.replay-timeline-panel{grid-row:span 2;min-height:260px}.replay-action-list{max-height:420px}}
 @media(max-width:560px){.replay-screen{padding:7px;gap:7px}.replay-header{align-items:flex-start;padding:9px;flex-direction:column}.replay-header-actions{width:100%;justify-content:space-between}.replay-header-actions>span{max-width:50vw}.replay-board-column{height:58vh;min-height:340px;padding:7px}.replay-board-heading{align-items:flex-start}.replay-board-heading>div{align-items:flex-start;flex-direction:column;gap:3px}.replay-transport{gap:4px}.replay-transport .toolbar-button{padding:0 7px}.replay-sidebar{grid-template-columns:1fr}.replay-timeline-panel{grid-row:auto;min-height:220px}.replay-action-list{max-height:300px}}
+
+.replay-import-progress{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid rgba(139,211,183,.2);border-radius:8px;color:#b9cbd0;background:#172533;font-size:11px}
+.replay-import-progress progress{width:min(180px,28vw);height:7px;accent-color:#8bd3b7}
+.replay-import-progress span{min-width:0;flex:1 1 auto}
+.replay-action-list{display:block;gap:0;overflow:auto;overflow-anchor:none;contain:content}
+.replay-action-list li{height:44px;min-height:44px;max-height:44px}
+.replay-action-list .replay-timeline-spacer{height:auto;min-height:0;max-height:none;padding:0;border:0;pointer-events:none}
+.replay-action-item{height:44px;min-height:44px;max-height:44px;padding:5px 8px;overflow:hidden}
