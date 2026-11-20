@@ -28,7 +28,7 @@ export class ReplayController {
 
     goTo(step) {
         this.pause();
-        const snapshot = this.session.goTo(step);
+        const snapshot = this.#goToSessionStep(step);
         this.#notify('seek', snapshot);
         return snapshot;
     }
@@ -40,17 +40,28 @@ export class ReplayController {
 
     previous() {
         this.pause();
-        if (!this.canGoPrevious) return this.session.getCurrentSnapshot();
-        const snapshot = this.session.goTo(this.currentStep - 1);
+        if (!this.canGoPrevious) return this.#currentSnapshot();
+        const snapshot = this.#goToSessionStep(this.currentStep - 1);
         this.#notify('step', snapshot);
         return snapshot;
     }
 
     #advance() {
-        if (!this.canGoNext) return this.session.getCurrentSnapshot();
-        const snapshot = this.session.goTo(this.currentStep + 1);
+        if (!this.canGoNext) return this.#currentSnapshot();
+        const snapshot = this.#goToSessionStep(this.currentStep + 1);
         this.#notify('step', snapshot);
         return snapshot;
+    }
+
+    #goToSessionStep(step) {
+        return typeof this.session.goToView === 'function'
+            ? this.session.goToView(step)
+            : this.session.goTo(step);
+    }
+    #currentSnapshot() {
+        return typeof this.session.getCurrentSnapshotView === 'function'
+            ? this.session.getCurrentSnapshotView()
+            : this.session.getCurrentSnapshot();
     }
 
     first() { return this.goTo(0); }
@@ -62,7 +73,7 @@ export class ReplayController {
         }
         this.speed = speed;
         if (this.isPlaying) this.#schedule();
-        this.#notify('speed', this.session.getCurrentSnapshot());
+        this.#notify('speed', this.#currentSnapshot());
         return this.speed;
     }
 
@@ -70,7 +81,7 @@ export class ReplayController {
         if (this.isPlaying || !this.canGoNext) return false;
         this.isPlaying = true;
         this.#schedule();
-        this.#notify('play', this.session.getCurrentSnapshot());
+        this.#notify('play', this.#currentSnapshot());
         return true;
     }
 
@@ -81,7 +92,7 @@ export class ReplayController {
         }
         const wasPlaying = this.isPlaying;
         this.isPlaying = false;
-        if (wasPlaying) this.#notify('pause', this.session.getCurrentSnapshot());
+        if (wasPlaying) this.#notify('pause', this.#currentSnapshot());
         return wasPlaying;
     }
 

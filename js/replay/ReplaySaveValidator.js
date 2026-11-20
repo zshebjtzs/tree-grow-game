@@ -3,15 +3,20 @@ import { MatchHistory } from '../game/MatchHistory.js';
 import { MatchTracker } from '../game/MatchTracker.js';
 import { MapManager } from '../core/MapManager.js';
 
-const copy = value => value == null ? value : JSON.parse(JSON.stringify(value));
-function stable(value) {
-    if (Array.isArray(value)) return '[' + value.map(stable).join(',') + ']';
-    if (value && typeof value === 'object') {
-        return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + stable(value[key])).join(',') + '}';
+// Compare JSON-shaped values without constructing two additional full-size
+// serialized strings. Object key order is not semantically significant.
+function same(a, b) {
+    if (Object.is(a, b)) return true;
+    if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
+    if (Array.isArray(a) !== Array.isArray(b)) return false;
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) return false;
+    for (const key of aKeys) {
+        if (!Object.prototype.hasOwnProperty.call(b, key) || !same(a[key], b[key])) return false;
     }
-    return JSON.stringify(value);
+    return true;
 }
-const same = (a, b) => stable(a) === stable(b);
 const DIFFICULTIES = ['easy', 'medium', 'hard', 'expert'];
 
 function validateSnapshot(snapshot, mapManager, areaIds, redBaseId, blueBaseId) {
@@ -118,17 +123,21 @@ export class ReplaySaveValidator {
         }
 
         let previousSnapshot = history.initialSnapshot;
-        validateSnapshot(previousSnapshot, mapManager, areaIds, rawData.redBaseId, rawData.blueBaseId);
+        // The initial position is validated once. Each subsequent "before"
+        // snapshot must equal the already-validated previous "after" snapshot,
+        // so validating it again would repeat all node and tracker checks.
+        let beforeGame = validateSnapshot(
+            previousSnapshot, mapManager, areaIds, rawData.redBaseId, rawData.blueBaseId
+        );
         for (const [index, actionRecord] of history.actions.entries()) {
             if (!same(actionRecord.before, previousSnapshot)) {
                 throw new TypeError(`棋谱第 ${index + 1} 步与前一步状态无法衔接`);
             }
-            validateSnapshot(actionRecord.before, mapManager, areaIds, rawData.redBaseId, rawData.blueBaseId);
-            validateSnapshot(actionRecord.after, mapManager, areaIds, rawData.redBaseId, rawData.blueBaseId);
 
             const action = actionRecord.action;
-            const beforeGame = GameState.fromJSON(actionRecord.before.gameState);
-            const afterGame = GameState.fromJSON(actionRecord.after.gameState);
+            const afterGame = validateSnapshot(
+                actionRecord.after, mapManager, areaIds, rawData.redBaseId, rawData.blueBaseId
+            );
             const nextSide = actionRecord.side === 'red' ? 'blue' : 'red';
             if (beforeGame.isGameOver || beforeGame.currentTurn !== actionRecord.side) {
                 throw new TypeError(`棋谱第 ${index + 1} 步的行动方与行动前回合不一致`);
@@ -173,6 +182,7 @@ export class ReplaySaveValidator {
                 throw new TypeError(`棋谱第 ${index + 1} 步包含未知行动类型`);
             }
             previousSnapshot = actionRecord.after;
+            beforeGame = afterGame;
         }
 
         if (!same(previousSnapshot, currentSnapshot)) {
@@ -182,10 +192,16 @@ export class ReplaySaveValidator {
             warnings.push('该棋谱只包含一个不完整历史段；历史起点之前的行动不可恢复。');
         }
 
-        const normalizedData = copy(rawData);
-        normalizedData.matchHistory = history.toJSON();
-        normalizedData.matchTracker = currentSnapshot.matchTracker;
-        normalizedData.lastMatchResult = currentSnapshot.lastMatchResult;
+        // ReplaySession only consumes the normalized history and metadata.
+        // Shallow-copy the top-level save instead of duplicating every map and
+        // current-position field. The validated history is passed separately.
+        const normalizedData = {
+            ...rawData,
+            // The validated MatchHistory instance is returned separately. Keeping
+            // the parsed JSON reference here avoids another full history clone.
+            matchTracker: currentSnapshot.matchTracker,
+            lastMatchResult: currentSnapshot.lastMatchResult
+        };
         return {
             data: normalizedData,
             history,
