@@ -41,3 +41,13 @@ test('timeline cache is isolated from caller-owned source history', () => {
     data.actions[0].action.type = 'mutated';
     assert.equal(session.getTimelineEntryAt(1).action.type, 'skip');
 });
+
+test('accepts a plain history object only through the validated Worker handoff', () => {
+    const data = createHistory(2).toJSON();
+    const session = new ReplaySession({ matchHistory: data }, {
+        history: data,
+        validatedHistory: true
+    });
+    assert.equal(session.totalSteps, 2);
+    assert.equal(session.getTimelineEntryAt(2).step, 2);
+});

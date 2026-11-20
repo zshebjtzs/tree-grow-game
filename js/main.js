@@ -1208,7 +1208,10 @@ function renderReplayPosition(snapshot, step) {
 
 function installValidatedReplay(validated, fileName = '存档') {
     replayController?.dispose();
-    replaySession = new ReplaySession(validated.data, { history: validated.history });
+    replaySession = new ReplaySession(validated.data, {
+        history: validated.history,
+        validatedHistory: validated.validatedHistory === true
+    });
     replayMapManager = validated.mapManager;
     replayMapAreas = validated.mapAreas;
     replayMetadata = validated.metadata;
@@ -1248,11 +1251,11 @@ function cancelReplayImport() {
     replayImportProgressText.textContent = '已取消导入';
 }
 function installWorkerValidatedReplay(result, fileName) {
-    const history = MatchHistory.fromJSON(result.data.matchHistory);
+    const history = result.data.matchHistory;
     const mapManager = new MapManager(1800, 1200);
     const mapAreas = mapManager.loadMapFromSeeds(result.data.mapSeeds);
     installValidatedReplay({
-        data: result.data, history, mapManager, mapAreas,
+        data: result.data, history, validatedHistory: true, mapManager, mapAreas,
         warnings: result.warnings || [], metadata: result.metadata
     }, fileName);
 }

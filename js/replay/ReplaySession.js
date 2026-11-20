@@ -26,17 +26,22 @@ export class ReplaySession {
     #history;
     #timeline;
 
-    constructor(saveData, { history = null } = {}) {
+    constructor(saveData, { history = null, validatedHistory = false } = {}) {
+        const isHistoryData = history && typeof history === 'object' &&
+            Array.isArray(history.actions) && history.initialSnapshot;
         if (!saveData || typeof saveData !== 'object' ||
-            (!(history instanceof MatchHistory) && !saveData.matchHistory)) {
+            (!(history instanceof MatchHistory) && !(validatedHistory && isHistoryData) && !saveData.matchHistory)) {
             throw new TypeError('回放存档缺少棋谱数据');
         }
 
-        // The validator may pass its already-isolated MatchHistory instance.
-        // Direct callers still receive the defensive JSON import path.
+        // The Worker may transfer its already-validated plain history object.
+        // Main-thread callers still use MatchHistory.fromJSON for validation
+        // and defensive isolation.
         this.#history = history instanceof MatchHistory
             ? history
-            : MatchHistory.fromJSON(saveData.matchHistory);
+            : validatedHistory
+                ? history
+                : MatchHistory.fromJSON(saveData.matchHistory);
         deepFreeze(this.#history);
         this.#timeline = this.#history.actions.map((record, index) => Object.freeze({
             step: index + 1, side: record.side,
@@ -57,7 +62,7 @@ export class ReplaySession {
     }
 
     get totalSteps() {
-        return this.#history.actionCount;
+        return this.#history.actions.length;
     }
 
     get historyIncomplete() {
