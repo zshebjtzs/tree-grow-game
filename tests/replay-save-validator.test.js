@@ -119,3 +119,28 @@ test('rejects a history action recorded for the wrong side to move', () => {
     wrongTurn.matchHistory.actions[0].before.gameState.currentTurn = 'blue';
     assert.throws(() => ReplaySaveValidator.validate(wrongTurn), /行动方与行动前回合不一致/);
 });
+
+
+test('validates a long skip-only timeline while reusing the prior validated position', () => {
+    const { data, after } = createFixture();
+    const history = MatchHistory.fromJSON(data.matchHistory);
+    let current = after;
+    for (let i = 0; i < 250; i++) {
+        const side = current.gameState.currentTurn;
+        const next = structuredClone(current);
+        next.gameState.currentTurn = side === 'red' ? 'blue' : 'red';
+        history.recordAction({
+            side,
+            action: { type: 'skip', owner: side },
+            beforeSnapshot: current,
+            afterSnapshot: next,
+            completedAt: 100 + i
+        });
+        current = next;
+    }
+    data.matchHistory = history.toJSON();
+    data.gameState = current.gameState;
+    const result = ReplaySaveValidator.validate(data);
+    assert.equal(result.history.actionCount, 251);
+    assert.equal(result.data.gameState.currentTurn, current.gameState.currentTurn);
+});

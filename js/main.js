@@ -19,6 +19,7 @@ import { TutorialController } from './tutorial/TutorialController.js';
 import { ReplaySession } from './replay/ReplaySession.js';
 import { ReplayController } from './replay/ReplayController.js';
 import { ReplaySaveValidator } from './replay/ReplaySaveValidator.js';
+import { encodeSaveFile, decodeSaveFile } from './storage/SaveCodec.js';
 import { formatReplayAction, formatReplayEvent } from './replay/ReplayFormatter.js';
 
 // 1. 初始化各模块
@@ -737,7 +738,7 @@ updateUI();
 showAppScreen('menu');
 
 // 存读档逻辑
-function getGameBlob() {
+async function getGameBlob() {
     if (isAnimating || isAIThinking) {
         alert('当前战斗动画或 AI 运算尚未结束，请稍后再保存。');
         return null;
@@ -761,11 +762,11 @@ function getGameBlob() {
         undoManager: undoManager?.toJSON() || null,
         lastMatchResult
     };
-    return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    return encodeSaveFile(data);
 }
 
 async function saveGame() {
-    const blob = getGameBlob();
+    const blob = await getGameBlob();
     if (!blob) return;
 
     try {
@@ -775,7 +776,7 @@ async function saveGame() {
                 suggestedName: 'growth_tree_save.sav',
                 types: [{
                     description: '生长树存档文件',
-                    accept: { 'application/json': ['.sav'] }
+                    accept: { 'application/octet-stream': ['.sav'] }
                 }]
             });
             const writable = await handle.createWritable();
@@ -812,7 +813,7 @@ async function loadGame() {
         let file;
         if ('showOpenFilePicker' in window) {
             const [handle] = await window.showOpenFilePicker({
-                types: [{ description: '生长树存档文件', accept: { 'application/json': ['.sav', '.json'] } }],
+                types: [{ description: '生长树存档文件', accept: { 'application/octet-stream': ['.sav'], 'application/json': ['.json'] } }],
                 multiple: false
             });
             file = await handle.getFile();
@@ -828,7 +829,7 @@ async function loadGame() {
             file = await filePromise;
             if (!file) return;
         }
-        applyLoadedGameData(JSON.parse(await file.text()), file.name);
+        applyLoadedGameData(await decodeSaveFile(file), file.name);
     } catch (err) {
         if (err.name !== 'AbortError') {
             console.error('读档出错：', err);
@@ -1199,13 +1200,8 @@ function openReplayFromSave(rawData, fileName = '存档') {
 async function importReplayFile(file) {
     if (!file) return;
     replayController?.pause();
-    if (file.size > 20 * 1024 * 1024) {
-        replayError.textContent = '存档文件超过 20 MB，已拒绝导入。';
-        replayError.hidden = false;
-        return;
-    }
     try {
-        const data = JSON.parse(await file.text());
+        const data = await decodeSaveFile(file);
         openReplayFromSave(data, file.name);
     } catch (error) {
         console.error('导入回放存档失败：', error);
