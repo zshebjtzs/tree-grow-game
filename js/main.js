@@ -766,10 +766,11 @@ async function getGameBlob() {
 }
 
 async function saveGame() {
-    const blob = await getGameBlob();
-    if (!blob) return;
-
+    let blob = null;
     try {
+        blob = await getGameBlob();
+        if (!blob) return;
+
         // 方案一：使用现代浏览器 API 弹出系统原生“另存为”对话框
         if ('showSaveFilePicker' in window) {
             const handle = await window.showSaveFilePicker({
@@ -790,7 +791,8 @@ async function saveGame() {
     } catch (err) {
         if (err.name !== 'AbortError') {
             console.error('保存出错：', err);
-            fallbackDownload(blob);
+            if (blob) fallbackDownload(blob);
+            else alert('❌ 存档生成失败，请检查控制台报错。');
         }
     }
 }
@@ -1178,7 +1180,7 @@ function renderReplayPosition(snapshot, step) {
 function openReplayFromSave(rawData, fileName = '存档') {
     const validated = ReplaySaveValidator.validate(rawData);
     replayController?.dispose();
-    replaySession = new ReplaySession(validated.data);
+    replaySession = new ReplaySession(validated.data, { history: validated.history });
     replayMapManager = validated.mapManager;
     replayMapAreas = validated.mapAreas;
     replayMetadata = validated.metadata;

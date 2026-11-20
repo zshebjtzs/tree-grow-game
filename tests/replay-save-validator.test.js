@@ -48,7 +48,7 @@ test('validates a complete history and returns an isolated normalized save', () 
     assert.equal(result.history.actionCount, 1);
     assert.equal(result.warnings.length, 0);
     assert.equal(result.metadata.redBaseId, 1);
-    result.data.matchHistory.actions.length = 0;
+    result.history.actions.length = 0;
     assert.equal(data.matchHistory.actions.length, 1);
 });
 

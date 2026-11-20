@@ -198,7 +198,8 @@ export class ReplaySaveValidator {
         // current-position field; the history remains detached via toJSON().
         const normalizedData = {
             ...rawData,
-            matchHistory: history.toJSON(),
+            // The validated MatchHistory instance is returned separately. Keeping
+            // the parsed JSON reference here avoids another full history clone.
             matchTracker: currentSnapshot.matchTracker,
             lastMatchResult: currentSnapshot.lastMatchResult
         };

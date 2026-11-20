@@ -15,7 +15,7 @@ export async function encodeSaveFile(data) {
     const json = JSON.stringify(data);
     if (typeof json !== 'string') throw new TypeError('存档数据无法序列化');
 
-    const source = new Blob([json], { type: 'application/json' });
+    const source = new Blob([json], { type: SAVE_MIME });
     if (!hasCompressionSupport() || typeof source.stream !== 'function') return source;
 
     const compressed = await new Response(

@@ -9,12 +9,17 @@ const copy = value => value == null ? value : JSON.parse(JSON.stringify(value));
 export class ReplaySession {
     #history;
 
-    constructor(saveData) {
-        if (!saveData || typeof saveData !== 'object' || !saveData.matchHistory) {
+    constructor(saveData, { history = null } = {}) {
+        if (!saveData || typeof saveData !== 'object' ||
+            (!(history instanceof MatchHistory) && !saveData.matchHistory)) {
             throw new TypeError('回放存档缺少棋谱数据');
         }
 
-        this.#history = MatchHistory.fromJSON(saveData.matchHistory);
+        // The validator may pass its already-isolated MatchHistory instance.
+        // Direct callers still receive the defensive JSON import path.
+        this.#history = history instanceof MatchHistory
+            ? history
+            : MatchHistory.fromJSON(saveData.matchHistory);
         this.metadata = copy({
             schemaVersion: saveData.schemaVersion ?? null,
             mapSeeds: saveData.mapSeeds ?? null,
