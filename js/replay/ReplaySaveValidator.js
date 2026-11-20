@@ -3,7 +3,6 @@ import { MatchHistory } from '../game/MatchHistory.js';
 import { MatchTracker } from '../game/MatchTracker.js';
 import { MapManager } from '../core/MapManager.js';
 
-const copy = value => value == null ? value : JSON.parse(JSON.stringify(value));
 // Compare JSON-shaped values without constructing two additional full-size
 // serialized strings. Object key order is not semantically significant.
 function same(a, b) {

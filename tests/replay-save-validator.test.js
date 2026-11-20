@@ -42,7 +42,7 @@ function createFixture({ includeHistory = true } = {}) {
     return { data, before, after };
 }
 
-test('validates a complete history and returns an isolated normalized save', () => {
+test('validates a complete history and keeps its internal copy isolated from input data', () => {
     const { data } = createFixture();
     const result = ReplaySaveValidator.validate(data);
     assert.equal(result.history.actionCount, 1);
