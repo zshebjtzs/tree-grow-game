@@ -31,6 +31,7 @@ test('provides immutable views while preserving defensive getters', () => {
     const view = session.goToView(1);
     assert.ok(Object.isFrozen(view));
     assert.ok(Object.isFrozen(session.getActionViewAt(1)));
+    assert.equal(session.getActionViewAt(1).before, undefined);
     assert.equal(session.getCurrentSnapshotView(), view);
     assert.notEqual(session.getSnapshotAt(1), view);
     assert.equal(session.getActionAt(1).action.type, 'skip');

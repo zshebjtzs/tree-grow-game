@@ -1265,7 +1265,7 @@ async function importReplayFile(file) {
     cancelReplayImport();
     const requestId = ++replayImportRequestId;
     replayError.hidden = true;
-    replayImportCancelBtn.disabled = false;
+    replayImportCancelBtn.disabled = typeof Worker !== 'function';
     setReplayImportProgress(3, '正在启动后台导入…');
     try {
         if (typeof Worker === 'function') {

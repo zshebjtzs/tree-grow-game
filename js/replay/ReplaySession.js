@@ -42,7 +42,6 @@ export class ReplaySession {
             : validatedHistory
                 ? history
                 : MatchHistory.fromJSON(saveData.matchHistory);
-        deepFreeze(this.#history);
         this.#timeline = this.#history.actions.map((record, index) => Object.freeze({
             step: index + 1, side: record.side,
             action: deepFreeze(copy(record.action)),
@@ -74,17 +73,18 @@ export class ReplaySession {
     }
     getSnapshotViewAt(step) {
         this.#assertStep(step);
-        return step === 0 ? this.#history.initialSnapshot : this.#history.actions[step - 1].after;
+        const snapshot = step === 0 ? this.#history.initialSnapshot : this.#history.actions[step - 1].after;
+        return deepFreeze(snapshot);
     }
     getCurrentSnapshot() { return this.getSnapshotAt(this.currentStep); }
     getCurrentSnapshotView() { return this.getSnapshotViewAt(this.currentStep); }
     getActionAt(step) {
-        const action = this.getActionViewAt(step);
-        return action ? copy(action) : null;
+        if (!Number.isInteger(step) || step < 1 || step > this.totalSteps) return null;
+        return copy(this.#history.actions[step - 1]);
     }
     getActionViewAt(step) {
         if (!Number.isInteger(step) || step < 1 || step > this.totalSteps) return null;
-        return this.#history.actions[step - 1];
+        return this.#timeline[step - 1];
     }
     getTimelineEntryAt(step) {
         if (!Number.isInteger(step) || step < 1 || step > this.totalSteps) return null;
