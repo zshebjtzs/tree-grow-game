@@ -20,6 +20,7 @@ import { TutorialController } from './tutorial/TutorialController.js';
 import { ReplaySession } from './replay/ReplaySession.js';
 import { ReplayController } from './replay/ReplayController.js';
 import { ReplayAnimationController } from './replay/ReplayAnimationController.js';
+import { ReplayAudioScheduler } from './replay/ReplayAudioScheduler.js';
 import { ReplaySaveValidator } from './replay/ReplaySaveValidator.js';
 import { encodeSaveFile, decodeSaveFile } from './storage/SaveCodec.js';
 import { formatReplayAction, formatReplayEvent } from './replay/ReplayFormatter.js';
@@ -153,6 +154,8 @@ const replayPlayBtn = document.getElementById('replay-play-btn');
 const replayNextBtn = document.getElementById('replay-next-btn');
 const replayLastBtn = document.getElementById('replay-last-btn');
 const replaySpeedSelect = document.getElementById('replay-speed-select');
+const replayAudioMuteBtn = document.getElementById('replay-audio-mute-btn');
+const replayAudioVolume = document.getElementById('replay-audio-volume');
 const resultTitle = document.getElementById('result-title');
 const resultSubtitle = document.getElementById('result-subtitle');
 const resultMeta = document.getElementById('result-meta');
@@ -189,11 +192,14 @@ const audio = new AudioController();
 const audioMuteBtn = document.getElementById('audio-mute-btn');
 const audioVolume = document.getElementById('audio-volume');
 function syncAudioControls() {
-    if (audioMuteBtn) {
-        audioMuteBtn.textContent = audio.muted ? '音效：关' : '音效：开';
-        audioMuteBtn.setAttribute('aria-pressed', String(audio.muted));
+    for (const button of [audioMuteBtn, replayAudioMuteBtn]) {
+        if (!button) continue;
+        button.textContent = audio.muted ? '音效：关' : '音效：开';
+        button.setAttribute('aria-pressed', String(audio.muted));
     }
-    if (audioVolume) audioVolume.value = String(audio.volume);
+    for (const control of [audioVolume, replayAudioVolume]) {
+        if (control) control.value = String(audio.volume);
+    }
 }
 document.addEventListener('pointerdown', () => { audio.unlock(); }, { capture: true, passive: true });
 document.addEventListener('keydown', event => {
@@ -1281,7 +1287,8 @@ function installValidatedReplay(validated, fileName = '存档') {
         renderFrame: frame => replayDrawer.renderNodes(
             frame.nodes, null, [], replayMapManager?.portals || {},
             frame.animationState || null, frame.combatState || null
-        )
+        ),
+        audioScheduler: new ReplayAudioScheduler({ audioController: audio })
     });
     replayController = new ReplayController(replaySession, {
         onChange: event => {
@@ -1725,14 +1732,20 @@ document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !gameScreen.hidden && pauseBtn && !pauseBtn.disabled) pauseBtn.click();
 });
 
-audioMuteBtn?.addEventListener('click', () => {
+function toggleAudioMute() {
     audio.setMuted(!audio.muted);
+    if (audio.muted) audio.stopAll();
     syncAudioControls();
     if (!audio.muted) { audio.unlock().then(() => audio.play('resume')); }
-});
-audioVolume?.addEventListener('input', event => {
+}
+function updateAudioVolume(event) {
     audio.setVolume(Number(event.target.value));
-});
+    syncAudioControls();
+}
+audioMuteBtn?.addEventListener('click', toggleAudioMute);
+replayAudioMuteBtn?.addEventListener('click', toggleAudioMute);
+audioVolume?.addEventListener('input', updateAudioVolume);
+replayAudioVolume?.addEventListener('input', updateAudioVolume);
 
 for (const [button, side] of [[undoRedBtn, 'red'], [undoBlueBtn, 'blue'], [undoPlayerBtn, null], [resultUndoRedBtn, 'red'], [resultUndoBlueBtn, 'blue'], [resultUndoPlayerBtn, null]]) {
     button?.addEventListener('click', () => {

@@ -311,3 +311,6 @@
 .replay-action-list li{height:44px;min-height:44px;max-height:44px}
 .replay-action-list .replay-timeline-spacer{height:auto;min-height:0;max-height:none;padding:0;border:0;pointer-events:none}
 .replay-action-item{height:44px;min-height:44px;max-height:44px;padding:5px 8px;overflow:hidden}
+
+/* Replay audio controls share the global AudioController settings. */
+.replay-audio-controls{padding:0 4px}

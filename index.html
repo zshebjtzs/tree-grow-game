@@ -136,6 +136,11 @@
                     <option value="0.5">0.5×</option><option value="1" selected>1×</option>
                     <option value="2">2×</option><option value="4">4×</option>
                 </select>
+                <div class="audio-controls replay-audio-controls" aria-label="回放音效设置">
+                    <button id="replay-audio-mute-btn" class="toolbar-button audio-mute-button" type="button" aria-pressed="false">音效：开</button>
+                    <label class="audio-volume-label" for="replay-audio-volume">音量</label>
+                    <input id="replay-audio-volume" class="audio-volume" type="range" min="0" max="1" step="0.05" value="0.32" aria-label="回放音效音量">
+                </div>
             </div>
             <div class="replay-progress-row">
                 <span id="replay-current-step">0</span>
