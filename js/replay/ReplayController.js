@@ -31,7 +31,7 @@ export class ReplayController {
     setSpeed(speed){
         if(!DEFAULT_SPEEDS.includes(speed))throw new RangeError('不支持的回放速度');
         this.speed=speed;this.setAnimationSpeed(speed);
-        if(this.isPlaying){if(this.animateStep)this.#scheduleAnimatedContinuation();else this.#schedule();}
+        if(this.isPlaying){if(this.animateStep){if(this.timerId!==null)this.#scheduleAnimatedContinuation();}else this.#schedule();}
         this.#notify('speed',this.#currentSnapshot());return this.speed;
     }
     play(){
