@@ -171,11 +171,11 @@ test('ReplayAnimationController forwards segment lifecycle and cancels audio wit
         audioScheduler
     });
     const done = controller.playStep(1);
-    assert.deepEqual(calls.slice(0, 2), [['begin', 1], ['start', 'growth']]);
+    assert.deepEqual(calls.slice(0, 3), [['cancel'], ['begin', 1], ['start', 'growth']]);
     frameCallback();
     assert.equal(await done, true);
     assert.deepEqual(calls, [
-        ['begin', 1], ['start', 'growth'], ['complete', 'growth'], ['finish']
+        ['cancel'], ['begin', 1], ['start', 'growth'], ['complete', 'growth'], ['finish']
     ]);
     controller.destroy();
     assert.equal(calls.at(-1)[0], 'cancel');
