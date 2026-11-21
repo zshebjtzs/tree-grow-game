@@ -1404,6 +1404,7 @@ replayPlayBtn?.addEventListener('click', () => {
 });
 replayProgress?.addEventListener('pointerdown', () => {
     if (!replaySession) return;
+    replaySeekToken++;
     replayController?.pause();
     replayDragStartStep = replaySession.currentStep;
     replayDragActive = true;
@@ -1411,6 +1412,7 @@ replayProgress?.addEventListener('pointerdown', () => {
 replayProgress?.addEventListener('input', event => {
     if (!replaySession) return;
     if (!replayDragActive) {
+        replaySeekToken++;
         replayController?.pause();
         replayDragStartStep = replaySession.currentStep;
         replayDragActive = true;
