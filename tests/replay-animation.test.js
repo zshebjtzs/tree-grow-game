@@ -75,7 +75,7 @@ test('cancelling replay animation prevents stale frames',async()=>{
  const raf=rafHarness();let renders=0;
  const c=new ReplayAnimationController({session:s,renderFrame:()=>renders++,animationController:new AnimationController({requestFrame:raf.requestFrame,cancelFrame:raf.cancelFrame})});
  const done=c.playStep(1);assert.equal(c.cancel(),true);assert.equal(await done,false);
- raf.step(500);assert.equal(renders,1);assert.equal(raf.pending,0);
+ raf.step(500);assert.equal(renders,0);assert.equal(raf.pending,0);
 });
 
 test('animated ReplayController commits a step only after its animation completes',async()=>{
