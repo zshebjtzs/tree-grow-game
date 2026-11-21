@@ -19,6 +19,7 @@ import { getDifficultyLabel, DIFFICULTY_LEVELS } from './ai/DifficultyProfiles.j
 import { TutorialController } from './tutorial/TutorialController.js';
 import { ReplaySession } from './replay/ReplaySession.js';
 import { ReplayController } from './replay/ReplayController.js';
+import { ReplayAnimationController } from './replay/ReplayAnimationController.js';
 import { ReplaySaveValidator } from './replay/ReplaySaveValidator.js';
 import { encodeSaveFile, decodeSaveFile } from './storage/SaveCodec.js';
 import { formatReplayAction, formatReplayEvent } from './replay/ReplayFormatter.js';
@@ -39,6 +40,7 @@ const drawer = new CanvasDrawer('gameCanvas');
 const replayDrawer = new CanvasDrawer('replayCanvas');
 let replaySession = null;
 let replayController = null;
+let replayAnimationController = null;
 let replayMapManager = null;
 let replayMapAreas = [];
 let replayMetadata = null;
@@ -1209,6 +1211,8 @@ function renderReplayPosition(snapshot, step) {
 
 function installValidatedReplay(validated, fileName = '存档') {
     replayController?.dispose();
+    replayAnimationController?.destroy();
+    replayAnimationController = null;
     replaySession = new ReplaySession(validated.data, {
         history: validated.history,
         validatedHistory: validated.validatedHistory === true
@@ -1225,8 +1229,24 @@ function installValidatedReplay(validated, fileName = '存档') {
     replayError.hidden = true;
     renderReplayMetadata(fileName, validated.warnings);
     renderReplayTimeline();
+    replayAnimationController = new ReplayAnimationController({
+        session: replaySession,
+        renderFrame: frame => replayDrawer.renderNodes(
+            frame.nodes, null, [], replayMapManager?.portals || {},
+            frame.animationState || null, frame.combatState || null
+        )
+    });
     replayController = new ReplayController(replaySession, {
-        onChange: event => renderReplayPosition(event.snapshot, event.currentStep)
+        onChange: event => {
+            if (event.type !== 'speed') renderReplayPosition(event.snapshot, event.currentStep);
+        },
+        animateStep: ({ toStep }) => replayAnimationController.playStep(toStep),
+        cancelAnimation: () => replayAnimationController?.cancel(),
+        setAnimationSpeed: speed => replayAnimationController?.setSpeed(speed),
+        onError: error => {
+            console.error('回放动画执行失败：', error);
+            showFeedback('回放动画发生错误，已停止播放。', 'warning');
+        }
     });
     replayController.goTo(0);
     requestAnimationFrame(() => fitReplayCanvas());
