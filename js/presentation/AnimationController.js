@@ -1,12 +1,12 @@
 export class AnimationController {
     constructor({requestFrame=cb=>globalThis.requestAnimationFrame(cb),cancelFrame=id=>globalThis.cancelAnimationFrame(id)}={}) {
-        this.requestFrame=requestFrame; this.cancelFrame=cancelFrame; this.frameId=null; this.active=null;
+        this.requestFrame=requestFrame; this.cancelFrame=cancelFrame; this.frameId=null; this.active=null; this.speed=1;
     }
     get isRunning(){return this.active!==null;}
     play({duration=250,onUpdate=()=>{},onComplete=()=>{}}={}) {
         if(!Number.isFinite(duration)||duration<0) throw new TypeError('Animation duration must be non-negative');
         this.cancel();
-        const task={duration,onUpdate,onComplete,elapsed:0,lastTimestamp:null,speed:1,completed:false};
+        const task={duration,onUpdate,onComplete,elapsed:0,lastTimestamp:null,speed:this.speed,completed:false};
         this.active=task;
         const tick=timestamp=>{
             if(this.active!==task||task.completed)return;
@@ -21,6 +21,7 @@ export class AnimationController {
     }
     setSpeed(speed) {
         if(!Number.isFinite(speed)||speed<=0) throw new RangeError('Animation speed must be positive');
+        this.speed=speed;
         if(this.active) this.active.speed=speed;
         return speed;
     }
