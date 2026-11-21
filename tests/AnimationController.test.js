@@ -7,3 +7,5 @@ test('animation cancellation prevents completion',()=>{const f=harness(),c=new A
 test('animation can finish once when explicitly cancelled with finish',()=>{const f=harness(),c=new AnimationController({requestFrame:f.requestFrame,cancelFrame:f.cancelFrame}),p=[];let done=0;c.play({duration:100,onUpdate:x=>p.push(x),onComplete:()=>done++});f.step(0);c.cancel({finish:true});assert.deepEqual(p,[0,1]);assert.equal(done,1);});
 
 test('changing speed preserves elapsed animation progress',()=>{const f=harness(),c=new AnimationController({requestFrame:f.requestFrame,cancelFrame:f.cancelFrame}),p=[];c.play({duration:100,onUpdate:x=>p.push(x)});f.step(0);f.step(20);c.setSpeed(2);f.step(40);f.step(60);assert.deepEqual(p,[0,.2,.6,1]);});
+
+test('speed selected before playback is applied to new animation tasks',()=>{const f=harness(),c=new AnimationController({requestFrame:f.requestFrame,cancelFrame:f.cancelFrame}),p=[];c.setSpeed(2);c.play({duration:100,onUpdate:x=>p.push(x)});f.step(0);f.step(25);f.step(50);assert.deepEqual(p,[0,.5,1]);});
