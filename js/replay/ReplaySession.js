@@ -14,7 +14,9 @@ function collectNewEvents(record) {
         id: event.id, type: event.type, side: event.side, areaId: event.areaId,
         isAttack: event.isAttack, destroyedNodes: event.destroyedNodes, outcome: event.outcome,
         nodeId: event.nodeId, causedBy: event.causedBy, count: event.count,
-        remaining: event.remaining, reason: event.reason
+        remaining: event.remaining, reason: event.reason, turn: event.turn, at: event.at,
+        attackerNodeId: event.attackerNodeId, defenderNodeId: event.defenderNodeId,
+        freezeTargetId: event.freezeTargetId
     }));
 }
 

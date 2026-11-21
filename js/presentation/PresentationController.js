@@ -1,9 +1,11 @@
 import { AnimationController } from './AnimationController.js';
+import { GROWTH_ANIMATION_DURATION_MS, getCombatAnimationDurationMs } from './AnimationDurations.js';
+
 export class PresentationController {
     constructor({render=()=>{},animationController=new AnimationController()}={}) {
         this.render=render;this.animations=animationController;this.animationState=null;this.combatState=null;
     }
-    playCombat({ event, duration = 760, onComplete = () => {} }) {
+    playCombat({ event, duration = getCombatAnimationDurationMs(event?.affectedNodes?.length ?? 0), onComplete = () => {} }) {
         if (!event || !Array.isArray(event.affectedNodes)) throw new TypeError('Combat presentation requires a complete combat event');
         this.cancel();
         this.combatState = { type: 'combat', event, progress: 0 };
@@ -13,7 +15,7 @@ export class PresentationController {
             onComplete: () => { this.combatState = null; this.render(); onComplete(); }
         });
     }
-    playGrowth({node,parent,duration=280,onComplete=()=>{}}) {
+    playGrowth({node,parent,duration=GROWTH_ANIMATION_DURATION_MS,onComplete=()=>{}}) {
         if(!node||!parent||![node.x,node.y,parent.x,parent.y].every(Number.isFinite))throw new TypeError('Growth animation requires valid node and parent snapshots');
         this.cancel();
         this.animationState={type:'growth',nodeId:node.id,parentId:parent.id,node:{...node},parent:{...parent},progress:0};
