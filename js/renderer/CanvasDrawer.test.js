@@ -20,6 +20,8 @@ function createDrawer() {
     const drawer = Object.create(CanvasDrawer.prototype);
     drawer.canvas = { width: 100, height: 100, getContext: () => ctx };
     drawer.ctx = ctx;
+    drawer.mapCanvas = { width: 100, height: 100 };
+    drawer.mapCtx = ctx;
     return { drawer, calls, styleChanges };
 }
 
@@ -44,6 +46,33 @@ test('unfrozen nodes keep their normal appearance without frost overlays', () =>
     }]);
     const arcs = calls.filter(call => call.name === 'arc');
     assert.equal(arcs.length, 1, 'only the normal node circle is drawn');
+});
+
+test('each node frame clears stale pixels and restores the cached map before drawing', () => {
+    const { drawer, calls } = createDrawer();
+    drawer.renderMap([{
+        id: 1, vertices: [[0, 0], [80, 0], [80, 80], [0, 80]], center: [40, 40]
+    }], 1, null);
+
+    calls.length = 0;
+    drawer.renderNodes([{
+        id: 1, x: 20, y: 20, owner: 'red',
+        parentId: null, isDestroyed: false, isFrozen: false
+    }]);
+    const firstClear = calls.findIndex(call => call.name === 'clearRect');
+    const firstRestore = calls.findIndex(call => call.name === 'drawImage');
+    const firstNode = calls.findIndex(call => call.name === 'arc');
+    assert.ok(firstClear >= 0 && firstRestore > firstClear && firstNode > firstRestore,
+        'the old frame is cleared, map restored, and current nodes drawn in order');
+
+    calls.length = 0;
+    drawer.renderNodes([]);
+    assert.ok(calls.some(call => call.name === 'clearRect'),
+        'the previous frame is cleared even when the new position has no nodes');
+    assert.ok(calls.some(call => call.name === 'drawImage'),
+        'the static map is restored for every frame');
+    assert.equal(calls.some(call => call.name === 'arc'), false,
+        'destroyed/absent nodes are not redrawn');
 });
 
 

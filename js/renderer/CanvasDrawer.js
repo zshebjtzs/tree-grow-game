@@ -5,6 +5,12 @@ export class CanvasDrawer {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d');
+        // Keep the static map separate from transient nodes and edges. Replay
+        // steps can then redraw the dynamic layer without leaving stale pixels.
+        this.mapCanvas = document.createElement('canvas');
+        this.mapCanvas.width = this.canvas.width;
+        this.mapCanvas.height = this.canvas.height;
+        this.mapCtx = this.mapCanvas.getContext('2d');
         this.logicalWidth = this.canvas.width;
         this.logicalHeight = this.canvas.height;
         this.zoom = 1;
@@ -97,8 +103,8 @@ export class CanvasDrawer {
     }
 
     renderMap(areas, redBaseId = null, blueBaseId = null, shortEdges = [], legalAreaIds = new Set(), hoverAreaId = null, highlightAreaId = null) {
-        const ctx = this.ctx;
-        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        const ctx = this.mapCtx;
+        ctx.clearRect(0, 0, this.mapCanvas.width, this.mapCanvas.height);
 
         // 画背景网格
         ctx.strokeStyle = '#eee';
@@ -169,6 +175,10 @@ export class CanvasDrawer {
             ctx.textBaseline = 'middle';
             ctx.fillText(`区域 ${area.id}`, area.center[0], area.center[1]);
         });
+
+        // Composite the freshly rendered static map onto the visible canvas.
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.drawImage(this.mapCanvas, 0, 0);
     }
 
     _getPortalRoute(startAreaId, endAreaId, portals) {
@@ -256,6 +266,10 @@ export class CanvasDrawer {
     // 第三个参数：dyingNodes（即将被摧毁的节点列表）
     renderNodes(nodes, selectedNodeId = null, dyingNodes = [], portals = {}, animationState = null, combatState = null) {
         const ctx = this.ctx;
+        // Every node render is a complete frame: restore the cached map before
+        // drawing the current position, so destroyed nodes/edges cannot persist.
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        if (this.mapCanvas) ctx.drawImage(this.mapCanvas, 0, 0);
         const alive = nodes.filter(n => !n.isDestroyed);
 
         if (dyingNodes && dyingNodes.length > 0) {
