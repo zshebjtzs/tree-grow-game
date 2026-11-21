@@ -8,6 +8,7 @@ import { executeGrowthAction } from './game/GrowthActionService.js';
 import { resolveCombat } from './game/CombatResolver.js';
 import { PresentationController } from './presentation/PresentationController.js';
 import { createCombatEvent } from './presentation/CombatEvent.js';
+import { getCombatAnimationDurationMs } from './presentation/AnimationDurations.js';
 import { AudioController } from './presentation/AudioController.js';
 import { MatchTracker } from './game/MatchTracker.js';
 import { MatchHistory } from './game/MatchHistory.js';
@@ -520,7 +521,7 @@ function processSuccessfulGrowth(newNode, owner, beforeActionSnapshot, action) {
         updateUI();
         presentation.playCombat({
             event: combatEvent,
-            duration: Math.min(1050, 620 + nodesToDelete.length * 70),
+            duration: getCombatAnimationDurationMs(nodesToDelete.length),
             onComplete: finishCombat
         });
     };
