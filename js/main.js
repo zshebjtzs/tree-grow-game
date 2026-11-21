@@ -1289,7 +1289,6 @@ function installValidatedReplay(validated, fileName = '存档') {
         history: validated.history,
         validatedHistory: validated.validatedHistory === true
     });
-    replayNavigation.clear();
     replayMapManager = validated.mapManager;
     replayMapAreas = validated.mapAreas;
     replayMetadata = validated.metadata;
