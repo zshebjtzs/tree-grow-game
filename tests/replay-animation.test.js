@@ -87,6 +87,17 @@ test('animated ReplayController commits a step only after its animation complete
  assert.equal(c.currentStep,1);assert.equal(c.isPlaying,false);assert.equal(scheduled.size,0);
 });
 
+test('natural completion of the final animated step preserves its short audio tail',async()=>{
+ const s=sessionFor({beforeNodes:[node(1,'red',null)],afterNodes:[node(1,'red',null,[2]),node(2,'red',1)],action:growthAction});
+ let finish,cancelled=0;
+ const scheduler={setInterval(){return 1;},clearInterval(){},setTimeout(){return 1;},clearTimeout(){}};
+ const c=new ReplayController(s,{scheduler,animateStep:()=>new Promise(resolve=>finish=resolve),cancelAnimation:()=>cancelled++});
+ c.play();await Promise.resolve();finish(true);await Promise.resolve();await Promise.resolve();
+ assert.equal(c.currentStep,1);
+ assert.equal(c.isPlaying,false);
+ assert.equal(cancelled,0);
+});
+
 test('pausing animated playback cancels its in-flight transition',async()=>{
  const s=sessionFor({beforeNodes:[node(1,'red',null)],afterNodes:[node(1,'red',null,[2]),node(2,'red',1)],action:growthAction});
  let cancelled=0;const scheduler={setInterval(){return 1;},clearInterval(){},setTimeout(){return 1;},clearTimeout(){}};
