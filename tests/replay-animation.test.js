@@ -93,3 +93,37 @@ test('pausing animated playback cancels its in-flight transition',async()=>{
  const c=new ReplayController(s,{scheduler,animateStep:()=>new Promise(()=>{}),cancelAnimation:()=>cancelled++});
  c.play();c.pause();await Promise.resolve();assert.equal(c.currentStep,0);assert.equal(cancelled,1);assert.equal(c.isPlaying,false);
 });
+
+
+test('replacing an in-flight replay animation invalidates the older transition',async()=>{
+ const s=sessionFor({beforeNodes:[node(1,'red',null)],afterNodes:[node(1,'red',null,[2]),node(2,'red',1)],action:growthAction});
+ const raf=rafHarness(),frames=[];
+ const c=new ReplayAnimationController({session:s,renderFrame:f=>frames.push(f),
+  animationController:new AnimationController({requestFrame:raf.requestFrame,cancelFrame:raf.cancelFrame})});
+ const older=c.playStep(1);
+ const newer=c.playStep(1);
+ assert.equal(await older,false);
+ assert.equal(raf.pending,1);
+ raf.step(0);raf.step(280);
+ assert.equal(await newer,true);
+ assert.equal(frames.at(-1).animationState.progress,1);
+ assert.equal(raf.pending,0);
+ c.destroy();
+});
+
+test('changing replay speed during an active action updates its clock without scheduling a duplicate action',async()=>{
+ const s=sessionFor({beforeNodes:[node(1,'red',null)],afterNodes:[node(1,'red',null,[2]),node(2,'red',1)],action:growthAction});
+ let finish,appliedSpeed=null;
+ const scheduled=new Map();let id=0;
+ const scheduler={setInterval(){return 1;},clearInterval(){},setTimeout(cb,delay){const key=++id;scheduled.set(key,{cb,delay});return key;},clearTimeout(key){scheduled.delete(key);}};
+ const c=new ReplayController(s,{scheduler,animateStep:()=>new Promise(resolve=>finish=resolve),setAnimationSpeed:speed=>{appliedSpeed=speed;}});
+ c.play();await Promise.resolve();
+ assert.equal(scheduled.size,0);
+ c.setSpeed(2);
+ assert.equal(appliedSpeed,2);
+ assert.equal(scheduled.size,0);
+ finish(true);await Promise.resolve();await Promise.resolve();
+ assert.equal(c.currentStep,1);
+ assert.equal(c.isPlaying,false);
+ assert.equal(scheduled.size,0);
+});
