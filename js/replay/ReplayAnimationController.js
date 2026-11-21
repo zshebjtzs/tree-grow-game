@@ -1,23 +1,27 @@
 import { AnimationController } from '../presentation/AnimationController.js';
 import { createReplayAnimationTimeline } from './ReplayAnimationTimeline.js';
 
-/** Drives presentation-only animation frames for one replay action at a time. */
+/** Drives presentation-only animation frames and synchronized audio for one replay action. */
 export class ReplayAnimationController {
     constructor({
         session,
         renderFrame = () => {},
-        animationController = new AnimationController()
+        animationController = new AnimationController(),
+        audioScheduler = null
     } = {}) {
         if (!session || typeof session.getSnapshotViewAt !== 'function' ||
             typeof renderFrame !== 'function' || !animationController ||
             typeof animationController.play !== 'function' ||
             typeof animationController.cancel !== 'function' ||
-            typeof animationController.setSpeed !== 'function') {
+            typeof animationController.setSpeed !== 'function' ||
+            (audioScheduler && !['beginAction', 'onSegmentStart', 'onSegmentComplete', 'completeAction', 'cancel']
+                .every(method => typeof audioScheduler[method] === 'function'))) {
             throw new TypeError('回放动画控制器依赖项无效');
         }
         this.session = session;
         this.renderFrame = renderFrame;
         this.animations = animationController;
+        this.audioScheduler = audioScheduler;
         this.speed = 1;
         this.active = null;
         this.destroyed = false;
@@ -25,6 +29,7 @@ export class ReplayAnimationController {
 
     setSpeed(speed) {
         this.speed = this.animations.setSpeed(speed);
+        this.audioScheduler?.setSpeed?.(this.speed);
         return this.speed;
     }
 
@@ -32,16 +37,24 @@ export class ReplayAnimationController {
         if (this.destroyed) return false;
         this.cancel();
         const timeline = createReplayAnimationTimeline(this.session, step);
-        const token = { cancelled: false, cancelSegment: null };
+        const audioContext = this.audioScheduler?.beginAction(timeline) ?? null;
+        const token = { cancelled: false, cancelSegment: null, audioContext };
         this.active = token;
+        let completed = false;
         try {
             for (const segment of timeline.segments) {
                 if (token.cancelled) return false;
-                const completed = await this.#playSegment(segment, token, step);
-                if (!completed) return false;
+                this.audioScheduler?.onSegmentStart(audioContext, segment);
+                const segmentCompleted = await this.#playSegment(segment, token, step);
+                if (!segmentCompleted) return false;
+                this.audioScheduler?.onSegmentComplete(audioContext, segment);
             }
-            return !token.cancelled;
+            if (token.cancelled) return false;
+            this.audioScheduler?.completeAction(audioContext);
+            completed = true;
+            return true;
         } finally {
+            if (!completed && token.cancelled) this.audioScheduler?.cancel(audioContext);
             if (this.active === token) this.active = null;
         }
     }
@@ -90,11 +103,15 @@ export class ReplayAnimationController {
 
     cancel() {
         const token = this.active;
-        if (!token) return false;
-        token.cancelled = true;
-        token.cancelSegment?.();
-        this.active = null;
-        return true;
+        if (token) {
+            token.cancelled = true;
+            token.cancelSegment?.();
+            this.active = null;
+        }
+        // Also stop short sound tails from already-completed steps when the
+        // user pauses, seeks, replaces an action, or leaves the replay.
+        this.audioScheduler?.cancel(token?.audioContext ?? null);
+        return Boolean(token);
     }
 
     destroy() {
