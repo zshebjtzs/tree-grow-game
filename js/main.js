@@ -1280,6 +1280,8 @@ async function commitReplaySeek(step, { animateAdjacent = true } = {}) {
 }
 
 function installValidatedReplay(validated, fileName = '存档') {
+    replaySeekToken++;
+    replayNavigation.clear();
     replayController?.dispose();
     replayAnimationController?.destroy();
     replayAnimationController = null;
@@ -1354,6 +1356,8 @@ function installWorkerValidatedReplay(result, fileName) {
 }
 async function importReplayFile(file) {
     if (!file) return;
+    replaySeekToken++;
+    replayNavigation.clear();
     replayController?.pause();
     cancelReplayImport();
     const requestId = ++replayImportRequestId;
