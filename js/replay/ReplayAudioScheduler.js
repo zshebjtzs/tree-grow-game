@@ -121,9 +121,12 @@ export class ReplayAudioScheduler {
 
     cancel(context = this.active) {
         if (context && context !== this.active) return false;
+        const hadActiveContext = this.active !== null;
         if (this.active) this.active.cancelled = true;
         this.active = null;
-        try { this.audio.stopAll?.(); } catch { /* Audio must not block replay. */ }
-        return true;
+        if (hadActiveContext) {
+            try { this.audio.stopAll?.(); } catch { /* Audio must not block replay. */ }
+        }
+        return hadActiveContext;
     }
 }
