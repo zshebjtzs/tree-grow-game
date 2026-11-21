@@ -1000,6 +1000,7 @@ modeSelect.addEventListener('change', syncPveSetupFields);
 
 function showAppScreen(screen) {
     if (screen !== 'replay') {
+        replaySeekToken++;
         replayNavigation.clear();
         if (replayController?.isPlaying) replayController.pause();
         else replayAnimationController?.cancel();
@@ -1416,7 +1417,7 @@ replayFileInput?.addEventListener('change', event => {
     event.target.value = '';
     importReplayFile(file);
 });
-replayFirstBtn?.addEventListener('click', () => { replayNavigation.clear(); replayController?.first(); });
+replayFirstBtn?.addEventListener('click', () => { replaySeekToken++; replayNavigation.clear(); replayController?.first(); });
 replayPrevBtn?.addEventListener('click', () => {
     if (!replaySession) return;
     const base = replayNavigation.getBaseStep(replaySession.currentStep);
@@ -1427,9 +1428,10 @@ replayNextBtn?.addEventListener('click', () => {
     const base = replayNavigation.getBaseStep(replaySession.currentStep);
     void commitReplaySeek(base + 1);
 });
-replayLastBtn?.addEventListener('click', () => { replayNavigation.clear(); replayController?.last(); });
+replayLastBtn?.addEventListener('click', () => { replaySeekToken++; replayNavigation.clear(); replayController?.last(); });
 replayPlayBtn?.addEventListener('click', () => {
     if (!replayController) return;
+    replaySeekToken++;
     replayNavigation.clear();
     if (replayController.isPlaying) replayController.pause();
     else replayController.play();
