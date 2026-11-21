@@ -41,10 +41,10 @@ export class ReplayController {
         else this.#schedule();
         return true;
     }
-    pause(){
+    pause({cancelAnimation=true}={}){
         if(this.timerId!==null){if(this.animateStep)this.scheduler.clearTimeout(this.timerId);else this.scheduler.clearInterval(this.timerId);this.timerId=null;}
         const wasPlaying=this.isPlaying;this.isPlaying=false;
-        if(this.animateStep){this.playbackToken++;this.cancelAnimation();}
+        if(this.animateStep){this.playbackToken++;if(cancelAnimation)this.cancelAnimation();}
         if(wasPlaying)this.#notify('pause',this.#currentSnapshot());
         return wasPlaying;
     }
@@ -71,7 +71,11 @@ export class ReplayController {
             if(!completed){if(this.isPlaying&&token===this.playbackToken)this.pause();return;}
             if(!this.isPlaying||token!==this.playbackToken)return;
             const snapshot=this.#goToSessionStep(toStep);this.#notify('step',snapshot);
-            if(!this.canGoNext){this.pause();return;}
+            if(!this.canGoNext){
+                // The final action has completed; let its short audio tail finish.
+                this.pause({cancelAnimation:false});
+                return;
+            }
             this.#scheduleAnimatedContinuation();
         }catch(error){if(token===this.playbackToken){this.pause();this.onError(error);}}
     }
