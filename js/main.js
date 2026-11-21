@@ -47,6 +47,10 @@ let replayMetadata = null;
 let replayImportWorker = null;
 let replayImportRequestId = 0;
 let replayTimelineEntries = [];
+let replayPreviewStep = null;
+let replayDragStartStep = null;
+let replayDragActive = false;
+let replaySeekToken = 0;
 const REPLAY_TIMELINE_ROW_HEIGHT = 44;
 let presentation;
 let hoverAreaId = null;
@@ -1062,7 +1066,7 @@ function renderReplayTimelineWindow() {
         const li = document.createElement('li');
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'replay-action-item' + (entry.step === replaySession.currentStep ? ' active' : '');
+        button.className = 'replay-action-item' + (entry.step === (replayPreviewStep ?? replaySession.currentStep) ? ' active' : '');
         button.dataset.step = String(entry.step);
         const stepLabel = document.createElement('span');
         stepLabel.className = 'replay-action-index';
@@ -1075,7 +1079,7 @@ function renderReplayTimelineWindow() {
         sub.textContent = entry.detail;
         copy.append(heading, sub);
         button.append(stepLabel, copy);
-        button.addEventListener('click', () => replayController?.goTo(entry.step));
+        button.addEventListener('click', () => { void commitReplaySeek(entry.step); });
         li.appendChild(button);
         replayActionList.appendChild(li);
     }
@@ -1140,6 +1144,7 @@ function renderReplayStats(gameState, snapshot) {
 
 function renderReplayPosition(snapshot, step) {
     if (!replaySession || !replayMapManager || !replayMetadata) return;
+    replayPreviewStep = null;
     const replayGame = GameState.fromJSON(snapshot.gameState);
     replayDrawer.renderNodes(replayGame.getAliveNodes(), null, [], replayMapManager.portals);
     const record = step > 0 ? replaySession.getActionViewAt(step) : null;
@@ -1207,6 +1212,48 @@ function renderReplayPosition(snapshot, step) {
         }
         replayActionDetail.appendChild(eventList);
     }
+}
+
+function renderReplayPreview(step) {
+    if (!replaySession || !replayMapManager || !replayMetadata) return;
+    const boundedStep = Math.max(0, Math.min(replaySession.totalSteps, Math.trunc(step)));
+    const snapshot = replaySession.getSnapshotViewAt(boundedStep);
+    const replayGame = GameState.fromJSON(snapshot.gameState);
+    replayPreviewStep = boundedStep;
+    replayDrawer.renderNodes(replayGame.getAliveNodes(), null, [], replayMapManager.portals);
+    replayCurrentStep.textContent = String(boundedStep);
+    replayProgress.value = String(boundedStep);
+    replayPositionMeta.textContent = `预览第 ${boundedStep} / ${replaySession.totalSteps} 步 · 松开以定位`;
+    ensureReplayTimelineStepVisible(boundedStep);
+}
+
+async function commitReplaySeek(step, { animateAdjacent = true } = {}) {
+    if (!replaySession || !replayController) return false;
+    const target = Math.max(0, Math.min(replaySession.totalSteps, Math.trunc(Number(step))));
+    const from = replaySession.currentStep;
+    replayDragActive = false;
+    replayPreviewStep = null;
+    const token = ++replaySeekToken;
+    replayController.pause();
+    if (target === from) {
+        renderReplayPosition(replaySession.getCurrentSnapshotView(), from);
+        return true;
+    }
+    if (animateAdjacent && target === from + 1 && replayAnimationController) {
+        try {
+            const completed = await replayAnimationController.playStep(target);
+            if (token !== replaySeekToken) return false;
+            if (completed) {
+                replayController.goTo(target);
+                return true;
+            }
+        } catch (error) {
+            console.error('回放定位动画失败：', error);
+        }
+    }
+    if (token !== replaySeekToken) return false;
+    replayController.goTo(target);
+    return true;
 }
 
 function installValidatedReplay(validated, fileName = '存档') {
@@ -1347,7 +1394,7 @@ replayFileInput?.addEventListener('change', event => {
 });
 replayFirstBtn?.addEventListener('click', () => replayController?.first());
 replayPrevBtn?.addEventListener('click', () => replayController?.previous());
-replayNextBtn?.addEventListener('click', () => replayController?.next());
+replayNextBtn?.addEventListener('click', () => { void commitReplaySeek(replaySession?.currentStep + 1); });
 replayLastBtn?.addEventListener('click', () => replayController?.last());
 replayPlayBtn?.addEventListener('click', () => {
     if (!replayController) return;
@@ -1355,9 +1402,42 @@ replayPlayBtn?.addEventListener('click', () => {
     else replayController.play();
     renderReplayPosition(replaySession.getCurrentSnapshot(), replaySession.currentStep);
 });
-replayProgress?.addEventListener('input', event => {
-    if (replayController) replayController.goTo(Number(event.target.value));
+replayProgress?.addEventListener('pointerdown', () => {
+    if (!replaySession) return;
+    replayController?.pause();
+    replayDragStartStep = replaySession.currentStep;
+    replayDragActive = true;
 });
+replayProgress?.addEventListener('input', event => {
+    if (!replaySession) return;
+    if (!replayDragActive) {
+        replayController?.pause();
+        replayDragStartStep = replaySession.currentStep;
+        replayDragActive = true;
+    }
+    renderReplayPreview(Number(event.target.value));
+});
+function finishReplayTimelineDrag() {
+    if (!replayDragActive || replayDragStartStep === null) return;
+    const target = Number(replayProgress.value);
+    replayDragActive = false;
+    replayDragStartStep = null;
+    void commitReplaySeek(target, { animateAdjacent: true });
+}
+replayProgress?.addEventListener('pointerup', finishReplayTimelineDrag);
+replayProgress?.addEventListener('pointercancel', finishReplayTimelineDrag);
+replayProgress?.addEventListener('change', finishReplayTimelineDrag);
+replayProgress?.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) return;
+    if (!replayDragActive && replaySession) {
+        replayController?.pause();
+        replayDragStartStep = replaySession.currentStep;
+        replayDragActive = true;
+    }
+});
+replayProgress?.addEventListener('keyup', finishReplayTimelineDrag);
+window.addEventListener('pointerup', finishReplayTimelineDrag, { passive: true });
+window.addEventListener('pointercancel', finishReplayTimelineDrag, { passive: true });
 replaySpeedSelect?.addEventListener('change', event => {
     replayController?.setSpeed(Number(event.target.value));
 });
