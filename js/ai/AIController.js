@@ -103,14 +103,8 @@ export class AIController {
             const tacticallyRanked = ranked.filter(move => defenseSet.has(move));
             if (tacticallyRanked.length < ranked.length) selectionReason = 'defense-priority';
 
-            if (this.profile.selection === 'varied') {
-                const pool = tacticallyRanked.slice(0, Math.min(4, tacticallyRanked.length));
-                selectedMove = pool[Math.floor(Math.random() * pool.length)];
-            } else if (this.profile.selection === 'weighted') {
-                selectedMove = this._weightedChoice(tacticallyRanked);
-            } else {
-                selectedMove = this._searchHard(game, tacticallyRanked, playerSide, bases);
-            }
+            selectedMove = this._searchHard(game, tacticallyRanked, playerSide, bases);
+            selectionReason = 'search-selection';
         }
 
         this.lastDecisionExplanation = this._createDecisionExplanation(
@@ -353,7 +347,9 @@ export class AIController {
     }
 
     _searchHard(game, rankedMoves, side, bases) {
-        const rootMoves = rankedMoves.slice(0, this.profile.searchWidth);
+        // Search every legal root candidate; static ordering must not permanently
+        // discard a move before the search can evaluate its consequences.
+        const rootMoves = rankedMoves;
         const preparedChildren = new WeakMap();
         const preparedMoveOrder = new WeakMap();
         const positionKeyCache = new WeakMap();
@@ -432,16 +428,4 @@ export class AIController {
         return result.move || rootMoves[0];
     }
 
-    _weightedChoice(ranked) {
-        const top = ranked.slice(0, Math.min(8, ranked.length));
-        const floor = Math.min(...top.map(move => move.score));
-        const weights = top.map(move => Math.max(1, move.score - floor + 12));
-        const total = weights.reduce((sum, weight) => sum + weight, 0);
-        let pick = Math.random() * total;
-        for (let i = 0; i < top.length; i++) {
-            pick -= weights[i];
-            if (pick <= 0) return top[i];
-        }
-        return top[0];
-    }
 }
