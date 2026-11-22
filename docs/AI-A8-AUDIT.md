@@ -181,3 +181,30 @@ npm run analyze:ai-save -- ./match.sav --side blue
 需要注意：上述工作完成了静态 API/数据结构核对，并未执行 Node 分析器。反事实枚举仍然是单层对手回应分析，不等于完整 minimax；且候选生成、逐个模拟和回应枚举可能使完整运行耗时明显高于 AI 本身的一次决策耗时。
 
 **当前仍未完成的证据项：** 在本地项目工作区执行上传存档，取得六档在四个蓝方历史决策局面的选择与风险报告；随后用旧版代码在完全相同局面上运行 Hard/Expert 基准。未完成这两项前，不进入 A8.2 的算法修复与参数校准。
+
+
+### A8.1 新旧版本同局面对照工具
+
+为避免把旧版 AI 源码复制进新版目录，分析器新增可选参数 `--baseline-controller`，动态加载独立旧版工作树中的 `js/ai/AIController.js`。该模块会从其自身目录解析旧版的评估器、难度配置、搜索器和规则依赖，因此不需要把旧版实现混入当前分支。
+
+建议在仓库本地执行：
+
+```powershell
+git worktree add ..\tree-grow-legacy main
+npm run analyze:ai-save -- .\growth_tree_save.sav --side blue --difficulty hard,expert --baseline-controller ..\tree-grow-legacy\js\ai\AIController.js
+```
+
+若本地尚未更新 `main`，先执行 `git fetch origin main`，再创建 worktree。执行后可用以下命令移除临时工作树：
+
+```powershell
+git worktree remove ..\tree-grow-legacy
+```
+
+报告中的 `baseline.hard` 和 `baseline.expert` 分别记录旧版 Hard / Expert 在同一历史快照上的选招、是否匹配历史行动、选招合法性、单回合对手反事实风险和搜索统计；`decisions` 则保留当前版本六档决策结果。两边均使用当前存档的地图邻接和历史快照。
+
+比较边界：
+- 旧版只支持 easy / medium / hard / expert；本次只运行旧版 Hard / Expert。
+- 旧版 AI 的搜索与评估模块从独立 worktree 加载；共享的地图种子、存档快照和正式游戏规则数据保持一致。
+- 单回合风险只表示对手存在可造成相应损失的合法回应，不代表对手必然选择该回应。
+- 旧版与新版的决策耗时受本机环境、运行顺序和 JIT 预热影响；棋力判断应优先比较行动及其后续局面，不以单次毫秒值排序。
+- 本次工具改动不修改 AI 选招、评估权重或搜索预算。PR #33 继续保持 Open。
