@@ -23,6 +23,8 @@ export class TreeGrowAIAdapter {
         this.positionEvaluator = new PositionEvaluator({
             adjacency: this.adjacency,
             distanceToBase: (...args) => this.distanceToBase(...args),
+            softDistanceToBase: (...args) => this.softDistanceToBase(...args),
+            getGrowthMetrics: (...args) => this.getGrowthMetrics(...args),
             simulateMove: (...args) => this.simulateMove(...args),
             profile
         });
@@ -220,6 +222,131 @@ export class TreeGrowAIAdapter {
 
         positionCache.set(cacheKey, best);
         return best;
+    }
+
+    softDistanceToBase(game, side, baseId) {
+        let positionCache = this.distanceCache.get(game);
+        if (!positionCache) {
+            positionCache = new Map();
+            this.distanceCache.set(game, positionCache);
+        }
+        const cacheKey = `soft:${side}:${baseId}`;
+        if (positionCache.has(cacheKey)) return positionCache.get(cacheKey);
+
+        const enemy = side === 'red' ? 'blue' : 'red';
+        const enemyOccupied = new Set(
+            game.getAliveNodesByOwner(enemy).map(node => node.areaId)
+        );
+        const distances = new Map();
+        const heap = [];
+        const push = item => {
+            heap.push(item);
+            let index = heap.length - 1;
+            while (index > 0) {
+                const parent = Math.floor((index - 1) / 2);
+                if (heap[parent].distance <= item.distance) break;
+                heap[index] = heap[parent];
+                index = parent;
+            }
+            heap[index] = item;
+        };
+        const pop = () => {
+            const first = heap[0];
+            const last = heap.pop();
+            if (heap.length) {
+                let index = 0;
+                while (true) {
+                    const left = index * 2 + 1;
+                    const right = left + 1;
+                    if (left >= heap.length) break;
+                    const child = right < heap.length &&
+                        heap[right].distance < heap[left].distance ? right : left;
+                    if (heap[child].distance >= last.distance) break;
+                    heap[index] = heap[child];
+                    index = child;
+                }
+                heap[index] = last;
+            }
+            return first;
+        };
+
+        for (const node of game.getAliveNodesByOwner(side)) {
+            if (distances.has(node.areaId)) continue;
+            distances.set(node.areaId, 0);
+            push({ areaId: node.areaId, distance: 0 });
+        }
+
+        let best = Infinity;
+        while (heap.length) {
+            const current = pop();
+            if (current.distance !== distances.get(current.areaId)) continue;
+            if (current.areaId === baseId) {
+                best = current.distance;
+                break;
+            }
+            for (const next of this.adjacency[current.areaId] || []) {
+                const stepCost = next !== baseId && enemyOccupied.has(next) ? 3 : 1;
+                const nextDistance = current.distance + stepCost;
+                if (nextDistance >= (distances.get(next) ?? Infinity)) continue;
+                distances.set(next, nextDistance);
+                push({ areaId: next, distance: nextDistance });
+            }
+        }
+
+        positionCache.set(cacheKey, best);
+        return best;
+    }
+
+    getGrowthMetrics(game, side, bases) {
+        const previousTurn = game.currentTurn;
+        this.setSideToMove(game, side);
+        try {
+            const context = this.ruleEngine.createGrowthContext(game, side);
+            const enemy = side === 'red' ? 'blue' : 'red';
+            const enemyBaseId = bases[enemy];
+            const growthParentIds = new Set();
+            let baseThreatCount = 0;
+
+            for (const parent of game.getAliveNodesByOwner(side)) {
+                if (parent.isFrozen || (parent.isRoot && parent.hasUsedRootGrowth)) continue;
+                const targets = parent.isRoot && !parent.hasUsedRootGrowth &&
+                    parent.childrenIds.length === 0
+                    ? this.areaCenters.map((_, index) => index + 1)
+                    : (this.adjacency[parent.areaId] || []);
+                const options = {
+                    ownBaseId: bases[side],
+                    enemyBaseId,
+                    context
+                };
+
+                let hasLegalMove = false;
+                if (targets.includes(enemyBaseId)) {
+                    const result = this.ruleEngine.canGrow(game, parent, enemyBaseId, options);
+                    if (result.allowed) {
+                        baseThreatCount++;
+                        hasLegalMove = true;
+                    }
+                }
+                if (!hasLegalMove) {
+                    for (const targetAreaId of targets) {
+                        if (targetAreaId === enemyBaseId) continue;
+                        if (this.ruleEngine.canGrow(game, parent, targetAreaId, options).allowed) {
+                            hasLegalMove = true;
+                            break;
+                        }
+                    }
+                }
+                if (hasLegalMove) growthParentIds.add(parent.id);
+            }
+
+            return {
+                growthHeadroom: growthParentIds.size,
+                baseThreatCount,
+                growthParentIds
+            };
+        } finally {
+            this.setSideToMove(game, previousTurn);
+        }
     }
 
     simulateMove(game, move, side, bases, { alreadyValidated = false } = {}) {
