@@ -68,7 +68,7 @@ test('AI rejects an unsupported player side and invalid difficulty', () => {
 });
 
 
-test('all three difficulty levels only return moves accepted by RuleEngine', () => {
+test('all six difficulty levels only return moves accepted by RuleEngine', () => {
     for (const difficulty of ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
@@ -497,7 +497,7 @@ test('deep search receives every legal root candidate without a static width cut
 });
 
 
-test('all existing difficulties execute the shared search pipeline on non-terminal positions', () => {
+test('all six difficulties execute the shared search pipeline on non-terminal positions', () => {
     for (const difficulty of ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
