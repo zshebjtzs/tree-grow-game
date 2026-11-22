@@ -50,12 +50,14 @@ The current four levels are:
 
 | Level | Maximum depth | Time budget | Node budget |
 |---|---:|---:|---:|
+| beginner | 1 | 25 ms | 500 |
 | easy | 2 | 50 ms | 1,500 |
 | medium | 4 | 150 ms | 6,000 |
+| advanced | 5 | 300 ms | 12,000 |
 | hard | 7 | 700 ms | 30,000 |
 | expert | 8 | 1,200 ms | 60,000 |
 
-These are initial tuning values, not proven strength ratings. Tournament results and target-device measurements must guide later calibration.
+These are initial tuning values, not proven strength ratings. All six levels share the same evaluation weights and search implementation. Tournament results and target-device measurements must guide later calibration.
 
 ## Position-key invariant
 
