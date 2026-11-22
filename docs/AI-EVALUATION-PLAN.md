@@ -38,6 +38,20 @@ Do not duplicate these rules in the evaluator. Legal growth and base-threat coun
 - Use the same weights for all six difficulty levels. Difficulty remains a search-budget distinction.
 - Initial weights are calibration seeds, not final values. Tune against reproducible maps and color-swapped games rather than visual intuition.
 
+Current shared structural weights in `DifficultyProfiles.js`:
+
+| Feature | Weight |
+|---|---:|
+| root safety | 2,500 |
+| vulnerable root-chain risk | 80 |
+| soft-distance fallback | 0.25 |
+| growth headroom | 12 |
+| immediate base threat | 700 |
+| pre-fortress siege | 350 |
+| fortress siege | 1,500 |
+
+All six levels use these same values. They remain calibration seeds, not empirically established constants.
+
 ## Deferred metrics
 
 Two proposed metrics are intentionally deferred:
@@ -87,4 +101,17 @@ The structural-metric cache now defers `softDistanceToBase` until evaluation act
 
 This preserves the evaluation formula and all difficulty budgets; it changes when the fallback metric is computed, not its value. A regression test verifies zero fallback calls when both hard routes are reachable and exactly one call when only one side's route is blocked.
 
-Acceptance requires the existing six-tier / three-fixture benchmark to complete and show no regression in selected moves, evaluation values, or completed search depth. Performance impact must be measured on the same CI environment; no speedup is assumed before the run completes.
+CI result (same Ubuntu / Node 20 environment): 232 tests passed; six-tier benchmarks, full 30-game paired round robin, build, Pages verification, and Windows Desktop Build passed.
+
+Sparse-fixture PVS average time before/after lazy fallback:
+
+| Difficulty | Before | After | Change |
+|---|---:|---:|---:|
+| beginner | 1.044 ms | 0.951 ms | -8.9% |
+| easy | 2.909 ms | 2.484 ms | -14.6% |
+| medium | 13.155 ms | 13.172 ms | +0.1% |
+| advanced | 27.841 ms | 24.449 ms | -12.2% |
+| hard | 146.296 ms | 128.928 ms | -11.9% |
+| expert | 304.150 ms | 298.439 ms | -1.9% |
+
+Configured search depths remained unchanged. This confirms the lazy fallback avoids some unnecessary work, but the improvement is fixture-dependent and does not fully offset the structural-evaluation cost. Continue with A4.2 rather than reducing search budgets.
