@@ -137,7 +137,11 @@ export class PositionEvaluator {
         const enemyRoots = game.getPlayerRootNodes(opponent).length;
         if (ownRoots === 0) return -WIN_SCORE;
         if (enemyRoots === 0) return WIN_SCORE;
-        if (game.isGameOver) return 0;
+        if (game.isGameOver) {
+            // Base invasion ends the game before the adapter switches turns.
+            // In that terminal state, currentTurn therefore identifies the winner.
+            return game.currentTurn === perspective ? WIN_SCORE : -WIN_SCORE;
+        }
 
         const ownDistance = this.distanceToBase(game, perspective, bases[opponent]);
         const enemyDistance = this.distanceToBase(game, opponent, bases[perspective]);
