@@ -74,6 +74,7 @@ function analyzeReplies(controller, state, move, side, bases) {
             opponentReplies: 0,
             maxRootLoss: 0,
             maxNodeLoss: 0,
+            maxCascadeLoss: 0,
             rootLossReplies: 0,
             largestLossReply: null
         };
@@ -86,6 +87,7 @@ function analyzeReplies(controller, state, move, side, bases) {
     const replies = adapter.generateMoves(replyState, enemy, bases);
     let maxRootLoss = 0;
     let maxNodeLoss = 0;
+    let maxCascadeLoss = 0;
     let rootLossReplies = 0;
     let largestLossReply = null;
 
@@ -98,6 +100,7 @@ function analyzeReplies(controller, state, move, side, bases) {
         const rootLoss = before.roots - remaining.roots;
         const nodeLoss = before.nodes - remaining.nodes;
         if (rootLoss > 0) rootLossReplies++;
+        maxCascadeLoss = Math.max(maxCascadeLoss, Math.max(0, nodeLoss - rootLoss - 1));
         if (rootLoss > maxRootLoss || (rootLoss === maxRootLoss && nodeLoss > maxNodeLoss)) {
             maxRootLoss = rootLoss;
             maxNodeLoss = nodeLoss;
@@ -116,6 +119,7 @@ function analyzeReplies(controller, state, move, side, bases) {
         opponentReplies: replies.length,
         maxRootLoss,
         maxNodeLoss,
+        maxCascadeLoss,
         rootLossReplies,
         largestLossReply
     };
