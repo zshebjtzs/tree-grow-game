@@ -280,6 +280,6 @@ test('first-root growth candidate generation is limited to reachable unoccupied 
         enemyBaseId: 4,
         context
     }).allowed);
-    assert.deepEqual(legal, [2, 3, 4],
+    assert.deepEqual(legal.sort((a, b) => a - b), [2, 3, 4],
         'candidate pruning must preserve the exact legal root-growth targets');
 });
