@@ -1,6 +1,6 @@
 # AI A0：现状审计与棋力基线
 
-状态：A0–A3.2 已完成当前轮实现与验证；A4.1 惰性软距离优化已通过 CI；A4.2 根层 Aspiration Window 已实现，等待 CI 和性能基准验证。
+状态：A0–A3.2、A4.1 和 A4.2 均已通过当前轮 CI；后续继续优化搜索效率并完成多种子棋力校准。
 
 审计基准：`main`，提交 `fb49e70d844a1c2687c23a68ec902603e4c3a387`（2026-11-22）。
 
@@ -337,7 +337,7 @@ A4.1 将 `softDistanceToBase` 改为惰性计算：当硬路径可达时，不�
 六档在 sparse / branching fixture 上均保持配置深度；hard/expert 的 Alpha-Beta 与 PVS 一致性检查通过。优化收益并不均匀：medium 基本不变，expert 仅小幅改善。A4.1 证明了避免不必要 Dijkstra 的有效性，但还不足以消除 A3 指标带来的整体评估开销。
 
 
-## 14. A4.2：根层 Aspiration Window（CI 验证中）
+## 14. A4.2：根层 Aspiration Window（已通过 CI）
 
 迭代加深在第二层及以后使用上一轮完整搜索值的 ±150 分作为窄窗口；若结果 fail-high 或 fail-low，则用全窗口重新搜索。窄窗口失败的结果不会被当作已完成深度提交。
 
@@ -348,4 +348,25 @@ A4.1 将 `softDistanceToBase` 改为惰性计算：当硬路径可达时，不�
 - 新增 aspiration re-search、fail-high、fail-low 统计。
 - 新增 fail-high、fail-low 与全窗口结果一致性测试。
 
-本阶段的目标是减少稳定迭代中的无效搜索，不是减少搜索深度。最新代码尚待 CI 验证，不能预先声称节点数或耗时已经下降。
+本阶段的目标是减少稳定迭代中的无效搜索，不是减少搜索深度。
+
+### A4.2 CI 验证与性能结果
+
+提交 `6889876f726b8e640278f58cedfc286a7d1151ce` 的 CI：
+- `npm test`：234 项通过，0 失败。
+- 六档三局面 AI 性能基准、回放基准、六局锦标赛冒烟：通过。
+- 构建与 Pages 资源验证：通过。
+- Windows Desktop Build：通过。
+
+同一 sparse fixture 下，A4.1 与 A4.2 的 PVS 平均耗时：
+
+| 难度 | A4.1 | A4.2 | 变化 |
+|---|---:|---:|---:|
+| beginner | 0.951 ms | 0.850 ms | -10.6% |
+| easy | 2.484 ms | 2.556 ms | +2.9% |
+| medium | 13.172 ms | 12.289 ms | -6.7% |
+| advanced | 24.449 ms | 20.889 ms | -14.6% |
+| hard | 128.928 ms | 113.892 ms | -11.7% |
+| expert | 298.439 ms | 283.636 ms | -5.0% |
+
+六档完成深度保持不变；hard/expert 的 Alpha-Beta 与 PVS 结果一致性检查通过。easy 的轻微波动可能来自测量噪声；本轮数据支持 Aspiration Window 在多数样本中有收益，但还不能证明所有局面都更快。后续应增加 aspiration re-search 统计，并在更丰富局面中验证。
