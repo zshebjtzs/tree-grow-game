@@ -22,11 +22,11 @@ export function createCombatEvent(gameState, attacker, defender, result) {
     if (freezeTarget) {
         outcome = 'branch-cut';
         title = '目标枝被切断';
-        description = `攻击沿父链追溯至最近的非根分叉点 #${freezeTarget.id}，目标枝及其后代被摧毁；该分叉点保留并进入冻结状态。`;
+        description = `攻击沿父链追溯至最近分叉点（非根节点）#${freezeTarget.id}，目标枝及其后代被摧毁；该分叉点保留并进入冻结状态。`;
     } else if (deletedRoot) {
         outcome = 'tree-destroyed';
         title = '整棵防守树被摧毁';
-        description = `攻击目标 #${defender.id} 沿父链回溯未找到其他可保留的非根分叉点，防守方根节点 #${deletedRoot.id} 及整棵树被摧毁。`;
+        description = `攻击目标 #${defender.id} 沿父链回溯，找不到可保留的分叉点，防守方根节点 #${deletedRoot.id} 及整棵树被摧毁。`;
     } else {
         // Defensive fallback for legacy or externally constructed results.
         outcome = 'branch-destroyed';
