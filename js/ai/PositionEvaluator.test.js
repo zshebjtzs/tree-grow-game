@@ -95,6 +95,7 @@ test('growth headroom, base threats, and siege metrics use legal RuleEngine acti
     assert.equal(JSON.stringify(game.toJSON()), before);
 
     const fortressGame = game.clone();
+    fortressGame.currentTurn = 'red';
     const fortress = fortressGame.addNode(attacker.id, 60, 0, 6, 'red');
     assert.ok(fortress);
     const fortressMetrics = adapter.positionEvaluator.getStructuralMetrics(
