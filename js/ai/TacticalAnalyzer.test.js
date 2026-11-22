@@ -84,7 +84,7 @@ test('defense ranking avoids multi-node cascade when root risk is equal', () => 
                 ...position({ vulnerable: cascade }),
                 cascade,
                 getAliveNodesByOwner(owner) {
-                    return Array.from({ length: owner === 'blue' ? (cascade ? 1 : 4) : 1 }, (_, id) => ({ id }));
+                    return Array.from({ length: owner === 'blue' ? 4 : 1 }, (_, id) => ({ id }));
                 }
             };
         }
