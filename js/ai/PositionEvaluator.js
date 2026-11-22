@@ -141,10 +141,12 @@ export class PositionEvaluator {
             Number.isFinite(distance) ? Math.max(-260, 120 - distance * 24) : -260;
         const ownDistanceScore = Number.isFinite(ownDistance)
             ? distanceValue(ownDistance)
-            : softDistanceValue(ownMetrics.softDistanceToBase) * this.profile.softDistanceWeight;
+            : -260 + (softDistanceValue(ownMetrics.softDistanceToBase) + 260) *
+                this.profile.softDistanceWeight;
         const enemyDistanceScore = Number.isFinite(enemyDistance)
             ? distanceValue(enemyDistance)
-            : softDistanceValue(enemyMetrics.softDistanceToBase) * this.profile.softDistanceWeight;
+            : -260 + (softDistanceValue(enemyMetrics.softDistanceToBase) + 260) *
+                this.profile.softDistanceWeight;
 
         const ownStructure = this._structureValue(game, perspective);
         const enemyStructure = this._structureValue(game, opponent);
