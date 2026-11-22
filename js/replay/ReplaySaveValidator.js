@@ -2,6 +2,7 @@ import { GameState } from '../game/GameState.js';
 import { MatchHistory } from '../game/MatchHistory.js';
 import { MatchTracker } from '../game/MatchTracker.js';
 import { MapManager } from '../core/MapManager.js';
+import { DIFFICULTY_LEVELS } from '../ai/DifficultyProfiles.js';
 
 // Compare JSON-shaped values without constructing two additional full-size
 // serialized strings. Object key order is not semantically significant.
@@ -17,7 +18,6 @@ function same(a, b) {
     }
     return true;
 }
-const DIFFICULTIES = ['easy', 'medium', 'hard', 'expert'];
 
 function validateSnapshot(snapshot, mapManager, areaIds, redBaseId, blueBaseId) {
     if (!snapshot || typeof snapshot !== 'object' ||
@@ -82,7 +82,7 @@ export class ReplaySaveValidator {
         if (rawData.playerSide != null && !['red', 'blue'].includes(rawData.playerSide)) {
             throw new TypeError('存档玩家阵营字段无效');
         }
-        if (rawData.difficulty != null && !DIFFICULTIES.includes(rawData.difficulty)) {
+        if (rawData.difficulty != null && !DIFFICULTY_LEVELS.includes(rawData.difficulty)) {
             throw new TypeError('存档 AI 难度字段无效');
         }
 
