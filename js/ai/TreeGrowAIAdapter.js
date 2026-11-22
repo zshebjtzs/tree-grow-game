@@ -44,6 +44,88 @@ export class TreeGrowAIAdapter {
         return bases;
     }
 
+    isValidSide(side) {
+        return side === 'red' || side === 'blue';
+    }
+
+    setSideToMove(state, side) {
+        state.currentTurn = side;
+    }
+
+    getMoveKey(move) {
+        return `${move.parentNodeId}:${move.targetAreaId}`;
+    }
+
+    toPublicMove(move) {
+        return {
+            parentNodeId: move.parentNodeId,
+            targetAreaId: move.targetAreaId,
+            x: move.x,
+            y: move.y
+        };
+    }
+
+    createDecisionExplanation(game, move, side, bases, rankedMoves, selectionReason, searchStats) {
+        if (!move) return null;
+        const enemy = side === 'red' ? 'blue' : 'red';
+        const selected = rankedMoves.find(candidate =>
+            candidate.parentNodeId === move.parentNodeId &&
+            candidate.targetAreaId === move.targetAreaId
+        );
+        const next = selected?._nextState || this.simulateMove(
+            game, move, side, bases, { alreadyValidated: true }
+        );
+        const details = [];
+        let summary = '根据当前局面评估选择该行动。';
+
+        if (move.targetAreaId === bases[enemy]) {
+            summary = '该行动可以直接进入敌方基地并结束对局。';
+            details.push('检测到合法的立即获胜行动，战术规则优先选择了该行动。');
+        } else if (next) {
+            const beforeEnemyNodes = game.getAliveNodesByOwner(enemy).length;
+            const afterEnemyNodes = next.getAliveNodesByOwner(enemy).length;
+            const beforeEnemyRoots = game.getPlayerRootNodes(enemy).length;
+            const afterEnemyRoots = next.getPlayerRootNodes(enemy).length;
+            const removedNodes = beforeEnemyNodes - afterEnemyNodes;
+            const removedRoots = beforeEnemyRoots - afterEnemyRoots;
+            if (removedRoots > 0) details.push(`模拟战斗可摧毁对方 ${removedRoots} 个根节点。`);
+            if (removedNodes > 0) details.push(`模拟战斗可减少对方 ${removedNodes} 个存活节点。`);
+
+            const beforeDistance = this.distanceToBase(game, side, bases[enemy]);
+            const afterDistance = this.distanceToBase(next, side, bases[enemy]);
+            if (Number.isFinite(beforeDistance) && Number.isFinite(afterDistance) && afterDistance < beforeDistance) {
+                details.push(`推进路线：到敌方基地的图论距离从 ${beforeDistance} 缩短至 ${afterDistance}。`);
+            }
+
+            const beforeSafety = this.distanceToBase(game, enemy, bases[side]);
+            const afterSafety = this.distanceToBase(next, enemy, bases[side]);
+            if (Number.isFinite(beforeSafety) && Number.isFinite(afterSafety) && afterSafety > beforeSafety) {
+                details.push(`防守收益：对手到己方基地的最短可行距离从 ${beforeSafety} 增加至 ${afterSafety}。`);
+            }
+
+            const beforeParent = game.getNode(move.parentNodeId);
+            const afterParent = next.getNode(move.parentNodeId);
+            if (beforeParent && afterParent && afterParent.childrenIds.length > beforeParent.childrenIds.length) {
+                details.push(`结构扩张：父节点 #${move.parentNodeId} 的子枝数增加至 ${afterParent.childrenIds.length}。`);
+            }
+        }
+
+        if (selectionReason === 'defense-priority') {
+            details.unshift('战术筛选优先保留能最大限度减少对手立即获胜机会的行动。');
+        }
+        if (!details.length) details.push('该行动在当前难度配置的候选评分中排名靠前。');
+        if (selectionReason === 'immediate-win') summary = '识别到立即获胜机会，优先执行胜利行动。';
+        else if (selectionReason === 'defense-priority') summary = '当前存在紧急威胁，优先选择防守效果最好的候选行动。';
+
+        const search = searchStats ? {
+            completedDepth: searchStats.completedDepth,
+            nodes: searchStats.nodes,
+            elapsedMs: searchStats.elapsedMs,
+            transpositionHits: searchStats.transpositionHits
+        } : null;
+        return { title: 'AI 行动分析', summary, details: details.slice(0, 4), search };
+    }
+
     getPositionKey(state) {
         return getPositionKey(state);
     }
