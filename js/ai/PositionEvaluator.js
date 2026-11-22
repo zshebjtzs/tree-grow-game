@@ -106,10 +106,21 @@ export class PositionEvaluator {
             }
         }
 
+        // Soft distance is only a fallback when the hard legal route is blocked.
+        // Keep it lazy so ordinary reachable positions avoid an unnecessary Dijkstra pass.
+        const evaluator = this;
+        let softDistanceResolved = false;
+        let softDistanceValue;
         const metrics = Object.freeze({
             unsafeRoots,
             rootChainRisk,
-            softDistanceToBase: this.softDistanceToBase(game, side, enemyBaseId),
+            get softDistanceToBase() {
+                if (!softDistanceResolved) {
+                    softDistanceValue = evaluator.softDistanceToBase(game, side, enemyBaseId);
+                    softDistanceResolved = true;
+                }
+                return softDistanceValue;
+            },
             growthHeadroom: growth.growthHeadroom,
             baseThreatCount: growth.baseThreatCount,
             siegePreFortressCount,
