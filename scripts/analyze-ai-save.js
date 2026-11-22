@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { performance } from 'node:perf_hooks';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { MapManager } from '../js/core/MapManager.js';
 import { GameState } from '../js/game/GameState.js';
 import { ReplaySaveValidator } from '../js/replay/ReplaySaveValidator.js';
@@ -22,15 +24,17 @@ function readSave(path) {
 }
 
 function parseArgs(argv) {
-    const options = { path: null, difficulties: [...DEFAULT_DIFFICULTIES], side: DEFAULT_AI_SIDE };
+    const options = { path: null, difficulties: [...DEFAULT_DIFFICULTIES], side: DEFAULT_AI_SIDE, baselineController: null };
     for (let index = 0; index < argv.length; index++) {
         const arg = argv[index];
         if (arg === '--difficulty') {
             options.difficulties = (argv[++index] || '').split(',').filter(Boolean);
         } else if (arg === '--side') {
             options.side = argv[++index];
+        } else if (arg === '--baseline-controller') {
+            options.baselineController = argv[++index] || null;
         } else if (arg === '--help' || arg === '-h') {
-            console.log('Usage: node scripts/analyze-ai-save.js <save.sav> [--difficulty beginner,easy,...] [--side red|blue]');
+            console.log('Usage: node scripts/analyze-ai-save.js <save.sav> [--difficulty beginner,easy,...] [--side red|blue] [--baseline-controller <legacy-worktree>/js/ai/AIController.js]');
             process.exit(0);
         } else if (!arg.startsWith('--') && options.path === null) {
             options.path = arg;
@@ -42,6 +46,9 @@ function parseArgs(argv) {
     if (!['red', 'blue'].includes(options.side)) throw new Error('Side must be red or blue.');
     for (const difficulty of options.difficulties) {
         if (!DIFFICULTY_LEVELS.includes(difficulty)) throw new Error(`Unknown difficulty: ${difficulty}`);
+    }
+    if (argv.includes('--baseline-controller') && !options.baselineController) {
+        throw new Error('Missing path after --baseline-controller.');
     }
     return options;
 }
@@ -114,7 +121,85 @@ function analyzeReplies(controller, state, move, side, bases) {
     };
 }
 
-function analyzePosition({ record, mapManager, bases, difficulties, side }) {
+
+function analyzeBaselineMove(controller, state, selectedMove, side, bases) {
+    if (!selectedMove) return null;
+    const legalMoves = controller._generateMoves(state, side, bases);
+    const move = legalMoves.find(candidate => moveMatchesRecord(candidate, selectedMove));
+    if (!move) return { legal: false, risk: null };
+
+    const enemy = side === 'red' ? 'blue' : 'red';
+    const afterMove = controller._simulateMove(
+        state, move, side, bases, { alreadyValidated: true }
+    );
+    if (!afterMove || afterMove.isGameOver) {
+        return {
+            legal: true,
+            risk: {
+                terminal: true,
+                opponentReplies: 0,
+                maxRootLoss: 0,
+                maxNodeLoss: 0,
+                rootLossReplies: 0,
+                largestLossReply: null
+            }
+        };
+    }
+
+    const before = countAlive(afterMove, side);
+    const replyState = afterMove.clone();
+    replyState.currentTurn = enemy;
+    const replies = controller._generateMoves(replyState, enemy, bases);
+    let maxRootLoss = 0;
+    let maxNodeLoss = 0;
+    let rootLossReplies = 0;
+    let largestLossReply = null;
+
+    for (const reply of replies) {
+        const afterReply = controller._simulateMove(
+            replyState, reply, enemy, bases, { alreadyValidated: true }
+        );
+        if (!afterReply) continue;
+        const remaining = countAlive(afterReply, side);
+        const rootLoss = before.roots - remaining.roots;
+        const nodeLoss = before.nodes - remaining.nodes;
+        if (rootLoss > 0) rootLossReplies++;
+        if (rootLoss > maxRootLoss || (rootLoss === maxRootLoss && nodeLoss > maxNodeLoss)) {
+            maxRootLoss = rootLoss;
+            maxNodeLoss = nodeLoss;
+            largestLossReply = {
+                parentNodeId: reply.parentNodeId,
+                targetAreaId: reply.targetAreaId,
+                isAttack: Boolean(reply.attacks),
+                rootLoss,
+                nodeLoss
+            };
+        }
+    }
+
+    return {
+        legal: true,
+        risk: {
+            terminal: false,
+            opponentReplies: replies.length,
+            maxRootLoss,
+            maxNodeLoss,
+            rootLossReplies,
+            largestLossReply
+        }
+    };
+}
+
+async function loadBaselineController(path) {
+    const moduleUrl = pathToFileURL(resolve(path)).href;
+    const module = await import(moduleUrl);
+    if (typeof module.AIController !== 'function') {
+        throw new TypeError('Baseline module does not export AIController.');
+    }
+    return module.AIController;
+}
+
+function analyzePosition({ record, mapManager, bases, difficulties, side, BaselineAIController }) {
     const game = GameState.fromJSON(record.before.gameState);
     if (game.currentTurn !== side) {
         throw new Error(`Action ${record.sequence}: expected ${side} to move, got ${game.currentTurn}`);
@@ -172,6 +257,33 @@ function analyzePosition({ record, mapManager, bases, difficulties, side }) {
         });
     }
 
+    let baseline = null;
+    if (BaselineAIController) {
+        baseline = {};
+        for (const difficulty of ['hard', 'expert']) {
+            const controller = new BaselineAIController(
+                difficulty,
+                mapManager.adjacency,
+                mapManager.areas.map(area => area.center)
+            );
+            const start = performance.now();
+            const selected = controller.getBestMove(snapshot, side);
+            const elapsedMs = performance.now() - start;
+            const tactical = analyzeBaselineMove(controller, game, selected, side, bases);
+            baseline[difficulty] = {
+                selectedMove: selected ? {
+                    parentNodeId: selected.parentNodeId,
+                    targetAreaId: selected.targetAreaId
+                } : null,
+                selectedMatchesHistorical: moveMatchesRecord(selected, record.action),
+                selectedMoveLegal: Boolean(tactical?.legal),
+                selectedMoveRisk: tactical?.risk || null,
+                elapsedMs: Number(elapsedMs.toFixed(2)),
+                searchStats: controller.lastSearchStats
+            };
+        }
+    }
+
     return {
         sequence: record.sequence,
         side: record.side,
@@ -181,12 +293,16 @@ function analyzePosition({ record, mapManager, bases, difficulties, side }) {
             red: countAlive(game, 'red'),
             blue: countAlive(game, 'blue')
         },
-        decisions: results
+        decisions: results,
+        baseline
     };
 }
 
-function main() {
+async function main() {
     const options = parseArgs(process.argv.slice(2));
+    const BaselineAIController = options.baselineController
+        ? await loadBaselineController(options.baselineController)
+        : null;
     const raw = readSave(options.path);
     // Validation reconstructs the map, validates all historical snapshots,
     // and checks that every action's before/after states form one valid chain.
@@ -210,7 +326,8 @@ function main() {
     const positions = selectedRecords.map(record => analyzePosition({
         record, mapManager, bases,
         difficulties: options.difficulties,
-        side: options.side
+        side: options.side,
+        BaselineAIController
     }));
 
     console.log(JSON.stringify({
@@ -233,7 +350,7 @@ function main() {
 }
 
 try {
-    main();
+    await main();
 } catch (error) {
     console.error(`AI save analysis failed: ${error.message}`);
     process.exitCode = 1;
