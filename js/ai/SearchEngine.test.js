@@ -401,3 +401,101 @@ test('PVS and aspiration windows match full-window alpha-beta across determinist
     assert.ok(totalAspirationResearches > 0,
         'the randomized sample should exercise fail-high or fail-low recovery');
 });
+
+
+test('budget exhaustion during aspiration re-search preserves the last completed depth', () => {
+    const engine = new SearchEngine({ now: () => 0 });
+    const result = engine.search({
+        rootState: { turn: 'red', phase: 'root', score: 0 },
+        rootMoves: ['a', 'b'],
+        maxDepth: 2,
+        maxNodes: 3,
+        timeBudgetMs: 100,
+        getPositionKey: state => `${state.phase}:${state.turn}:${state.rootMove || ''}`,
+        getMoveKey: move => move,
+        applyMove: (state, move) => state.phase === 'root'
+            ? { turn: 'blue', phase: 'reply', rootMove: move, score: 0 }
+            : { turn: 'red', phase: 'leaf', rootMove: state.rootMove,
+                score: state.rootMove === 'a' ? 500 : 400 },
+        generateMoves: state => state.phase === 'reply' ? ['reply'] : [],
+        isTerminal: state => state.phase === 'leaf',
+        evaluate: state => state.score,
+        orderMoves: (state, moves) => moves,
+        aspirationWindows: true,
+        aspirationWindow: 100
+    });
+
+    assert.equal(result.completedDepth, 1);
+    assert.equal(result.move, 'a');
+    assert.equal(result.value, 0);
+    assert.equal(result.aspirationResearches, 1);
+});
+
+test('PVS and aspiration match alpha-beta across random DAGs with transpositions', () => {
+    for (let seed = 101; seed <= 120; seed++) {
+        let randomState = seed >>> 0;
+        const random = () => {
+            randomState = (randomState * 1664525 + 1013904223) >>> 0;
+            return randomState / 0x100000000;
+        };
+        const nodes = new Map();
+        const layers = [];
+        for (let depth = 0; depth <= 4; depth++) {
+            const count = depth === 0 ? 1 : 5;
+            const layer = [];
+            for (let index = 0; index < count; index++) {
+                const id = `dag-${seed}-d${depth}-n${index}`;
+                const node = {
+                    id,
+                    depth,
+                    currentTurn: depth % 2 === 0 ? 'red' : 'blue',
+                    isGameOver: depth === 4,
+                    score: Math.floor(random() * 2001) - 1000,
+                    children: []
+                };
+                nodes.set(id, node);
+                layer.push(node);
+            }
+            layers.push(layer);
+        }
+        for (let depth = 0; depth < 4; depth++) {
+            for (const node of layers[depth]) {
+                const candidates = [...layers[depth + 1]];
+                for (let index = candidates.length - 1; index > 0; index--) {
+                    const target = Math.floor(random() * (index + 1));
+                    [candidates[index], candidates[target]] = [candidates[target], candidates[index]];
+                }
+                const childCount = 2 + Math.floor(random() * 3);
+                node.children = candidates.slice(0, childCount).map(child => child.id);
+            }
+        }
+
+        const root = layers[0][0];
+        const run = principalVariationSearch => new SearchEngine({ now: () => 0 }).search({
+            rootState: root,
+            rootMoves: [...root.children],
+            isTerminal: state => state.isGameOver,
+            getSideToMove: state => state.currentTurn,
+            getPositionKey: state => state.id,
+            getMoveKey: move => move,
+            applyMove: (state, move) => nodes.get(move),
+            generateMoves: state => state.children,
+            evaluate: state => state.score,
+            orderMoves: (state, moves) => moves,
+            maxDepth: 4,
+            timeBudgetMs: 1000,
+            maxNodes: 100000,
+            principalVariationSearch,
+            aspirationWindows: true,
+            aspirationWindow: 25
+        });
+
+        const alphaBeta = run(false);
+        const pvs = run(true);
+        assert.equal(alphaBeta.completedDepth, 4, `DAG seed ${seed} must complete depth 4`);
+        assert.equal(pvs.completedDepth, 4, `PVS DAG seed ${seed} must complete depth 4`);
+        assert.equal(pvs.value, alphaBeta.value, `DAG seed ${seed} changed minimax value`);
+        assert.equal(pvs.move, alphaBeta.move, `DAG seed ${seed} changed root move`);
+        assert.ok(alphaBeta.transpositionHits > 0, `DAG seed ${seed} should exercise transpositions`);
+    }
+});
