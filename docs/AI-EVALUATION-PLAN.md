@@ -12,7 +12,7 @@ The first implementation will add these metrics, all derived from the live JS st
 
 | Metric | Definition | Intended signal |
 |---|---|---|
-| `unsafeRoots` | Count roots whose first child is absent or has fewer than two children | A root can still be lost through a single-chain attack |
+| `unsafeRoots` | Count roots whose first child is absent or is not a fortress (`getDegree() <= 3`) | A root can still be lost by attacking its first child |
 | `rootChainRisk` | Number of nodes in vulnerable single-child chains below unsafe roots, stopping at a branch or leaf | Approximate cascade-loss magnitude |
 | `softDistanceToBase` | Multi-source Dijkstra from owned nodes; empty area cost 1, enemy-occupied intermediate area cost 3, enemy base remains the terminal target | Preserve a useful distance gradient when hard paths are blocked |
 | `growthHeadroom` | Number of distinct owned parent nodes with at least one legal growth move | Measure expansion capacity without rewarding raw node count alone |
@@ -23,6 +23,7 @@ Definitions must follow the actual JS rules:
 
 - Combat's stopping point is the nearest **ancestor** that is non-root and has at least two children; the attacked node itself is not a stopping point.
 - A fortress is currently protected from attack only when `getDegree() > 3`.
+- A first child with two children has degree 3 and is still attackable. Its branching protects descendants when they are attacked, but it does not protect the root if the first child itself is attacked. Therefore root safety requires the first child itself to be a fortress (degree greater than 3), not merely a two-way fork. This corrects the earlier helper-document heuristic.
 - Root growth is a one-time action tracked by `hasUsedRootGrowth`.
 - Entering the enemy base ends the game before combat resolution.
 
