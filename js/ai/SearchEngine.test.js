@@ -331,3 +331,73 @@ test('aspiration windows re-search fail-low iterations', () => {
     assert.equal(result.aspirationResearches, 1);
     assert.equal(result.aspirationFailLow, 1);
 });
+
+
+test('PVS and aspiration windows match full-window alpha-beta across deterministic random trees', () => {
+    let totalAspirationResearches = 0;
+
+    for (let seed = 1; seed <= 50; seed++) {
+        let randomState = seed >>> 0;
+        const random = () => {
+            randomState = (randomState * 1664525 + 1013904223) >>> 0;
+            return randomState / 0x100000000;
+        };
+        const nodes = new Map();
+        let nextId = 0;
+        const build = (depth, side) => {
+            const id = `seed-${seed}-node-${nextId++}`;
+            const node = {
+                id,
+                currentTurn: side,
+                isGameOver: depth === 4,
+                depth,
+                score: Math.floor(random() * 2001) - 1000,
+                children: []
+            };
+            nodes.set(id, node);
+            if (depth < 4) {
+                const childCount = 2 + Math.floor(random() * 3);
+                for (let index = 0; index < childCount; index++) {
+                    const child = build(depth + 1, side === 'red' ? 'blue' : 'red');
+                    node.children.push(child.id);
+                }
+            }
+            return node;
+        };
+        const root = build(0, 'red');
+        const rootMoves = [...root.children];
+        const run = (principalVariationSearch, aspirationWindows) =>
+            new SearchEngine({ now: () => 0 }).search({
+                rootState: root,
+                rootMoves,
+                isTerminal: state => state.isGameOver,
+                getSideToMove: state => state.currentTurn,
+                getPositionKey: state => state.id,
+                getMoveKey: move => move,
+                applyMove: (state, move) => nodes.get(move),
+                generateMoves: state => state.children,
+                evaluate: state => state.score,
+                orderMoves: (state, moves) => moves,
+                maxDepth: 4,
+                timeBudgetMs: 1000,
+                maxNodes: 100000,
+                principalVariationSearch,
+                aspirationWindows,
+                aspirationWindow: 25
+            });
+
+        const baseline = run(false, false);
+        const pvsOnly = run(true, false);
+        const aspirationOnly = run(false, true);
+        const combined = run(true, true);
+        for (const candidate of [pvsOnly, aspirationOnly, combined]) {
+            assert.equal(candidate.completedDepth, 4, `seed ${seed} must complete depth 4`);
+            assert.equal(candidate.move, baseline.move, `seed ${seed} selected a different move`);
+            assert.equal(candidate.value, baseline.value, `seed ${seed} changed the minimax value`);
+        }
+        totalAspirationResearches += combined.aspirationResearches;
+    }
+
+    assert.ok(totalAspirationResearches > 0,
+        'the randomized sample should exercise fail-high or fail-low recovery');
+});
