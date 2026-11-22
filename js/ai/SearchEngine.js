@@ -26,7 +26,7 @@ export class SearchEngine {
         maxNodes = Infinity,
         principalVariationSearch = true,
         aspirationWindows = true,
-        aspirationWindow = 500,
+        aspirationWindow = 150,
         onProgress = () => {}
     }) {
         if (!Array.isArray(rootMoves) || !rootMoves.length) {
@@ -56,6 +56,7 @@ export class SearchEngine {
         };
         let bestMove = rootMoves[0];
         let bestValue = -Infinity;
+        let previousScoreDelta = 0;
         let completedDepth = 0;
         let preferredRootMoveKey;
 
@@ -169,7 +170,7 @@ export class SearchEngine {
 
         for (let depth = 1; depth <= maxDepth; depth++) {
             try {
-                const window = Math.max(1, aspirationWindow);
+                const window = Math.max(1, aspirationWindow + previousScoreDelta * 2);
                 const alpha = aspirationWindows && depth > 1 && Number.isFinite(bestValue)
                     ? bestValue - window
                     : -Infinity;
@@ -187,6 +188,9 @@ export class SearchEngine {
                 }
 
                 if (!Number.isFinite(iteration.value)) break;
+                if (Number.isFinite(bestValue)) {
+                    previousScoreDelta = Math.abs(iteration.value - bestValue);
+                }
                 bestMove = iteration.move;
                 bestValue = iteration.value;
                 preferredRootMoveKey = getMoveKey(iteration.move);
