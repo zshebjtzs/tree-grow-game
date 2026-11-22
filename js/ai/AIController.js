@@ -21,9 +21,10 @@ export class AIController {
         });
 
         const requiredMethods = [
-            'createState', 'getBases', 'getPositionKey', 'isTerminal',
-            'getSideToMove', 'generateMoves', 'distanceToBase',
-            'simulateMove', 'simulatePass'
+            'createState', 'getBases', 'isValidSide', 'setSideToMove',
+            'getPositionKey', 'isTerminal', 'getSideToMove', 'getMoveKey',
+            'toPublicMove', 'createDecisionExplanation', 'generateMoves',
+            'distanceToBase', 'simulateMove', 'simulatePass'
         ];
         if (requiredMethods.some(method => typeof this.adapter[method] !== 'function') ||
             typeof this.adapter.positionEvaluator?.scoreMove !== 'function' ||
@@ -41,13 +42,13 @@ export class AIController {
     }
 
     getBestMove(gameStateData, playerSide) {
-        if (!['red', 'blue'].includes(playerSide)) {
+        if (!this.adapter.isValidSide(playerSide)) {
             throw new TypeError('AI 玩家阵营无效');
         }
         this.lastSearchStats = null;
         this.lastDecisionExplanation = null;
         const game = this.adapter.createState(gameStateData);
-        game.currentTurn = playerSide;
+        this.adapter.setSideToMove(game, playerSide);
         const bases = this.adapter.getBases(gameStateData);
 
         this._emitProgress({ phase: 'generating', completedCandidates: 0, totalCandidates: 0 });
@@ -111,7 +112,7 @@ export class AIController {
             game, selectedMove, playerSide, bases, ranked, selectionReason
         );
         this._emitProgress({ phase: 'complete', completedCandidates: moves.length, totalCandidates: moves.length });
-        return this._publicMove(selectedMove);
+        return this.adapter.toPublicMove(selectedMove);
     }
 
     _emitProgress(progress) {
@@ -122,88 +123,13 @@ export class AIController {
     }
 
     _createDecisionExplanation(game, move, side, bases, rankedMoves, selectionReason) {
-        if (!move) return null;
-        const enemy = this._enemy(side);
-        const selected = rankedMoves.find(candidate =>
-            candidate.parentNodeId === move.parentNodeId &&
-            candidate.targetAreaId === move.targetAreaId
+        return this.adapter.createDecisionExplanation(
+            game, move, side, bases, rankedMoves, selectionReason, this.lastSearchStats
         );
-        const next = selected?._nextState || this._simulateMove(
-            game, move, side, bases, { alreadyValidated: true }
-        );
-        const details = [];
-        let summary = '根据当前局面评估选择该行动。';
-
-        if (move.targetAreaId === bases[enemy]) {
-            summary = '该行动可以直接进入敌方基地并结束对局。';
-            details.push('检测到合法的立即获胜行动，战术规则优先选择了该行动。');
-        } else if (next) {
-            const beforeEnemyNodes = game.getAliveNodesByOwner(enemy).length;
-            const afterEnemyNodes = next.getAliveNodesByOwner(enemy).length;
-            const beforeEnemyRoots = game.getPlayerRootNodes(enemy).length;
-            const afterEnemyRoots = next.getPlayerRootNodes(enemy).length;
-            const removedNodes = beforeEnemyNodes - afterEnemyNodes;
-            const removedRoots = beforeEnemyRoots - afterEnemyRoots;
-            if (removedRoots > 0) {
-                details.push(`模拟战斗可摧毁对方 ${removedRoots} 个根节点。`);
-            }
-            if (removedNodes > 0) {
-                details.push(`模拟战斗可减少对方 ${removedNodes} 个存活节点。`);
-            }
-
-            const beforeDistance = this._distanceToBase(game, side, bases[enemy]);
-            const afterDistance = this._distanceToBase(next, side, bases[enemy]);
-            if (Number.isFinite(beforeDistance) && Number.isFinite(afterDistance) && afterDistance < beforeDistance) {
-                details.push(`推进路线：到敌方基地的图论距离从 ${beforeDistance} 缩短至 ${afterDistance}。`);
-            }
-
-            const beforeSafety = this._distanceToBase(game, enemy, bases[side]);
-            const afterSafety = this._distanceToBase(next, enemy, bases[side]);
-            if (Number.isFinite(beforeSafety) && Number.isFinite(afterSafety) && afterSafety > beforeSafety) {
-                details.push(`防守收益：对手到己方基地的最短可行距离从 ${beforeSafety} 增加至 ${afterSafety}。`);
-            }
-
-            const beforeParent = game.getNode(move.parentNodeId);
-            const afterParent = next.getNode(move.parentNodeId);
-            if (beforeParent && afterParent && afterParent.childrenIds.length > beforeParent.childrenIds.length) {
-                details.push(`结构扩张：父节点 #${move.parentNodeId} 的子枝数增加至 ${afterParent.childrenIds.length}。`);
-            }
-        }
-
-        if (selectionReason === 'defense-priority') {
-            details.unshift('战术筛选优先保留能最大限度减少对手立即获胜机会的行动。');
-        }
-        if (!details.length) {
-            details.push('该行动在当前难度配置的候选评分中排名靠前。');
-        }
-        if (selectionReason === 'immediate-win') summary = '识别到立即获胜机会，优先执行胜利行动。';
-        else if (selectionReason === 'defense-priority') summary = '当前存在紧急威胁，优先选择防守效果最好的候选行动。';
-
-        const search = this.lastSearchStats ? {
-            completedDepth: this.lastSearchStats.completedDepth,
-            nodes: this.lastSearchStats.nodes,
-            elapsedMs: this.lastSearchStats.elapsedMs,
-            transpositionHits: this.lastSearchStats.transpositionHits
-        } : null;
-        return {
-            title: 'AI 行动分析',
-            summary,
-            details: details.slice(0, 4),
-            search
-        };
     }
 
     _publicMove(move) {
-        return {
-            parentNodeId: move.parentNodeId,
-            targetAreaId: move.targetAreaId,
-            x: move.x,
-            y: move.y
-        };
-    }
-
-    _enemy(side) {
-        return side === 'red' ? 'blue' : 'red';
+        return this.adapter.toPublicMove(move);
     }
 
     _generateMoves(game, side, bases) {
@@ -237,7 +163,7 @@ export class AIController {
         const preparedChildren = new WeakMap();
         const preparedMoveOrder = new WeakMap();
         const positionKeyCache = new WeakMap();
-        const moveKey = move => `${move.parentNodeId}:${move.targetAreaId}`;
+        const moveKey = move => this.adapter.getMoveKey(move);
 
         // Root candidates were already simulated while calculating their
         // heuristic scores. Reuse those detached states across every
@@ -288,12 +214,12 @@ export class AIController {
                 const children = new Map();
                 for (const move of moves) {
                     checkBudget();
-                    const next = this._simulateMove(state, move, state.currentTurn, bases, { alreadyValidated: true });
+                    const next = this._simulateMove(state, move, this.adapter.getSideToMove(state), bases, { alreadyValidated: true });
                     if (!next) continue;
                     children.set(moveKey(move), next);
                     scored.push({
                         move,
-                        score: this._scoreMove(state, move, state.currentTurn, bases, next)
+                        score: this._scoreMove(state, move, this.adapter.getSideToMove(state), bases, next)
                     });
                 }
                 // Scores are from the side-to-move's own perspective, so
