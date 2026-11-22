@@ -151,3 +151,10 @@ All configurations must complete the same depth and return the same minimax valu
 Aspiration-window calibration: a fixed 150-point window caused roughly 6–7 full re-searches per hard/expert sparse-fixture decision. A fixed 500-point window did not materially reduce re-searches and slightly worsened decision time. The current implementation therefore adapts the next window using the previous completed iteration's score swing: `150 + 2 × |last score delta|`. CI showed the hard/expert sparse-fixture re-search average fall from roughly 6–7 to 2 per decision, with completed depth unchanged.
 
 A4.3 CI result: 50 deterministic four-ply random trees passed all four-way differential checks (Alpha-Beta/PVS × full/aspiration window). The six-tier benchmark retained configured depths. On the sparse fixture, hard PVS average time fell from 113.892 ms (fixed 150) to 70.725 ms (adaptive), and expert from 283.636 ms to 164.403 ms. Treat these as same-runner fixture measurements, not a general performance guarantee.
+
+
+## A4.4: Budget interruption and transposition validation
+
+- A deterministic test forces the budget sentinel during a fail-high aspiration full-window re-search and verifies that the result remains the last fully completed depth, move, and value.
+- Twenty deterministic random four-layer DAGs include shared child states to exercise the transposition table. Full-window Alpha-Beta and aspiration PVS must agree on completed depth, root move, and minimax value; Alpha-Beta must record transposition hits.
+- These tests complement the 50 random tree four-way differential test and explicit fail-high/fail-low recovery tests.
