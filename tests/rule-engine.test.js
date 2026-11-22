@@ -139,3 +139,16 @@ test('legal growth preview rejects invalid parent states and invalid area lists'
     assert.deepEqual(engine.getLegalGrowthAreas(game, root, [2, 3]), []);
     assert.throws(() => engine.getLegalGrowthAreas(game, root, null), TypeError);
 });
+
+
+test('a root cannot regrow after its first branch is destroyed', () => {
+    const { game, engine, root } = setup();
+    const firstBranch = game.addNode(root.id, 10, 0, 2, 'red');
+    assert.equal(root.hasUsedRootGrowth, true);
+
+    game.deleteNodes([firstBranch.id]);
+    assert.deepEqual(root.childrenIds, []);
+    assert.equal(root.hasUsedRootGrowth, true);
+    assert.equal(engine.canGrow(game, root, 2).allowed, false);
+    assert.deepEqual(engine.getLegalGrowthAreas(game, root, [2, 3]), []);
+});
