@@ -20,6 +20,8 @@ jobs:
         run: npm run benchmark:replay
       - name: Collect AI decision-time baseline
         run: npm run benchmark:ai
+      - name: Smoke-test AI tournament runner
+        run: npm run tournament:ai -- --seed-count 1 --pair-games 2 --max-plies 20 --only easy:medium,hard:expert
       - run: npm run build
         env:
           GITHUB_ACTIONS: true
