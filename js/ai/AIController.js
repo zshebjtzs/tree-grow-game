@@ -33,6 +33,7 @@ export class AIController {
         }
 
         this.ruleEngine = this.adapter.ruleEngine;
+        this.distanceCache = this.adapter.distanceCache;
         this.tacticalAnalyzer = this.adapter.tacticalAnalyzer;
         this.positionEvaluator = this.adapter.positionEvaluator;
         this.searchEngine = new SearchEngine();
