@@ -27,21 +27,40 @@ export class TacticalAnalyzer {
         return count;
     }
 
-    countRootLossReplies(game, defenderSide, attackerSide, bases, generateMoves, simulateMove) {
-        if (game.isGameOver) return 0;
-        const rootsBefore = game.getPlayerRootNodes(defenderSide).length;
-        if (!rootsBefore) return 0;
+    measureAttackRisk(game, defenderSide, attackerSide, bases, generateMoves, simulateMove) {
+        const beforeRoots = game.getPlayerRootNodes(defenderSide).length;
+        const beforeNodes = game.getAliveNodesByOwner(defenderSide).length;
+        const risk = {
+            rootLossReplies: 0,
+            maxRootLoss: 0,
+            maxNodeLoss: 0,
+            maxCascadeLoss: 0
+        };
+        if (game.isGameOver || !beforeRoots) return risk;
 
-        return generateMoves(game, attackerSide, bases)
-            .filter(move => move.attacks)
-            .reduce((count, move) => {
-                const next = simulateMove(game, move, attackerSide, bases);
-                if (!next) return count;
-                return count + Math.max(
-                    0,
-                    rootsBefore - next.getPlayerRootNodes(defenderSide).length
-                );
-            }, 0);
+        for (const move of generateMoves(game, attackerSide, bases)) {
+            if (!move.attacks) continue;
+            const next = simulateMove(game, move, attackerSide, bases);
+            if (!next) continue;
+
+            const rootLoss = Math.max(
+                0,
+                beforeRoots - next.getPlayerRootNodes(defenderSide).length
+            );
+            const nodeLoss = Math.max(
+                0,
+                beforeNodes - next.getAliveNodesByOwner(defenderSide).length
+            );
+            if (rootLoss > 0) risk.rootLossReplies++;
+            risk.maxRootLoss = Math.max(risk.maxRootLoss, rootLoss);
+            risk.maxNodeLoss = Math.max(risk.maxNodeLoss, nodeLoss);
+
+            // One lost node is the directly attacked target. Additional losses
+            // represent the ancestor/subtree cascade resolved by CombatResolver.
+            const cascadeLoss = Math.max(0, nodeLoss - rootLoss - 1);
+            risk.maxCascadeLoss = Math.max(risk.maxCascadeLoss, cascadeLoss);
+        }
+        return risk;
     }
 
     rankDefenses(game, moves, side, bases, simulateMove, generateMoves) {
@@ -90,15 +109,24 @@ export class TacticalAnalyzer {
             }
             return {
                 move,
-                rootLossReplies: this.countRootLossReplies(
+                ...this.measureAttackRisk(
                     next, side, opponent, bases, generateMoves, simulateMove
                 )
             };
         });
-        const minimumRootRisk = Math.min(...rootRisk.map(item => item.rootLossReplies));
-        if (!Number.isFinite(minimumRootRisk)) return moves;
-        return rootRisk
-            .filter(item => item.rootLossReplies === minimumRootRisk)
+        const finiteRisk = rootRisk.filter(item => Number.isFinite(item.maxRootLoss));
+        if (!finiteRisk.length) return moves;
+
+        // Root survival dominates. When root risk is equal, minimize the
+        // largest cascading structural loss; ordinary single-node captures
+        // are not treated as chain-collapse threats.
+        const minimumRootLoss = Math.min(...finiteRisk.map(item => item.maxRootLoss));
+        const rootSafe = finiteRisk.filter(item => item.maxRootLoss === minimumRootLoss);
+        const minimumRootLossReplies = Math.min(...rootSafe.map(item => item.rootLossReplies));
+        const rootStable = rootSafe.filter(item => item.rootLossReplies === minimumRootLossReplies);
+        const minimumCascadeLoss = Math.min(...rootStable.map(item => item.maxCascadeLoss));
+        return rootStable
+            .filter(item => item.maxCascadeLoss === minimumCascadeLoss)
             .map(item => item.move);
     }
 }
