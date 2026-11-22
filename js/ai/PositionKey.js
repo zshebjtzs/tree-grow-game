@@ -15,6 +15,7 @@ export function getPositionKey(state) {
             + (node.parentId ?? 0) + ','
             + node.areaId + ','
             + (node.isRoot ? 1 : 0)
+            + (node.hasUsedRootGrowth ? 1 : 0)
             + (node.isDestroyed ? 1 : 0)
             + (node.isFrozen ? 1 : 0) + ',';
         for (const childId of node.childrenIds) key += childId + '.';
