@@ -245,3 +245,35 @@ test('search progress reports only fully completed iterative-deepening depths', 
     assert.ok(progress.every(item => item.phase === 'search'));
     assert.ok(progress.every(item => item.nodes > 0 && item.elapsedMs >= 0));
 });
+
+
+test('search engine uses adapter callbacks instead of assuming a TreeGrow state shape', () => {
+    const engine = new SearchEngine({ now: () => 0 });
+    const result = engine.search({
+        rootState: { turn: 'north', terminal: false, value: 0 },
+        rootMoves: ['safe', 'winning'],
+        isTerminal: state => state.terminal,
+        getSideToMove: state => state.turn,
+        getPositionKey: state => `${state.turn}:${state.terminal}:${state.value}`,
+        applyMove: (state, move, side) => ({
+            turn: side === 'north' ? 'south' : 'north',
+            terminal: move === 'winning',
+            value: move === 'winning' ? 10 : 0
+        }),
+        generateMoves: () => [],
+        passTurn: state => ({
+            turn: state.turn === 'north' ? 'south' : 'north',
+            terminal: true,
+            value: -1
+        }),
+        evaluate: state => state.value,
+        orderMoves: (state, moves) => moves,
+        maxDepth: 2,
+        timeBudgetMs: 100,
+        maxNodes: 100
+    });
+
+    assert.equal(result.move, 'winning');
+    assert.equal(result.value, 10);
+    assert.equal(result.completedDepth, 2);
+});
