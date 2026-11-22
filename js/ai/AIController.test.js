@@ -506,3 +506,11 @@ test('all existing difficulties execute the shared search pipeline on non-termin
             `${difficulty} should complete at least one search iteration`);
     }
 });
+
+
+test('AIController rejects adapters that do not satisfy the game-mode contract', () => {
+    assert.throws(
+        () => new AIController('medium', line, centers, {}),
+        /AI 适配器接口无效/
+    );
+});
