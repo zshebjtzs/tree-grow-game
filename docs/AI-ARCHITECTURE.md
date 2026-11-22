@@ -46,7 +46,7 @@ The defaults preserve compatibility with the current TreeGrow state shape, while
 
 All existing difficulty levels use the same rules, tactical filters, evaluation weights and search algorithm. Strength is controlled by maximum depth, time budget and node budget. Difficulty-specific random move selection and evaluation-weight changes are intentionally excluded from this model.
 
-The current four levels are:
+The current six levels are:
 
 | Level | Maximum depth | Time budget | Node budget |
 |---|---:|---:|---:|
