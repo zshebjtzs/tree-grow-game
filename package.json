@@ -12,7 +12,8 @@
     "benchmark:ai": "node scripts/benchmark-ai.js",
     "tournament:ai": "node scripts/tournament-ai.js",
     "benchmark:replay": "node scripts/benchmark-replay-save.js",
-    "verify:pages": "node scripts/verify-pages-build.js"
+    "verify:pages": "node scripts/verify-pages-build.js",
+    "analyze:ai-save": "node scripts/analyze-ai-save.js"
   },
   "dependencies": {
     "d3-delaunay": "^6.0.4"
