@@ -136,7 +136,9 @@ export class TreeGrowAIAdapter {
     }
 
     getPositionKey(state) {
-        return getPositionKey(state);
+        return Array.isArray(state.nodes)
+            ? getPositionKey(state)
+            : JSON.stringify(state.toJSON());
     }
 
     isTerminal(state) {
