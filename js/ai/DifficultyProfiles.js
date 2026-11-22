@@ -14,15 +14,19 @@ const SHARED_EVALUATION = {
 };
 
 const SEARCH_BUDGETS = {
-    easy:    { maxDepth: 2, searchBudgetMs: 50,   maxNodes: 1500 },
-    medium:  { maxDepth: 4, searchBudgetMs: 150,  maxNodes: 6000 },
-    hard:    { maxDepth: 7, searchBudgetMs: 700,  maxNodes: 30000 },
-    expert:  { maxDepth: 8, searchBudgetMs: 1200, maxNodes: 60000 }
+    beginner: { maxDepth: 1, searchBudgetMs: 25,   maxNodes: 500 },
+    easy:     { maxDepth: 2, searchBudgetMs: 50,   maxNodes: 1500 },
+    medium:   { maxDepth: 4, searchBudgetMs: 150,  maxNodes: 6000 },
+    advanced: { maxDepth: 5, searchBudgetMs: 300,  maxNodes: 12000 },
+    hard:     { maxDepth: 7, searchBudgetMs: 700,  maxNodes: 30000 },
+    expert:   { maxDepth: 8, searchBudgetMs: 1200, maxNodes: 60000 }
 };
 
 const LABELS = {
+    beginner: '入门',
     easy: '简单',
     medium: '普通',
+    advanced: '进阶',
     hard: '困难',
     expert: '专家'
 };
