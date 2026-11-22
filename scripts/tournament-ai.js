@@ -2,7 +2,7 @@ import { performance } from 'node:perf_hooks';
 import { GameState } from '../js/game/GameState.js';
 import { AIController } from '../js/ai/AIController.js';
 
-const LEVELS = ['easy', 'medium', 'hard', 'expert'];
+const LEVELS = ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert'];
 const DEFAULTS = { pairGames: 2, seedCount: 2, maxPlies: 120 };
 
 function parseArgs(argv) {
