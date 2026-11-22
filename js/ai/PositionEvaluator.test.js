@@ -168,3 +168,30 @@ test('growth metrics exclude frozen parents and attacks against fortress bases',
     assert.equal(frozenMetrics.baseThreatCount, 0);
     assert.equal(frozenMetrics.growthHeadroom, 0);
 });
+
+
+test('evaluation rewards protecting the first branch with an actual fortress', () => {
+    const adjacency = {
+        1: [2], 2: [1, 3, 4, 5],
+        3: [2], 4: [2], 5: [2], 8: [9], 9: [8]
+    };
+    const adapter = createAdapter(adjacency, 9);
+    const unsafeGame = new GameState();
+    unsafeGame.currentTurn = 'red';
+    const root = addRoot(unsafeGame, 1, 'red');
+    const firstBranch = unsafeGame.addNode(root.id, 20, 0, 2, 'red');
+    unsafeGame.addNode(firstBranch.id, 30, 0, 3, 'red');
+    unsafeGame.addNode(firstBranch.id, 40, 0, 4, 'red');
+    unsafeGame.currentTurn = 'blue';
+    addRoot(unsafeGame, 9, 'blue');
+
+    const safeGame = unsafeGame.clone();
+    safeGame.currentTurn = 'red';
+    safeGame.addNode(firstBranch.id, 50, 0, 5, 'red');
+
+    const bases = { red: 1, blue: 9 };
+    const unsafeScore = adapter.positionEvaluator.evaluateState(unsafeGame, 'red', bases);
+    const safeScore = adapter.positionEvaluator.evaluateState(safeGame, 'red', bases);
+    assert.ok(safeScore > unsafeScore + 2000,
+        'a degree-4 first child should receive the shared root-safety bonus');
+});
