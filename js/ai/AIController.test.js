@@ -368,7 +368,7 @@ test('search reuses prepared root states and orders opponent replies by their ow
         return state.lastMove || 0;
     };
 
-    ai._searchHard(root, [
+    ai._search(root, [
         { parentNodeId: 1, targetAreaId: 2, x: 0, y: 0, score: 10 }
     ], 'blue', { red: 6, blue: 1 });
 
@@ -485,7 +485,7 @@ test('deep search receives every legal root candidate without a static width cut
         };
     };
 
-    ai._searchHard(game, candidates, 'red', { red: 1, blue: 50 });
+    ai._search(game, candidates, 'red', { red: 1, blue: 50 });
     assert.equal(receivedMoves.length, candidates.length);
     assert.deepEqual(receivedMoves, candidates);
 });
