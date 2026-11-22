@@ -8,6 +8,7 @@ export class Node {
         this.parentId = parentId; // 父节点ID (根节点为null)
         this.childrenIds = [];  // 子节点ID数组
         this.isRoot = false;    // 是否为根节点
+        this.hasUsedRootGrowth = false; // 根节点是否已经使用过首次生长机会
         this.isDestroyed = false; // 是否被摧毁
         this.isFrozen = false; // 是否被冻结
     }
