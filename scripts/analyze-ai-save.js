@@ -7,7 +7,7 @@ import { ReplaySaveValidator } from '../js/replay/ReplaySaveValidator.js';
 import { AIController } from '../js/ai/AIController.js';
 import { DIFFICULTY_LEVELS } from '../js/ai/DifficultyProfiles.js';
 
-const MAGIC = Buffer.from('TGSV\\x01\\n', 'binary');
+const MAGIC = Buffer.from([0x54, 0x47, 0x53, 0x56, 0x01, 0x0a]);
 const DEFAULT_DIFFICULTIES = DIFFICULTY_LEVELS;
 const DEFAULT_AI_SIDE = 'blue';
 
