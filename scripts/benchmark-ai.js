@@ -1,6 +1,7 @@
 import { performance } from 'node:perf_hooks';
 import { GameState } from '../js/game/GameState.js';
 import { AIController } from '../js/ai/AIController.js';
+import { DIFFICULTY_LEVELS } from '../js/ai/DifficultyProfiles.js';
 
 const AREA_COUNT = 50;
 const ITERATIONS = 40;
@@ -93,10 +94,10 @@ const fixtures = [
 const results = [];
 
 for (const fixture of fixtures) {
-    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+    for (const difficulty of DIFFICULTY_LEVELS) {
         const variants = ['hard', 'expert'].includes(difficulty)
             ? ['alpha-beta', 'pvs']
-            : ['heuristic'];
+            : ['pvs'];
         const createAI = variant => {
             const ai = new AIController(difficulty, fixture.adjacency, fixture.areaCenters);
             if (variant === 'alpha-beta') {
@@ -134,10 +135,8 @@ for (const fixture of fixtures) {
             red: fixture.snapshot.redBaseId,
             blue: fixture.snapshot.blueBaseId
         }).length;
-        if (difficulty === 'hard' || difficulty === 'expert') {
-            if (legalMoveCount === 0 && fixture.name !== 'sparse') {
-                throw new Error(`Benchmark fixture ${fixture.name} has no legal blue moves`);
-            }
+        if (legalMoveCount === 0) {
+            throw new Error(`Benchmark fixture ${fixture.name} has no legal blue moves for ${difficulty}`);
         }
         for (let index = 0; index < WARMUP; index++) {
             ai.getBestMove(fixture.snapshot, 'blue');
@@ -179,6 +178,7 @@ for (const fixture of fixtures) {
 
 console.log(JSON.stringify({
     benchmark: 'tree-grow-ai-multi-position',
+    difficulties: DIFFICULTY_LEVELS,
     node: process.version,
     platform: process.platform,
     architecture: process.arch,
