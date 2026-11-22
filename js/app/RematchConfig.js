@@ -1,5 +1,7 @@
+import { DIFFICULTY_LEVELS } from '../ai/DifficultyProfiles.js';
+
 const MODES = new Set(['pvp', 'pve']);
-const DIFFICULTIES = new Set(['easy', 'medium', 'hard', 'expert']);
+const DIFFICULTIES = new Set(DIFFICULTY_LEVELS);
 
 /** Create a fresh immutable configuration without carrying match state forward. */
 export function createRematchConfig(previous) {
