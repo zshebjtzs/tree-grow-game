@@ -82,8 +82,11 @@ export class TacticalAnalyzer {
         // before our move, and prefer candidates that prevent root destruction.
         const rootRisk = moves.map(move => {
             const next = move._nextState || simulateMove(game, move, side, bases);
-            if (!next || next.isGameOver || !next.getPlayerRootNodes(side).length) {
-                return { move, rootLossReplies: next?.isGameOver ? 0 : Infinity };
+            if (!next || !next.getPlayerRootNodes(side).length) {
+                return { move, rootLossReplies: Infinity };
+            }
+            if (next.isGameOver) {
+                return { move, rootLossReplies: 0 };
             }
             return {
                 move,
@@ -93,7 +96,7 @@ export class TacticalAnalyzer {
             };
         });
         const minimumRootRisk = Math.min(...rootRisk.map(item => item.rootLossReplies));
-        if (!Number.isFinite(minimumRootRisk) || minimumRootRisk === 0) return moves;
+        if (!Number.isFinite(minimumRootRisk)) return moves;
         return rootRisk
             .filter(item => item.rootLossReplies === minimumRootRisk)
             .map(item => item.move);
