@@ -159,6 +159,12 @@ export class GameState {
             if (raw.isRoot !== (raw.parentId === null)) {
                 throw new TypeError('存档根节点与父节点关系不一致');
             }
+            if (raw.isRoot && raw.childrenIds.length > 0 && raw.hasUsedRootGrowth === false) {
+                throw new TypeError('存档根节点生长历史与子节点关系不一致');
+            }
+            if (!raw.isRoot && raw.hasUsedRootGrowth === true) {
+                throw new TypeError('非根节点不能具有根节点首次生长标记');
+            }
             if (raw.parentId !== null) {
                 const parent = byId.get(raw.parentId);
                 if (!parent || parent.owner !== raw.owner || parent.isDestroyed ||
