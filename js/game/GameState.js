@@ -31,6 +31,7 @@ export class GameState {
         this.nodes.push(newNode);
         if (parentId !== null) {
             parentNode.addChild(newNode.id);
+            if (parentNode.isRoot) parentNode.hasUsedRootGrowth = true;
         } else {
             newNode.isRoot = true;
         }
@@ -103,6 +104,7 @@ export class GameState {
                 parentId: node.parentId,
                 childrenIds: [...node.childrenIds],
                 isRoot: node.isRoot,
+                hasUsedRootGrowth: node.hasUsedRootGrowth,
                 isDestroyed: node.isDestroyed,
                 isFrozen: node.isFrozen,
                 areaId: node.areaId
@@ -130,7 +132,8 @@ export class GameState {
                 !(raw.parentId === null || (Number.isInteger(raw.parentId) && raw.parentId > 0)) ||
                 !Array.isArray(raw.childrenIds) ||
                 typeof raw.isRoot !== 'boolean' || typeof raw.isDestroyed !== 'boolean' ||
-                typeof raw.isFrozen !== 'boolean') {
+                typeof raw.isFrozen !== 'boolean' ||
+                (raw.hasUsedRootGrowth !== undefined && typeof raw.hasUsedRootGrowth !== 'boolean')) {
                 throw new TypeError('存档包含无效节点');
             }
             ids.add(raw.id);
@@ -182,7 +185,12 @@ export class GameState {
         const state = new GameState();
         state.nodes = data.nodes.map(raw => {
             const node = new Node(raw.id, raw.x, raw.y, raw.owner, raw.parentId);
-            Object.assign(node, raw, { childrenIds: [...raw.childrenIds] });
+            Object.assign(node, raw, {
+                childrenIds: [...raw.childrenIds],
+                // Older saves did not store this history flag. A surviving child
+                // is sufficient evidence that the root has already grown.
+                hasUsedRootGrowth: raw.hasUsedRootGrowth ?? (raw.isRoot && raw.childrenIds.length > 0)
+            });
             return node;
         });
         state.currentTurn = data.currentTurn;
