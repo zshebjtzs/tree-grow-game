@@ -277,3 +277,57 @@ test('search engine uses adapter callbacks instead of assuming a TreeGrow state 
     assert.equal(result.value, 10);
     assert.equal(result.completedDepth, 2);
 });
+
+
+test('aspiration windows re-search fail-high iterations and preserve full-window results', () => {
+    const run = aspirationWindows => new SearchEngine({ now: () => 0 }).search({
+        rootState: { turn: 'red', phase: 'root', score: 0 },
+        rootMoves: ['a', 'b'],
+        maxDepth: 2,
+        timeBudgetMs: 100,
+        getPositionKey: state => `${state.phase}:${state.turn}:${state.rootMove || ''}`,
+        getMoveKey: move => move,
+        applyMove: (state, move, side) => state.phase === 'root'
+            ? { turn: 'blue', phase: 'reply', rootMove: move, score: 0 }
+            : { turn: 'red', phase: 'leaf', rootMove: state.rootMove,
+                score: state.rootMove === 'a' ? 500 : 400 },
+        generateMoves: state => state.phase === 'reply' ? ['reply'] : [],
+        evaluate: state => state.score,
+        orderMoves: (state, moves) => moves,
+        aspirationWindows,
+        aspirationWindow: 100
+    });
+
+    const windowed = run(true);
+    const fullWindow = run(false);
+    assert.equal(windowed.completedDepth, 2);
+    assert.equal(windowed.move, fullWindow.move);
+    assert.equal(windowed.value, fullWindow.value);
+    assert.equal(windowed.aspirationResearches, 1);
+    assert.equal(windowed.aspirationFailHigh, 1);
+    assert.equal(windowed.aspirationFailLow, 0);
+});
+
+test('aspiration windows re-search fail-low iterations', () => {
+    const engine = new SearchEngine({ now: () => 0 });
+    const result = engine.search({
+        rootState: { turn: 'red', phase: 'root', score: 0 },
+        rootMoves: ['a', 'b'],
+        maxDepth: 2,
+        timeBudgetMs: 100,
+        getPositionKey: state => `${state.phase}:${state.turn}:${state.rootMove || ''}`,
+        applyMove: (state, move) => state.phase === 'root'
+            ? { turn: 'blue', phase: 'reply', rootMove: move, score: 500 }
+            : { turn: 'red', phase: 'leaf', rootMove: state.rootMove, score: 0 },
+        generateMoves: state => state.phase === 'reply' ? ['reply'] : [],
+        evaluate: state => state.score,
+        orderMoves: (state, moves) => moves,
+        aspirationWindows: true,
+        aspirationWindow: 100
+    });
+
+    assert.equal(result.completedDepth, 2);
+    assert.equal(result.value, 0);
+    assert.equal(result.aspirationResearches, 1);
+    assert.equal(result.aspirationFailLow, 1);
+});
