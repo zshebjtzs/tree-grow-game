@@ -103,7 +103,7 @@ export class AIController {
             const tacticallyRanked = ranked.filter(move => defenseSet.has(move));
             if (tacticallyRanked.length < ranked.length) selectionReason = 'defense-priority';
 
-            selectedMove = this._searchHard(game, tacticallyRanked, playerSide, bases);
+            selectedMove = this._search(game, tacticallyRanked, playerSide, bases);
             selectionReason = 'search-selection';
         }
 
@@ -346,7 +346,7 @@ export class AIController {
         return this.positionEvaluator.evaluateState(game, perspective, bases);
     }
 
-    _searchHard(game, rankedMoves, side, bases) {
+    _search(game, rankedMoves, side, bases) {
         // Search every legal root candidate; static ordering must not permanently
         // discard a move before the search can evaluate its consequences.
         const rootMoves = rankedMoves;
