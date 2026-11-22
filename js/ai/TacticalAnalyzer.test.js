@@ -28,7 +28,7 @@ test('defense ranking rejects a move that exposes a root to immediate destructio
     };
     const simulateMove = (state, move, side) => {
         if (side === 'blue') {
-            return position({ vulnerable: move === risky });
+            return position({ vulnerable: move.targetAreaId === risky.targetAreaId });
         }
         if (side === 'red' && state.vulnerable && move.attacks) {
             return position({ blueRoots: 0, isGameOver: true });
