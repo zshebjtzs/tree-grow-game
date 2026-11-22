@@ -10,6 +10,9 @@ function position({ blueRoots = 1, redRoots = 1, vulnerable = false, isGameOver 
             if (side === 'blue') return Array.from({ length: blueRoots }, (_, id) => ({ id }));
             return Array.from({ length: redRoots }, (_, id) => ({ id }));
         },
+        getAliveNodesByOwner(side) {
+            return this.getPlayerRootNodes(side);
+        },
         vulnerable
     };
 }
