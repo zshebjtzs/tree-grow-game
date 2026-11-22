@@ -2,6 +2,7 @@ import { performance } from 'node:perf_hooks';
 import { GameState } from '../js/game/GameState.js';
 import { AIController } from '../js/ai/AIController.js';
 import { DIFFICULTY_LEVELS } from '../js/ai/DifficultyProfiles.js';
+import { calculatePairedScoreRate, validatePairGames } from './tournament-stats.js';
 
 const LEVELS = DIFFICULTY_LEVELS;
 const DEFAULTS = { pairGames: 2, seedCount: 2, maxPlies: 120 };
@@ -18,7 +19,8 @@ function parseArgs(argv) {
         else if (key === '--only') options.only = value.split(',').map(pair => pair.split(':'));
         else throw new TypeError(`Unknown argument: ${key}`);
     }
-    for (const key of ['pairGames', 'seedCount', 'maxPlies']) {
+    validatePairGames(options.pairGames);
+    for (const key of ['seedCount', 'maxPlies']) {
         if (!Number.isInteger(options[key]) || options[key] < 1) {
             throw new TypeError(`--${key.replace(/[A-Z]/g, match => '-' + match.toLowerCase())} must be a positive integer`);
         }
@@ -125,7 +127,7 @@ function summarizeDecisions(samples) {
     };
 }
 
-function playGame({ seed, redDifficulty, blueDifficulty, maxPlies }) {
+function playGame({ seed, pairId, randomSeed, redDifficulty, blueDifficulty, maxPlies }) {
     const map = createMap(seed);
     const { adjacency, areaCenters } = map;
     let game = createInitialState(areaCenters, map);
@@ -178,6 +180,8 @@ function playGame({ seed, redDifficulty, blueDifficulty, maxPlies }) {
 
     return {
         seed,
+        pairId,
+        randomSeed,
         baseDistance: map.baseDistance,
         redDifficulty,
         blueDifficulty,
@@ -189,21 +193,6 @@ function playGame({ seed, redDifficulty, blueDifficulty, maxPlies }) {
             red: summarizeDecisions(decisionSamples.red),
             blue: summarizeDecisions(decisionSamples.blue)
         }
-    };
-}
-
-function scoreInterval(scores) {
-    if (!scores.length) return { mean: 0, lower95: 0, upper95: 0 };
-    const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
-    if (scores.length === 1) {
-        return { mean: Number(mean.toFixed(3)), lower95: null, upper95: null };
-    }
-    const variance = scores.reduce((sum, score) => sum + (score - mean) ** 2, 0) / (scores.length - 1);
-    const margin = 1.96 * Math.sqrt(variance / scores.length);
-    return {
-        mean: Number(mean.toFixed(3)),
-        lower95: Number(Math.max(0, mean - margin).toFixed(3)),
-        upper95: Number(Math.min(1, mean + margin).toFixed(3))
     };
 }
 
@@ -232,12 +221,16 @@ function runTournament(options) {
                 const redDifficulty = gameIndex % 2 === 0 ? first : second;
                 const blueDifficulty = gameIndex % 2 === 0 ? second : first;
                 const mapSeed = (seed + pairIndex * 997) >>> 0;
-                const randomSeed = (seed + pairIndex * 997 + Math.floor(gameIndex / 2) * 7919) >>> 0;
+                const swapPairIndex = Math.floor(gameIndex / 2);
+                const randomSeed = (seed + pairIndex * 997 + swapPairIndex * 7919) >>> 0;
+                const pairId = `${seed}:${swapPairIndex}`;
                 const originalRandom = Math.random;
                 Math.random = createRandom(randomSeed);
                 try {
                     matches.push(playGame({
                         seed: mapSeed,
+                        pairId,
+                        randomSeed,
                         redDifficulty,
                         blueDifficulty,
                         maxPlies: options.maxPlies
@@ -254,17 +247,19 @@ function runTournament(options) {
             [match.redDifficulty, match.blueDifficulty].includes(first) &&
             [match.redDifficulty, match.blueDifficulty].includes(second)
         );
-        const scores = games.map(match => {
+        const gameScores = games.map(match => {
             if (!match.winner) return 0.5;
             return match[match.winner === 'red' ? 'redDifficulty' : 'blueDifficulty'] === first ? 1 : 0;
         });
+        const paired = calculatePairedScoreRate(games, first);
         return {
             matchup: `${first} vs ${second}`,
             games: games.length,
-            firstWins: scores.filter(score => score === 1).length,
-            draws: scores.filter(score => score === 0.5).length,
-            secondWins: scores.filter(score => score === 0).length,
-            firstScoreRate: scoreInterval(scores)
+            pairedSamples: paired.pairedSamples,
+            firstWins: gameScores.filter(score => score === 1).length,
+            draws: gameScores.filter(score => score === 0.5).length,
+            secondWins: gameScores.filter(score => score === 0).length,
+            firstScoreRate: paired.firstScoreRate
         };
     });
 
