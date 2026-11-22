@@ -169,6 +169,13 @@ for (const fixture of fixtures) {
                 ? Number((searchStats.reduce((sum, item) => sum + (item.aspirationResearches || 0), 0) /
                     searchStats.length).toFixed(2))
                 : 0,
+            meanAspirationOneSidedResearches: searchStats.length
+                ? Number((searchStats.reduce((sum, item) =>
+                    sum + (item.aspirationOneSidedResearches || 0), 0) /
+                    searchStats.length).toFixed(2))
+                : 0,
+            aspirationOneSidedResearchCount: searchStats.reduce((sum, item) =>
+                sum + (item.aspirationOneSidedResearches || 0), 0),
             aspirationFailHighCount: searchStats.reduce((sum, item) =>
                 sum + (item.aspirationFailHigh || 0), 0),
             aspirationFailLowCount: searchStats.reduce((sum, item) =>
