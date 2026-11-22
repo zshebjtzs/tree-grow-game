@@ -1,17 +1,12 @@
 // js/ai/AIController.js
-import { GameState } from '../game/GameState.js';
-import { RuleEngine } from '../game/RuleEngine.js';
-import { resolveCombat } from '../game/CombatResolver.js';
-import { PositionEvaluator } from './PositionEvaluator.js';
-import { TacticalAnalyzer } from './TacticalAnalyzer.js';
 import { SearchEngine } from './SearchEngine.js';
-import { getPositionKey } from './PositionKey.js';
 import { getDifficultyProfile, DIFFICULTY_LEVELS } from './DifficultyProfiles.js';
+import { TreeGrowAIAdapter } from './TreeGrowAIAdapter.js';
 
 const WIN_SCORE = 100000;
 
 export class AIController {
-    constructor(difficulty = 'medium', adjacency, areaCenters) {
+    constructor(difficulty = 'medium', adjacency, areaCenters, adapter = null) {
         if (!DIFFICULTY_LEVELS.includes(difficulty)) {
             throw new TypeError('AI 难度无效');
         }
@@ -19,19 +14,30 @@ export class AIController {
         this.profile = getDifficultyProfile(difficulty);
         this.adjacency = adjacency || {};
         this.areaCenters = areaCenters || [];
-        this.ruleEngine = new RuleEngine({ adjacency: this.adjacency });
-        this.tacticalAnalyzer = new TacticalAnalyzer();
-        this.searchEngine = new SearchEngine();
-        this.lastSearchStats = null;
-        // Evaluations repeatedly query the same immutable search position.
-        // WeakMap avoids retaining discarded search states after a decision.
-        this.distanceCache = new WeakMap();
-        this.positionEvaluator = new PositionEvaluator({
+        this.adapter = adapter || new TreeGrowAIAdapter({
             adjacency: this.adjacency,
-            distanceToBase: (...args) => this._distanceToBase(...args),
-            simulateMove: (...args) => this._simulateMove(...args),
+            areaCenters: this.areaCenters,
             profile: this.profile
         });
+
+        const requiredMethods = [
+            'createState', 'getBases', 'getPositionKey', 'isTerminal',
+            'getSideToMove', 'generateMoves', 'distanceToBase',
+            'simulateMove', 'simulatePass'
+        ];
+        if (requiredMethods.some(method => typeof this.adapter[method] !== 'function') ||
+            typeof this.adapter.positionEvaluator?.scoreMove !== 'function' ||
+            typeof this.adapter.positionEvaluator?.evaluateState !== 'function' ||
+            typeof this.adapter.tacticalAnalyzer?.findImmediateWinningMove !== 'function' ||
+            typeof this.adapter.tacticalAnalyzer?.rankDefenses !== 'function') {
+            throw new TypeError('AI 适配器接口无效');
+        }
+
+        this.ruleEngine = this.adapter.ruleEngine;
+        this.tacticalAnalyzer = this.adapter.tacticalAnalyzer;
+        this.positionEvaluator = this.adapter.positionEvaluator;
+        this.searchEngine = new SearchEngine();
+        this.lastSearchStats = null;
     }
 
     getBestMove(gameStateData, playerSide) {
@@ -40,15 +46,9 @@ export class AIController {
         }
         this.lastSearchStats = null;
         this.lastDecisionExplanation = null;
-        const game = GameState.fromJSON(gameStateData);
+        const game = this.adapter.createState(gameStateData);
         game.currentTurn = playerSide;
-        const bases = {
-            red: gameStateData.redBaseId,
-            blue: gameStateData.blueBaseId
-        };
-        if (!Number.isInteger(bases.red) || !Number.isInteger(bases.blue) || bases.red === bases.blue) {
-            throw new TypeError('AI 基地数据无效');
-        }
+        const bases = this.adapter.getBases(gameStateData);
 
         this._emitProgress({ phase: 'generating', completedCandidates: 0, totalCandidates: 0 });
         const moves = this._generateMoves(game, playerSide, bases);
@@ -207,139 +207,23 @@ export class AIController {
     }
 
     _generateMoves(game, side, bases) {
-        const aliveNodes = game.getAliveNodes();
-        const occupiedBySide = new Set(game.getAliveNodesByOwner(side).map(node => node.areaId));
-        const enemyAreas = new Set(aliveNodes
-            .filter(node => node.owner !== side)
-            .map(node => node.areaId));
-        const growthContext = this.ruleEngine.createGrowthContext(game, side);
-        const moves = [];
-        for (const parent of game.getAliveNodesByOwner(side)) {
-            if (parent.isFrozen || (parent.isRoot && parent.hasUsedRootGrowth)) continue;
-            const isFirstRootBranch = parent.isRoot && !parent.hasUsedRootGrowth && parent.childrenIds.length === 0;
-            const targets = isFirstRootBranch
-                ? this.areaCenters.map((_, index) => index + 1)
-                : (this.adjacency[parent.areaId] || []);
-            for (const targetAreaId of targets) {
-                if (!this.areaCenters[targetAreaId - 1] || occupiedBySide.has(targetAreaId)) continue;
-                const result = this.ruleEngine.canGrow(game, parent, targetAreaId, {
-                    ownBaseId: bases[side],
-                    enemyBaseId: bases[this._enemy(side)],
-                    context: growthContext
-                });
-                if (!result.allowed) continue;
-                const center = this.areaCenters[targetAreaId - 1];
-                moves.push({
-                    parentNodeId: parent.id,
-                    targetAreaId,
-                    x: center[0],
-                    y: center[1],
-                    attacks: enemyAreas.has(targetAreaId)
-                });
-            }
-        }
-        return moves;
+        return this.adapter.generateMoves(game, side, bases);
     }
 
     _distanceToBase(game, side, baseId) {
-        let positionCache = this.distanceCache.get(game);
-        if (!positionCache) {
-            positionCache = new Map();
-            this.distanceCache.set(game, positionCache);
-        }
-        const cacheKey = `${side}:${baseId}`;
-        if (positionCache.has(cacheKey)) return positionCache.get(cacheKey);
-
-        // Multi-source BFS is equivalent to running one BFS per owned node,
-        // but visits each reachable area at most once for this query.
-        const occupied = new Set(game.getAliveNodes().map(node => node.areaId));
-        const queue = [];
-        const distance = new Map();
-        for (const node of game.getAliveNodesByOwner(side)) {
-            if (distance.has(node.areaId)) continue;
-            distance.set(node.areaId, 0);
-            queue.push(node.areaId);
-        }
-
-        let best = Infinity;
-        for (let head = 0; head < queue.length; head++) {
-            const current = queue[head];
-            const currentDistance = distance.get(current);
-            if (current === baseId) {
-                best = currentDistance;
-                break;
-            }
-            for (const next of this.adjacency[current] || []) {
-                if (distance.has(next)) continue;
-                if (occupied.has(next) && next !== baseId) continue;
-                distance.set(next, currentDistance + 1);
-                queue.push(next);
-            }
-        }
-
-        positionCache.set(cacheKey, best);
-        return best;
+        return this.adapter.distanceToBase(game, side, baseId);
     }
 
     _scoreMove(game, move, side, bases, simulatedNext = null) {
         return this.positionEvaluator.scoreMove(game, move, side, bases, simulatedNext);
     }
 
-    _simulateMove(game, move, side, bases, { alreadyValidated = false } = {}) {
-        const next = game.clone();
-        next.currentTurn = side;
-        const parent = next.getNode(move.parentNodeId);
-        if (!parent) return null;
-        if (!alreadyValidated) {
-            const validation = this.ruleEngine.canGrow(next, parent, move.targetAreaId, {
-                ownBaseId: bases[side],
-                enemyBaseId: bases[this._enemy(side)]
-            });
-            if (!validation.allowed) return null;
-        }
-        const child = next.addNode(parent.id, move.x, move.y, move.targetAreaId, side);
-        if (!child) return null;
-
-        const enemy = this._enemy(side);
-        if (move.targetAreaId === bases[enemy]) {
-            next.isGameOver = true;
-            return next;
-        }
-
-        const defender = next.getAliveNodes().find(node =>
-            node.id !== child.id && node.owner === enemy && node.areaId === move.targetAreaId
-        );
-        if (defender) {
-            const combat = resolveCombat(next, child, defender);
-            if (combat.nodesToDelete.length) next.deleteNodes(combat.nodesToDelete);
-            if (combat.freezeTargetId) {
-                const frozen = next.getNode(combat.freezeTargetId);
-                if (frozen) frozen.isFrozen = true;
-            }
-        }
-
-        if (!next.getPlayerRootNodes(enemy).length) {
-            next.isGameOver = true;
-            return next;
-        }
-        if (!next.getPlayerRootNodes(side).length) {
-            next.isGameOver = true;
-            return next;
-        }
-
-        // Match the live turn transition: the acting side's temporary freezes
-        // expire when that side completes its action.
-        for (const node of next.getAliveNodesByOwner(side)) node.isFrozen = false;
-        next.switchTurn();
-        return next;
+    _simulateMove(game, move, side, bases, options = {}) {
+        return this.adapter.simulateMove(game, move, side, bases, options);
     }
 
     _simulatePass(game, side) {
-        const next = game.clone();
-        next.currentTurn = side;
-        for (const node of next.getAliveNodesByOwner(side)) node.isFrozen = false;
-        next.switchTurn();
-        return next;
+        return this.adapter.simulatePass(game, side);
     }
 
     _evaluateState(game, perspective, bases) {
@@ -370,6 +254,8 @@ export class AIController {
         const result = this.searchEngine.search({
             rootState: game,
             rootMoves,
+            isTerminal: state => this.adapter.isTerminal(state),
+            getSideToMove: state => this.adapter.getSideToMove(state),
             getMoveKey: moveKey,
             maxDepth: this.profile.maxDepth,
             timeBudgetMs: this.profile.searchBudgetMs,
@@ -377,9 +263,7 @@ export class AIController {
             getPositionKey: state => {
                 let key = positionKeyCache.get(state);
                 if (key === undefined) {
-                    key = Array.isArray(state.nodes)
-                        ? getPositionKey(state)
-                        : JSON.stringify(state.toJSON());
+                    key = this.adapter.getPositionKey(state);
                     positionKeyCache.set(state, key);
                 }
                 return key;
