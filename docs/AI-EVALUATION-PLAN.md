@@ -64,3 +64,18 @@ They can be reconsidered after A3.1/A3.2 profiling shows whether they add value.
 3. Run the same seed set with red/blue swapped; report each difficulty's score rate and confidence interval.
 4. Do not change search budgets to compensate for a slower evaluator until the algorithmic cost is understood.
 5. Accept the feature set only if correctness tests pass and the strength signal is repeatable across multiple seeds; a single small tournament is not sufficient.
+
+
+## A3.2: Paired tournament statistics
+
+The tournament runner must treat two games played on the same map with the same random seed and swapped red/blue difficulty assignments as one paired sample.
+
+- `--pair-games` must be an even integer of at least 2, ensuring every scheduled game has a color-swapped counterpart.
+- Every game records its pair ID, map seed, and decision-randomness seed.
+- The report still shows raw game wins, draws, and losses, but the score-rate estimate and confidence interval are calculated across paired samples.
+- The confidence interval uses a two-sided Student's t critical value for small samples (tabulated through 30 degrees of freedom, normal approximation thereafter). With fewer than two paired samples, interval bounds are null rather than implying false precision.
+- A pair is rejected if it is incomplete, uses different map/random seeds, or fails to swap the color assignments.
+
+This fixes the statistical unit: the two color-swapped games are not treated as independent observations. It does not make a small tournament conclusive; multiple independent map seeds and sufficiently long games are still required.
+
+Automated tests cover pair aggregation, sample counting, incomplete pairs, seed mismatch, color-swap validation, and even pair-game constraints.
