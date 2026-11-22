@@ -127,3 +127,30 @@ test('defense ranking rejects a move that creates an immediate enemy base invasi
         [safe]
     );
 });
+
+
+test('immediate-win scan simulates attacks only after checking direct base entries', () => {
+    const analyzer = new TacticalAnalyzer();
+    const game = position();
+    const moves = [
+        { parentNodeId: 1, targetAreaId: 6, attacks: false },
+        { parentNodeId: 2, targetAreaId: 7, attacks: false },
+        { parentNodeId: 3, targetAreaId: 8, attacks: true }
+    ];
+    const calls = [];
+    const generateMoves = () => moves;
+    const simulateMove = (_state, move) => {
+        calls.push(move.targetAreaId);
+        return {
+            isGameOver: true,
+            getPlayerRootNodes: side => side === 'blue' ? [] : [{}]
+        };
+    };
+
+    const count = analyzer.countImmediateWinningMoves(
+        game, 'red', { red: 1, blue: 6 }, generateMoves, simulateMove
+    );
+
+    assert.equal(count, 2);
+    assert.deepEqual(calls, [8]);
+});
