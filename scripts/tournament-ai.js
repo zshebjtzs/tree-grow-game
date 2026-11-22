@@ -51,12 +51,10 @@ function createMap(seed, areaCount = 50) {
     for (let area = 1; area <= areaCount; area++) {
         connect(area, area === areaCount ? 1 : area + 1);
     }
-    // Add deterministic long-range edges while preserving a connected base ring.
-    for (let area = 1; area <= areaCount; area++) {
-        for (let edge = 0; edge < 2; edge++) {
-            const target = 1 + Math.floor(random() * areaCount);
-            connect(area, target);
-        }
+    // Add sparse deterministic shortcuts while keeping the map strategically connected.
+    for (let area = 1; area <= areaCount; area += 4) {
+        const target = 1 + Math.floor(random() * areaCount);
+        connect(area, target);
     }
     const adjacency = Object.fromEntries(
         Array.from({ length: areaCount }, (_, index) => [
@@ -66,15 +64,40 @@ function createMap(seed, areaCount = 50) {
     const areaCenters = Array.from({ length: areaCount }, (_, index) => [
         (index % 10) * 100, Math.floor(index / 10) * 100
     ]);
-    return { adjacency, areaCenters, areaCount };
+
+    let redBaseId = 1;
+    let blueBaseId = areaCount;
+    let baseDistance = -1;
+    for (let start = 1; start <= areaCount; start++) {
+        const distances = new Map([[start, 0]]);
+        const queue = [start];
+        for (let head = 0; head < queue.length; head++) {
+            const current = queue[head];
+            for (const next of adjacency[current] || []) {
+                if (distances.has(next)) continue;
+                distances.set(next, distances.get(current) + 1);
+                queue.push(next);
+            }
+        }
+        for (let target = start + 1; target <= areaCount; target++) {
+            const distance = distances.get(target);
+            if (distance !== undefined && distance > baseDistance) {
+                redBaseId = start;
+                blueBaseId = target;
+                baseDistance = distance;
+            }
+        }
+    }
+
+    return { adjacency, areaCenters, areaCount, redBaseId, blueBaseId, baseDistance };
 }
 
-function createInitialState(areaCenters) {
+function createInitialState(areaCenters, bases) {
     const game = new GameState();
     game.currentTurn = 'red';
-    game.addNode(null, ...areaCenters[0], 1, 'red');
+    game.addNode(null, ...areaCenters[bases.redBaseId - 1], bases.redBaseId, 'red');
     game.currentTurn = 'blue';
-    game.addNode(null, ...areaCenters[25], 26, 'blue');
+    game.addNode(null, ...areaCenters[bases.blueBaseId - 1], bases.blueBaseId, 'blue');
     game.currentTurn = 'red';
     return game;
 }
@@ -103,9 +126,10 @@ function summarizeDecisions(samples) {
 }
 
 function playGame({ seed, redDifficulty, blueDifficulty, maxPlies }) {
-    const { adjacency, areaCenters } = createMap(seed);
-    let game = createInitialState(areaCenters);
-    const bases = { red: 1, blue: 26 };
+    const map = createMap(seed);
+    const { adjacency, areaCenters } = map;
+    let game = createInitialState(areaCenters, map);
+    const bases = { red: map.redBaseId, blue: map.blueBaseId };
     const controllers = {
         red: new AIController(redDifficulty, adjacency, areaCenters),
         blue: new AIController(blueDifficulty, adjacency, areaCenters)
@@ -154,6 +178,7 @@ function playGame({ seed, redDifficulty, blueDifficulty, maxPlies }) {
 
     return {
         seed,
+        baseDistance: map.baseDistance,
         redDifficulty,
         blueDifficulty,
         winner,
