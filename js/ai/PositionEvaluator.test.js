@@ -195,3 +195,32 @@ test('evaluation rewards protecting the first branch with an actual fortress', (
     assert.ok(safeScore > unsafeScore + 2000,
         'a degree-4 first child should receive the shared root-safety bonus');
 });
+
+test('soft distance is evaluated lazily only when the hard route is blocked', () => {
+    const adjacency = { 1: [2], 2: [1, 3], 3: [2] };
+    const adapter = createAdapter(adjacency, 3);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    addRoot(game, 1, 'red');
+    game.currentTurn = 'blue';
+    const blueRoot = addRoot(game, 3, 'blue');
+    const bases = { red: 1, blue: 3 };
+
+    const originalSoftDistance = adapter.softDistanceToBase.bind(adapter);
+    let softDistanceCalls = 0;
+    adapter.softDistanceToBase = (...args) => {
+        softDistanceCalls++;
+        return originalSoftDistance(...args);
+    };
+
+    adapter.positionEvaluator.evaluateState(game, 'red', bases);
+    assert.equal(softDistanceCalls, 0,
+        'reachable hard routes must not trigger fallback Dijkstra searches');
+
+    const blocked = game.clone();
+    blocked.currentTurn = 'blue';
+    blocked.addNode(blueRoot.id, 20, 0, 2, 'blue');
+    adapter.positionEvaluator.evaluateState(blocked, 'red', bases);
+    assert.equal(softDistanceCalls, 1,
+        'only the side whose hard route is blocked should compute soft distance');
+});
