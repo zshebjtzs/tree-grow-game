@@ -10,7 +10,14 @@ const SHARED_EVALUATION = {
     expansionWeight: 1,
     safetyWeight: 1,
     structureWeight: 1,
-    branchingWeight: 1
+    branchingWeight: 1,
+    rootSafetyWeight: 2500,
+    rootChainRiskWeight: 80,
+    softDistanceWeight: 0.25,
+    growthHeadroomWeight: 12,
+    baseThreatWeight: 700,
+    siegePreparationWeight: 350,
+    siegeFortressWeight: 1500
 };
 
 const SEARCH_BUDGETS = {
