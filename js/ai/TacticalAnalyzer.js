@@ -27,6 +27,23 @@ export class TacticalAnalyzer {
         return count;
     }
 
+    countRootLossReplies(game, defenderSide, attackerSide, bases, generateMoves, simulateMove) {
+        if (game.isGameOver) return 0;
+        const rootsBefore = game.getPlayerRootNodes(defenderSide).length;
+        if (!rootsBefore) return 0;
+
+        return generateMoves(game, attackerSide, bases)
+            .filter(move => move.attacks)
+            .reduce((count, move) => {
+                const next = simulateMove(game, move, attackerSide, bases);
+                if (!next) return count;
+                return count + Math.max(
+                    0,
+                    rootsBefore - next.getPlayerRootNodes(defenderSide).length
+                );
+            }, 0);
+    }
+
     rankDefenses(game, moves, side, bases, simulateMove, generateMoves) {
         const opponent = side === 'red' ? 'blue' : 'red';
         const originalTurn = game.currentTurn;
@@ -39,23 +56,46 @@ export class TacticalAnalyzer {
         } finally {
             game.currentTurn = originalTurn;
         }
-        if (!currentThreats) return moves;
 
-        const ranked = moves.map(move => {
+        // Immediate wins remain the highest-priority tactical threat.
+        if (currentThreats) {
+            const ranked = moves.map(move => {
+                const next = move._nextState || simulateMove(game, move, side, bases);
+                if (!next) return { move, remainingThreats: Infinity };
+                const remainingThreats = !next.getPlayerRootNodes(side).length
+                    ? Infinity
+                    : next.isGameOver
+                        ? 0
+                        : this.countImmediateWinningMoves(
+                            next, opponent, bases, generateMoves, simulateMove
+                        );
+                return { move, remainingThreats };
+            });
+            const minimum = Math.min(...ranked.map(item => item.remainingThreats));
+            return ranked
+                .filter(item => item.remainingThreats === minimum)
+                .map(item => item.move);
+        }
+
+        // A move can expose a root to a one-reply attack without immediately
+        // losing the game. Check the resulting position, not only the position
+        // before our move, and prefer candidates that prevent root destruction.
+        const rootRisk = moves.map(move => {
             const next = move._nextState || simulateMove(game, move, side, bases);
-            if (!next) return { move, remainingThreats: Infinity };
-            const remainingThreats = !next.getPlayerRootNodes(side).length
-                ? Infinity
-                : next.isGameOver
-                    ? 0
-                    : this.countImmediateWinningMoves(
-                    next, opponent, bases, generateMoves, simulateMove
-                );
-            return { move, remainingThreats };
+            if (!next || next.isGameOver || !next.getPlayerRootNodes(side).length) {
+                return { move, rootLossReplies: next?.isGameOver ? 0 : Infinity };
+            }
+            return {
+                move,
+                rootLossReplies: this.countRootLossReplies(
+                    next, side, opponent, bases, generateMoves, simulateMove
+                )
+            };
         });
-        const minimum = Math.min(...ranked.map(item => item.remainingThreats));
-        return ranked
-            .filter(item => item.remainingThreats === minimum)
+        const minimumRootRisk = Math.min(...rootRisk.map(item => item.rootLossReplies));
+        if (!Number.isFinite(minimumRootRisk) || minimumRootRisk === 0) return moves;
+        return rootRisk
+            .filter(item => item.rootLossReplies === minimumRootRisk)
             .map(item => item.move);
     }
 }
