@@ -52,6 +52,21 @@ test('unsafe root and single-chain metrics follow the authoritative combat ances
     );
     assert.equal(safeMetrics.unsafeRoots, 0);
     assert.equal(safeMetrics.rootChainRisk, 0);
+
+    const forkedGame = new GameState();
+    forkedGame.currentTurn = 'red';
+    const forkedRoot = addRoot(forkedGame, 6, 'red');
+    const twoWayFork = forkedGame.addNode(forkedRoot.id, 70, 0, 7, 'red');
+    forkedGame.addNode(twoWayFork.id, 80, 0, 8, 'red');
+    forkedGame.addNode(twoWayFork.id, 90, 0, 9, 'red');
+    forkedGame.currentTurn = 'blue';
+    addRoot(forkedGame, 5, 'blue');
+    const forkedMetrics = adapter.positionEvaluator.getStructuralMetrics(
+        forkedGame, 'red', { red: 6, blue: 5 }
+    );
+    assert.equal(forkedMetrics.unsafeRoots, 1,
+        'a degree-3 first child is still attackable and does not protect its root');
+    assert.equal(forkedMetrics.rootChainRisk, 1);
 });
 
 test('soft distance preserves a gradient through an enemy-occupied intermediate area', () => {
@@ -118,4 +133,38 @@ test('structural metrics are cached per immutable state and side', () => {
     const first = adapter.positionEvaluator.getStructuralMetrics(game, 'red', bases);
     const second = adapter.positionEvaluator.getStructuralMetrics(game, 'red', bases);
     assert.strictEqual(first, second);
+});
+
+
+test('growth metrics exclude frozen parents and attacks against fortress bases', () => {
+    const adjacency = {
+        1: [2], 2: [1, 3], 3: [2, 4, 5, 6, 7],
+        4: [3], 5: [3], 6: [3], 7: [3]
+    };
+    const adapter = createAdapter(adjacency, 7);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const root = addRoot(game, 1, 'red');
+    const attacker = game.addNode(root.id, 20, 0, 2, 'red');
+    game.currentTurn = 'blue';
+    const enemyRoot = addRoot(game, 3, 'blue');
+    game.addNode(enemyRoot.id, 40, 0, 4, 'blue');
+    game.addNode(enemyRoot.id, 50, 0, 5, 'blue');
+    game.addNode(enemyRoot.id, 60, 0, 6, 'blue');
+    game.addNode(enemyRoot.id, 70, 0, 7, 'blue');
+
+    const fortressMetrics = adapter.positionEvaluator.getStructuralMetrics(
+        game, 'red', { red: 1, blue: 3 }
+    );
+    assert.equal(enemyRoot.getDegree(), 4);
+    assert.equal(fortressMetrics.baseThreatCount, 0);
+    assert.equal(fortressMetrics.growthHeadroom, 0);
+
+    const frozenGame = game.clone();
+    frozenGame.getNode(attacker.id).isFrozen = true;
+    const frozenMetrics = adapter.positionEvaluator.getStructuralMetrics(
+        frozenGame, 'red', { red: 1, blue: 3 }
+    );
+    assert.equal(frozenMetrics.baseThreatCount, 0);
+    assert.equal(frozenMetrics.growthHeadroom, 0);
 });
