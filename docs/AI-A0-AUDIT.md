@@ -1,0 +1,181 @@
+# AI A0：现状审计与棋力基线
+
+状态：代码审计完成；自动化对局评测工具已加入；运行时基准需以 CI 日志和本地完整对局结果为准。
+
+审计基准：`main`，提交 `fb49e70d844a1c2687c23a68ec902603e4c3a387`（2026-11-22）。
+
+## 1. A0 范围
+
+本阶段只建立现状认知和评测能力，不调整正式 AI 的选招行为、评估权重或难度参数。
+
+审计文件：
+
+- `js/ai/DifficultyProfiles.js`
+- `js/ai/AIController.js`
+- `js/ai/AIWorker.js`
+- `js/ai/SearchEngine.js`
+- `js/ai/PositionEvaluator.js`
+- `js/ai/TacticalAnalyzer.js`
+- `js/ai/PositionKey.js`
+- `js/game/GameState.js`
+- `js/game/RuleEngine.js`
+- `js/game/CombatResolver.js`
+- `js/ai/AIController.test.js`
+- `js/ai/SearchEngine.test.js`
+- `scripts/benchmark-ai.js`
+- `.github/workflows/ci.yml`
+
+## 2. 当前四档决策架构
+
+| 难度 | 决策方式 | 主要配置 |
+|---|---|---|
+| easy / 简单 | 静态评分后从前 4 个候选中随机选择 | 不进行多回合搜索 |
+| medium / 普通 | 静态评分后对前 8 个候选加权随机选择 | 不进行多回合搜索 |
+| hard / 困难 | 迭代加深 Alpha-Beta / PVS | width 7、depth 7、700ms、30,000 nodes |
+| expert / 专家 | 迭代加深 Alpha-Beta / PVS | width 10、depth 8、1,200ms、60,000 nodes |
+
+所有难度都会执行立即获胜检测和紧急防守筛选。因此，低难度不是完全没有战术意识；其主要差别是候选选择策略和是否进入多回合搜索。
+
+当前搜索运行于 Web Worker。搜索是同步执行，但有时间和节点预算；Worker 消息事件不能在同步搜索过程中插入执行，因此不能把“发送取消消息”当作中断机制。
+
+## 3. 搜索引擎审计
+
+### 已有能力
+
+- 迭代加深：只提交完整完成的深度结果。
+- Alpha-Beta 剪枝。
+- PVS 窄窗口试探与必要时重搜。
+- 置换表：记录深度、上下界类型、估值和最佳着法。
+- 置换表最佳着法优先排序。
+- 搜索时间预算和节点预算。
+- 无合法行动时通过 Pass 处理回合切换。
+- 搜索进度回调异常不会改变搜索结果。
+
+### 发现的问题
+
+#### A0-F01：根节点候选行动在深搜前被静态截断
+
+位置：`AIController._searchHard()`
+
+当前流程先将所有候选行动按 `scoreMove` 排序，再执行：
+
+```js
+const rootMoves = rankedMoves.slice(0, this.profile.searchWidth);
+```
+
+因此，困难只搜索静态排名前 7 个根行动，专家只搜索前 10 个。其余合法行动完全不会进入多回合搜索。
+
+影响：静态评估一旦低估某个需要多步铺垫的行动，搜索无法纠正该误判。这是搜索覆盖率问题，不是简单增加深度或预算就能解决的问题。
+
+建议：A1/A4 设计根层完整候选搜索及其性能控制策略。不要在 A0 直接扩大范围，以免改变当前基线。
+
+#### A0-F02：置换表局面键遗漏根节点首次生长历史
+
+位置：`js/ai/PositionKey.js`
+
+`GameState` 中的 `hasUsedRootGrowth` 是持久化规则状态。根节点首次生长后，即使其后代被摧毁，该标记仍保持为 true；它直接决定该根能否再次生长。
+
+当前局面键包含行动方、节点计数器、游戏结束状态、节点 ID、归属、父子关系、区域、根标记、摧毁状态和冻结状态，但没有编码 `hasUsedRootGrowth`。
+
+影响：对于节点计数器和当前存活结构相同、但根首次生长历史不同的两个局面，理论上可能生成相同 key，而其合法行动集合不同。置换表可能复用不适用于当前局面的搜索结果。
+
+建议：A1 修复局面键并添加回归测试。不能仅依赖当前节点是否还有子节点推导该标记，因为后代可能已经被摧毁。
+
+#### A0-F03：PVS 正确性测试覆盖面仍有限
+
+当前 `SearchEngine.test.js` 有确定性树上的 PVS 与全窗口 Alpha-Beta 对照；`benchmark-ai.js` 也会在三个固定局面上比较 hard/expert 的 PVS 与 Alpha-Beta 结果。
+
+这能发现一部分回归，但不能证明所有复杂局面下 PVS 都与全窗口搜索一致。A4 应增加随机生成的小型博弈树穷举对照，以及真实 TreeGrow 局面差分测试。
+
+#### A0-F04：置换表键和搜索模拟必须共同维护状态完备性
+
+`GameState.clone()` 会复制根首次生长标记；搜索模拟也使用真实 `RuleEngine`、`resolveCombat` 和回合冻结处理。这一方向正确，但状态键必须与模拟状态字段同步演进。未来每增加影响合法行动或评估的持久状态，都必须审查 `PositionKey`。
+
+## 4. 规则与战术边界审计
+
+当前正式 AI 的行动生成和模拟使用正式规则模块，而不是独立复制一套战斗规则：
+
+- `RuleEngine.canGrow()` 校验根节点首次生长、冻结、路径、区域占用和堡垒限制。
+- `CombatResolver` 负责父链回溯、分支保护与级联删除。
+- `AIController._simulateMove()` 先处理进入敌方基地的胜利，再处理战斗；随后检查双方根节点是否归零，并执行行动方冻结清理和回合切换。
+- `TacticalAnalyzer` 检查立即获胜行动，并通过临时切换行动方统计对手立即获胜威胁；使用 `finally` 恢复原行动方。
+
+现有固定测试已覆盖：立即获胜、紧急基地威胁防守、堡垒不可攻击、冻结节点无行动、根节点首次生长、根枝被摧毁后不能重新生长、战斗后防守方冻结状态保留，以及搜索 Pass。
+
+仍缺少系统性的战术局面集，尤其是复杂级联摧毁、多个根同时受威胁、结构保护与基地竞速冲突、以及不同搜索深度下的选择稳定性。
+
+## 5. 现有性能基准
+
+`scripts/benchmark-ai.js` 是性能基准，不是棋力锦标赛。
+
+固定局面：
+
+- sparse
+- branching
+- combat
+
+采样方式：
+
+- 每个局面预热 5 次。
+- 每个局面/难度执行 40 次。
+- 记录均值、P50、P95、最大耗时、节点数和完成深度。
+- hard/expert 对照 PVS 与关闭 PVS 的 Alpha-Beta，并检查选招、估值和完成深度一致。
+
+CI 当前顺序为：
+
+1. `npm test`
+2. `npm run benchmark:replay`
+3. `npm run benchmark:ai`
+4. `npm run build`
+5. `npm run verify:pages`
+
+注意：CI 的 Node.js 基准不等于浏览器 Worker 端到端延迟，也不等于用户目标设备性能。不能把单次共享 CI 机器的毫秒值设为硬性门槛。
+
+## 6. 新增对局评测工具
+
+新增 `scripts/tournament-ai.js`，并增加命令：
+
+```bash
+npm run tournament:ai
+```
+
+工具特性：
+
+- 对 easy、medium、hard、expert 进行两两对战。
+- 使用可复现的伪随机地图拓扑和随机选择种子。
+- 支持指定地图种子、配对局数、最大 ply 和指定难度配对。
+- 配对局按红蓝双方交换难度位置。
+- 统计胜、负、和、得分率及 95% 区间估计。
+- 同时记录各方决策耗时、P50/P95、节点数和完成深度。
+- 输出完整 JSON，便于后续保存、比较和分析。
+
+示例：
+
+```bash
+# 小规模冒烟测试
+npm run tournament:ai -- --seed-count 1 --pair-games 1 --max-plies 40 --only easy:medium,hard:expert
+
+# 扩大样本
+npm run tournament:ai -- --seed-count 10 --pair-games 2 --max-plies 120
+```
+
+注意：小规模冒烟测试只验证对局流程和报告生成，不足以得出可靠棋力结论。正式比较应扩大种子数，并结合先手交换、置信区间和真人测试。得分率区间是样本统计摘要，不应被解释为对所有地图的保证。
+
+## 7. A0 结论与后续优先级
+
+当前主要问题不是缺少搜索算法，而是搜索覆盖、状态键完备性和棋力评测体系仍不充分。
+
+建议优先级：
+
+1. A1：修复 `PositionKey` 对 `hasUsedRootGrowth` 的遗漏，并增加回归测试。
+2. A1：重新设计根层候选覆盖，避免静态评分在搜索前永久排除关键行动。
+3. A1：统一四档决策框架，明确低难度行为差异与战术硬约束的边界。
+4. A2：在统一搜索框架后增加 beginner / advanced。
+5. A3：逐项实验结构性评估指标。
+6. A4：利用 tournament 结果校准预算，并继续验证 PVS、置换表和搜索优化。
+
+## 8. 基线数据状态
+
+代码审计与评测工具已经建立。实际性能数据以本分支 CI 的 `benchmark:ai` 输出为准；棋力数据以本地运行 `tournament:ai` 的完整 JSON 为准。
+
+在 CI 和目标设备的实际运行结果尚未读取前，不填写推测的耗时、节点数或胜率。A0 的棋力基线不能用静态代码审查或少量人工对局代替。
