@@ -399,3 +399,18 @@ test('AI explains an immediate win as a verified tactical result', () => {
     assert.equal(move.targetAreaId, 6);
     assert.match(ai.lastDecisionExplanation.summary, /立即获胜/);
 });
+
+
+test('AI never generates a second root branch after the original branch is destroyed', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    const root = game.addNode(null, 0, 0, 1, 'blue');
+    const firstBranch = game.addNode(root.id, 10, 0, 2, 'blue');
+    game.deleteNodes([firstBranch.id]);
+    assert.deepEqual(root.childrenIds, []);
+    assert.equal(root.hasUsedRootGrowth, true);
+
+    const ai = new AIController('hard', line, centers);
+    assert.deepEqual(ai._generateMoves(game, 'blue', { red: 6, blue: 1 }), []);
+    assert.equal(ai.getBestMove(snapshot(game, 6, 1), 'blue'), null);
+});
