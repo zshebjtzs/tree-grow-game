@@ -233,7 +233,10 @@ test('all difficulty profiles share evaluation weights and vary only by search b
     const profiles = DIFFICULTY_LEVELS.map(getDifficultyProfile);
     const weightKeys = [
         'progressWeight', 'attackWeight', 'rootAttackWeight',
-        'expansionWeight', 'safetyWeight', 'structureWeight', 'branchingWeight'
+        'expansionWeight', 'safetyWeight', 'structureWeight', 'branchingWeight',
+        'rootSafetyWeight', 'rootChainRiskWeight', 'softDistanceWeight',
+        'growthHeadroomWeight', 'baseThreatWeight', 'siegePreparationWeight',
+        'siegeFortressWeight'
     ];
     const baselineWeights = Object.fromEntries(weightKeys.map(key => [key, profiles[0][key]]));
     for (const profile of profiles) {
