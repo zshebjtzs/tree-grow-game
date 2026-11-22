@@ -385,20 +385,24 @@ A4.1 将 `softDistanceToBase` 改为惰性计算：当硬路径可达时，不�
 
 新增 50 棵确定性随机四层博弈树差分测试，分别运行全窗口 Alpha-Beta、全窗口 PVS、Aspiration Alpha-Beta、Aspiration PVS。四种配置必须完成相同深度，并返回相同最优根着法与 minimax 值。benchmark 同时输出平均重搜次数和 fail-high / fail-low 计数。
 
-提交 `636bf62652f87e8d366528d61d438bd3555a023c` 的 CI：
-- `npm test`：235 项通过，0 失败。
+提交 `c55befb28caf90769d5c06f02c3cecb2a06b23e7` 的 CI：
+- `npm test`：237 项通过，0 失败。
 - 六档 AI 基准、回放基准、六局锦标赛冒烟：通过。
 - 构建、Pages 资源验证、Windows Desktop Build：通过。
 
-相较固定 150 分窗口，自适应窗口在 sparse fixture 的 PVS 平均耗时变化：
+固定 150 分窗口的首次基准中，hard/expert 平均每次决策约 6–7 次重搜；自适应窗口后降至 2 次。该计数在重复 CI 中保持稳定，六档完成深度也未下降。
 
-| 难度 | 固定窗口 | 自适应窗口 | 变化 |
-|---|---:|---:|---:|
-| beginner | 0.850 ms | 0.438 ms | -48.5% |
-| easy | 2.556 ms | 1.632 ms | -36.1% |
-| medium | 12.289 ms | 7.107 ms | -42.2% |
-| advanced | 20.889 ms | 12.090 ms | -42.1% |
-| hard | 113.892 ms | 70.725 ms | -37.9% |
-| expert | 283.636 ms | 164.403 ms | -42.0% |
+耗时指标在不同 CI run 之间波动明显：一次自适应 run 的 hard/expert PVS 均值为 70.725 / 164.403 ms，重复 run 则为 93.428 / 215.818 ms。因此不能将不同 run 的时间差直接归因于算法优化，也不宣称固定加速比例。当前可以确认的是重搜次数下降且搜索深度不变；实际耗时收益仍需同机重复测量。
 
-hard/expert 的平均 aspiration re-search 从约 6–7 次降至 2 次；六档完成深度仍为原配置值，PVS/Alpha-Beta 一致性检查通过。该结果支持采用自适应窗口，但仍需在更多地图与真实局面中复测，不能将单一 fixture 的加速比例视为普遍保证。
+
+## 16. A4.4：预算边界与随机 DAG 差分测试（已通过 CI）
+
+新增测试覆盖：
+- 在 fail-high 后的全窗口重搜阶段注入预算耗尽信号，验证搜索回退到上一轮已完整完成的深度、着法和值。
+- 20 个确定性随机四层 DAG，多个父节点共享后继状态，验证置换表命中；Alpha-Beta 与 PVS/Aspiration 必须返回相同根着法和 minimax 值。
+- 50 个随机四层树的四配置差分测试继续通过。
+
+提交 `c55befb28caf90769d5c06f02c3cecb2a06b23e7` 的 CI：
+- 237/237 自动化测试通过。
+- 回放基准、六档 AI 基准、六局锦标赛冒烟、构建、Pages 验证通过。
+- Windows Desktop Build 通过。
