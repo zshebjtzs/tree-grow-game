@@ -29,13 +29,13 @@ jobs:
       - name: Collect AI decision-time baseline
         run: npm run benchmark:ai
       - name: Smoke-test AI tournament runner
-        if: ${{ github.event_name != 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'push' }}
         run: npm run tournament:ai -- --seed-count 1 --pair-games 2 --max-plies 20 --only beginner:easy,medium:advanced,hard:expert
       - name: Run full paired AI tournament
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: node scripts/tournament-ai.js --seed-count "${{ inputs.tournament_seed_count }}" --pair-games 2 --max-plies 80 > ai-tournament-results.json
+        if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+        run: node scripts/tournament-ai.js --seed-count "${{ inputs.tournament_seed_count || '5' }}" --pair-games 2 --max-plies 80 > ai-tournament-results.json
       - name: Upload AI tournament results
-        if: always() && github.event_name == 'workflow_dispatch' && hashFiles('ai-tournament-results.json') != ''
+        if: always() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && hashFiles('ai-tournament-results.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: ai-tournament-results
