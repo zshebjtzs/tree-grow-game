@@ -45,6 +45,10 @@ jobs:
           }
           $refs = [regex]::Matches($html, '(?:src|href)="([^"]+)"') | ForEach-Object { $_.Groups[1].Value }
           foreach ($ref in $refs) {
+            # External links, protocol-relative URLs, anchors, and data URLs are not bundled assets.
+            if ($ref -match '^(?:[a-z][a-z0-9+.-]*:|//|#)') {
+              continue
+            }
             if ($ref.StartsWith('/')) {
               $asset = Join-Path "dist" $ref.TrimStart('/')
             } else {
