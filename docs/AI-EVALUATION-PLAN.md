@@ -115,3 +115,21 @@ Sparse-fixture PVS average time before/after lazy fallback:
 | expert | 304.150 ms | 298.439 ms | -1.9% |
 
 Configured search depths remained unchanged. This confirms the lazy fallback avoids some unnecessary work, but the improvement is fixture-dependent and does not fully offset the structural-evaluation cost. Continue with A4.2 rather than reducing search budgets.
+
+
+## A4.2: Root aspiration windows
+
+Iterative deepening now uses the previous completed iteration's score as a prediction for the next depth:
+
+- Depth 1 and any search without a previous score use a full window.
+- Later iterations begin with `previousValue ± 150`.
+- A fail-high or fail-low triggers a full-window re-search; a failed narrow-window result is never committed as a completed iteration.
+- The previous iteration's best root move is promoted before search, preserving principal-variation ordering.
+- Every root candidate checks the same time/node budget guard; the search still retains the complete legal root candidate set.
+- Telemetry reports aspiration research count and fail-high/fail-low counts.
+
+Correctness requirements:
+- Aspiration and full-window search must return the same move/value on deterministic trees.
+- Both fail-high and fail-low must trigger a full-window recovery.
+- Budget exhaustion during a re-search must preserve the last fully completed depth.
+- PVS/Alpha-Beta parity and the six-tier benchmark remain mandatory.
