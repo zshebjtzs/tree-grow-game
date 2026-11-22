@@ -1,11 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MatchTracker } from '../js/game/MatchTracker.js';
-
-const DIFFICULTIES = ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert'];
+import { DIFFICULTY_LEVELS } from '../js/ai/DifficultyProfiles.js';
 
 test('MatchTracker accepts all six supported AI difficulty levels', () => {
-    for (const difficulty of DIFFICULTIES) {
+    for (const difficulty of DIFFICULTY_LEVELS) {
         assert.doesNotThrow(() => new MatchTracker({ mode: 'pve', difficulty }), difficulty);
     }
 });
