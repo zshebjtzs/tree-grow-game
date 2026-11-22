@@ -19,7 +19,7 @@ function position({ blueRoots = 1, redRoots = 1, vulnerable = false, isGameOver 
 
 test('defense ranking rejects a move that exposes a root to immediate destruction', () => {
     const analyzer = new TacticalAnalyzer();
-    const game = position();
+    const game = position({ blueRoots: 2 });
     const safe = { parentNodeId: 1, targetAreaId: 4 };
     const risky = { parentNodeId: 2, targetAreaId: 5 };
 
@@ -31,10 +31,10 @@ test('defense ranking rejects a move that exposes a root to immediate destructio
     };
     const simulateMove = (state, move, side) => {
         if (side === 'blue') {
-            return position({ vulnerable: move.targetAreaId === risky.targetAreaId });
+            return position({ blueRoots: 2, vulnerable: move.targetAreaId === risky.targetAreaId });
         }
         if (side === 'red' && state.vulnerable && move.attacks) {
-            return position({ blueRoots: 0, isGameOver: true });
+            return position({ blueRoots: 1 });
         }
         return state;
     };
