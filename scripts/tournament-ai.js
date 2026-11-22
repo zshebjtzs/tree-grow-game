@@ -223,7 +223,7 @@ function runTournament(options) {
                 const mapSeed = (seed + pairIndex * 997) >>> 0;
                 const swapPairIndex = Math.floor(gameIndex / 2);
                 const randomSeed = (seed + pairIndex * 997 + swapPairIndex * 7919) >>> 0;
-                const pairId = `${seed}:${swapPairIndex}`;
+                const pairId = `${pairIndex}:${seed}:${swapPairIndex}`;
                 const originalRandom = Math.random;
                 Math.random = createRandom(randomSeed);
                 try {
