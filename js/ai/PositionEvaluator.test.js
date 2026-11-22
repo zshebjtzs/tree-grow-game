@@ -251,3 +251,35 @@ test('soft distance is evaluated lazily only when the hard route is blocked', ()
     assert.equal(softDistanceCalls, 1,
         'only the side whose hard route is blocked should compute soft distance');
 });
+
+
+test('first-root growth candidate generation is limited to reachable unoccupied paths', () => {
+    const adjacency = {
+        1: [2, 4], 2: [1, 3], 3: [2],
+        4: [1, 5], 5: [4], 8: []
+    };
+    const adapter = createAdapter(adjacency, 8);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const root = addRoot(game, 1, 'red');
+    addRoot(game, 8, 'red');
+    game.currentTurn = 'blue';
+    addRoot(game, 4, 'blue');
+    game.currentTurn = 'red';
+
+    const context = adapter.ruleEngine.createGrowthContext(game, 'red');
+    const targets = adapter.getRootGrowthTargets(root, context);
+    assert.deepEqual(new Set(targets), new Set([2, 3, 4]));
+    assert.ok(!targets.includes(5),
+        'an occupied intermediate area must not be traversed');
+    assert.ok(!targets.includes(6) && !targets.includes(7),
+        'unreachable map areas must not be scanned as root-growth candidates');
+
+    const legal = targets.filter(target => adapter.ruleEngine.canGrow(game, root, target, {
+        ownBaseId: 1,
+        enemyBaseId: 4,
+        context
+    }).allowed);
+    assert.deepEqual(legal, [2, 3],
+        'candidate pruning must preserve the exact legal root-growth targets');
+});
