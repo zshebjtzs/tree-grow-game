@@ -227,31 +227,48 @@ test('expert difficulty is accepted and returns a RuleEngine-legal move', () => 
     assert.equal(validation.allowed, true);
 });
 
-test('difficulty profiles encode distinct strategic priorities and expert search breadth', async () => {
+test('all difficulty profiles share evaluation weights and vary only by search budget', async () => {
     const { getDifficultyProfile, DIFFICULTY_LEVELS } = await import('./DifficultyProfiles.js');
     assert.deepEqual(DIFFICULTY_LEVELS, ['easy', 'medium', 'hard', 'expert']);
-    const easy = getDifficultyProfile('easy');
-    const medium = getDifficultyProfile('medium');
-    const hard = getDifficultyProfile('hard');
-    const expert = getDifficultyProfile('expert');
-    assert.ok(easy.expansionWeight > medium.expansionWeight);
-    assert.ok(easy.attackWeight < medium.attackWeight);
-    assert.ok(hard.attackWeight > medium.attackWeight);
-    assert.ok(expert.safetyWeight > hard.safetyWeight);
-    assert.ok(expert.structureWeight > hard.structureWeight);
-    assert.ok(expert.searchWidth > hard.searchWidth);
+    const profiles = DIFFICULTY_LEVELS.map(getDifficultyProfile);
+    const weightKeys = [
+        'progressWeight', 'attackWeight', 'rootAttackWeight',
+        'expansionWeight', 'safetyWeight', 'structureWeight', 'branchingWeight'
+    ];
+    const baselineWeights = Object.fromEntries(weightKeys.map(key => [key, profiles[0][key]]));
+    for (const profile of profiles) {
+        assert.deepEqual(
+            Object.fromEntries(weightKeys.map(key => [key, profile[key]])),
+            baselineWeights
+        );
+        assert.ok(profile.maxDepth > 0);
+        assert.ok(profile.searchBudgetMs > 0);
+        assert.ok(profile.maxNodes > 0);
+        assert.equal('selection' in profile, false);
+        assert.equal('searchWidth' in profile, false);
+    }
+    assert.ok(profiles[1].maxDepth > profiles[0].maxDepth);
+    assert.ok(profiles[2].searchBudgetMs > profiles[1].searchBudgetMs);
+    assert.ok(profiles[3].maxNodes > profiles[2].maxNodes);
     assert.throws(() => getDifficultyProfile('unknown'), /难度无效/);
 });
 
 
-test('hard and expert profiles configure bounded iterative search', async () => {
+test('all four difficulties configure bounded iterative search', async () => {
     const { getDifficultyProfile } = await import('./DifficultyProfiles.js');
+    const easy = getDifficultyProfile('easy');
+    const medium = getDifficultyProfile('medium');
     const hard = getDifficultyProfile('hard');
     const expert = getDifficultyProfile('expert');
+    assert.equal(easy.maxDepth, 2);
+    assert.equal(medium.maxDepth, 4);
     assert.equal(hard.maxDepth, 7);
     assert.equal(expert.maxDepth, 8);
-    assert.ok(hard.searchBudgetMs > 0 && expert.searchBudgetMs > hard.searchBudgetMs);
-    assert.ok(hard.maxNodes > 0 && expert.maxNodes > hard.maxNodes);
+    assert.ok(easy.searchBudgetMs > 0 && medium.searchBudgetMs > easy.searchBudgetMs);
+    assert.ok(hard.searchBudgetMs > medium.searchBudgetMs);
+    assert.ok(expert.searchBudgetMs > hard.searchBudgetMs);
+    assert.ok(easy.maxNodes > 0 && medium.maxNodes > easy.maxNodes);
+    assert.ok(hard.maxNodes > medium.maxNodes && expert.maxNodes > hard.maxNodes);
 });
 
 
@@ -438,4 +455,37 @@ test('AI never generates a second root branch after the original branch is destr
     const ai = new AIController('hard', line, centers);
     assert.deepEqual(ai._generateMoves(game, 'blue', { red: 6, blue: 1 }), []);
     assert.equal(ai.getBestMove(snapshot(game, 6, 1), 'blue'), null);
+});
+
+
+test('deep search receives every legal root candidate without a static width cutoff', () => {
+    const ai = new AIController('hard', line, centers);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    game.addNode(null, 0, 0, 1, 'red');
+    const candidates = Array.from({ length: 14 }, (_, index) => ({
+        parentNodeId: 1,
+        targetAreaId: index + 2,
+        x: index * 10,
+        y: 0,
+        score: 100 - index,
+        _nextState: {}
+    }));
+    let receivedMoves = null;
+    ai.searchEngine.search = options => {
+        receivedMoves = options.rootMoves;
+        return {
+            move: options.rootMoves[0],
+            value: 0,
+            completedDepth: 0,
+            nodes: 0,
+            cutoffs: 0,
+            transpositionHits: 0,
+            elapsedMs: 0
+        };
+    };
+
+    ai._searchHard(game, candidates, 'red', { red: 1, blue: 50 });
+    assert.equal(receivedMoves.length, candidates.length);
+    assert.deepEqual(receivedMoves, candidates);
 });
