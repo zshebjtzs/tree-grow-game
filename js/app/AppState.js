@@ -1,3 +1,7 @@
+import { DIFFICULTY_LEVELS } from '../ai/DifficultyProfiles.js';
+
+const DIFFICULTIES = new Set(DIFFICULTY_LEVELS);
+
 export class AppState {
     constructor() {
         this.screen = 'menu';
@@ -22,7 +26,7 @@ export class AppState {
 
     startMatch(config) {
         if (!config || !['pvp', 'pve'].includes(config.mode) ||
-            !['easy', 'medium', 'hard', 'expert'].includes(config.difficulty) ||
+            !DIFFICULTIES.has(config.difficulty) ||
             !['red', 'blue'].includes(config.playerSide) ||
             (config.mode === 'pvp' && config.playerSide !== 'red')) {
             throw new TypeError('Invalid match configuration');
