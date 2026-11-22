@@ -36,7 +36,7 @@ test('root first branch can target map areas without a direct adjacency entry', 
 });
 
 test('all difficulties take an immediate legal winning move', () => {
-    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+    for (const difficulty of ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
         game.addNode(null, 0, 0, 6, 'red');
@@ -69,7 +69,7 @@ test('AI rejects an unsupported player side and invalid difficulty', () => {
 
 
 test('all three difficulty levels only return moves accepted by RuleEngine', () => {
-    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+    for (const difficulty of ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
         game.addNode(null, 0, 0, 6, 'red');
@@ -93,7 +93,7 @@ test('all AI difficulties reject a fortress as the only possible attack target',
         1: [2], 2: [1, 3, 4, 5, 6],
         3: [2], 4: [2], 5: [2], 6: [2]
     };
-    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+    for (const difficulty of ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
         const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
@@ -229,7 +229,7 @@ test('expert difficulty is accepted and returns a RuleEngine-legal move', () => 
 
 test('all difficulty profiles share evaluation weights and vary only by search budget', async () => {
     const { getDifficultyProfile, DIFFICULTY_LEVELS } = await import('./DifficultyProfiles.js');
-    assert.deepEqual(DIFFICULTY_LEVELS, ['easy', 'medium', 'hard', 'expert']);
+    assert.deepEqual(DIFFICULTY_LEVELS, ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']);
     const profiles = DIFFICULTY_LEVELS.map(getDifficultyProfile);
     const weightKeys = [
         'progressWeight', 'attackWeight', 'rootAttackWeight',
@@ -247,28 +247,34 @@ test('all difficulty profiles share evaluation weights and vary only by search b
         assert.equal('selection' in profile, false);
         assert.equal('searchWidth' in profile, false);
     }
-    assert.ok(profiles[1].maxDepth > profiles[0].maxDepth);
-    assert.ok(profiles[2].searchBudgetMs > profiles[1].searchBudgetMs);
-    assert.ok(profiles[3].maxNodes > profiles[2].maxNodes);
+    for (let index = 1; index < profiles.length; index++) {
+        assert.ok(profiles[index].maxDepth > profiles[index - 1].maxDepth);
+        assert.ok(profiles[index].searchBudgetMs > profiles[index - 1].searchBudgetMs);
+        assert.ok(profiles[index].maxNodes > profiles[index - 1].maxNodes);
+    }
+    assert.deepEqual(
+        DIFFICULTY_LEVELS.map(getDifficultyProfile).map(profile => profile.label),
+        ['入门', '简单', '普通', '进阶', '困难', '专家']
+    );
     assert.throws(() => getDifficultyProfile('unknown'), /难度无效/);
 });
 
 
-test('all four difficulties configure bounded iterative search', async () => {
+test('all six difficulties configure bounded iterative search', async () => {
     const { getDifficultyProfile } = await import('./DifficultyProfiles.js');
-    const easy = getDifficultyProfile('easy');
-    const medium = getDifficultyProfile('medium');
-    const hard = getDifficultyProfile('hard');
-    const expert = getDifficultyProfile('expert');
-    assert.equal(easy.maxDepth, 2);
-    assert.equal(medium.maxDepth, 4);
-    assert.equal(hard.maxDepth, 7);
-    assert.equal(expert.maxDepth, 8);
-    assert.ok(easy.searchBudgetMs > 0 && medium.searchBudgetMs > easy.searchBudgetMs);
-    assert.ok(hard.searchBudgetMs > medium.searchBudgetMs);
-    assert.ok(expert.searchBudgetMs > hard.searchBudgetMs);
-    assert.ok(easy.maxNodes > 0 && medium.maxNodes > easy.maxNodes);
-    assert.ok(hard.maxNodes > medium.maxNodes && expert.maxNodes > hard.maxNodes);
+    const expectedDepths = [1, 2, 4, 5, 7, 8];
+    const profiles = ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']
+        .map(getDifficultyProfile);
+
+    assert.deepEqual(profiles.map(profile => profile.maxDepth), expectedDepths);
+    for (let index = 0; index < profiles.length; index++) {
+        assert.ok(profiles[index].searchBudgetMs > 0);
+        assert.ok(profiles[index].maxNodes > 0);
+        if (index > 0) {
+            assert.ok(profiles[index].searchBudgetMs > profiles[index - 1].searchBudgetMs);
+            assert.ok(profiles[index].maxNodes > profiles[index - 1].maxNodes);
+        }
+    }
 });
 
 
@@ -492,7 +498,7 @@ test('deep search receives every legal root candidate without a static width cut
 
 
 test('all existing difficulties execute the shared search pipeline on non-terminal positions', () => {
-    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+    for (const difficulty of ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
         game.addNode(null, 0, 0, 6, 'red');
