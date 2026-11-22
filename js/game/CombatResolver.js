@@ -8,6 +8,10 @@ export function resolveCombat(gameState, invadingNode, defenderNode) {
         throw new TypeError('战斗结算需要有效的游戏状态、进攻节点和防守节点');
     }
 
+    if (defenderNode.getDegree() > 3) {
+        throw new Error('堡垒节点不能作为攻击目标');
+    }
+
     const getSubtreeIds = rootId => {
         const result = [];
         const visited = new Set();
@@ -24,46 +28,37 @@ export function resolveCombat(gameState, invadingNode, defenderNode) {
         return result;
     };
 
-    // Find the nearest ancestor that is a branching point.
+    // The attacked node itself is never a stopping point, even when it is
+    // a branching point. Only an ancestor branching node can protect its
+    // other child branches.
     let stopNode = null;
-    let cursor = defenderNode;
+    let cursor = defenderNode.parentId === null
+        ? null
+        : gameState.getNode(defenderNode.parentId);
     while (cursor) {
-        // A branching point protects its sibling branches, but a root is
-        // never a valid stopping point: reaching it destroys the whole tree.
         if (!cursor.isRoot && cursor.childrenIds.length >= 2) {
             stopNode = cursor;
             break;
         }
-        cursor = cursor.parentId === null ? null : gameState.getNode(cursor.parentId);
+        cursor = cursor.parentId === null
+            ? null
+            : gameState.getNode(cursor.parentId);
     }
 
-    if (defenderNode.getDegree() > 3) {
-        throw new Error('堡垒节点不能作为攻击目标');
-    }
-
-    let nodesToDelete;
-    let freezeTargetId = null;
-
-    // A non-fortress branching point loses its complete subtree.
-    if (defenderNode.childrenIds.length >= 2) {
-        nodesToDelete = getSubtreeIds(defenderNode.id);
-    } else {
-        // Remove the defender-to-branch path and every descendant hanging
-        // from that path. The branching point itself survives.
-        nodesToDelete = [];
-        cursor = defenderNode;
-        while (cursor && (!stopNode || cursor.id !== stopNode.id)) {
-            nodesToDelete.push(...getSubtreeIds(cursor.id));
-            cursor = cursor.parentId === null ? null : gameState.getNode(cursor.parentId);
-        }
-
-        if (stopNode && !stopNode.isRoot && !nodesToDelete.includes(stopNode.id)) {
-            freezeTargetId = stopNode.id;
-        }
+    // Delete the attacked subtree and each path segment up to (but not
+    // including) the nearest ancestor branching point. If none exists,
+    // the walk reaches the root and deletes the complete defending tree.
+    const nodesToDelete = [];
+    cursor = defenderNode;
+    while (cursor && (!stopNode || cursor.id !== stopNode.id)) {
+        nodesToDelete.push(...getSubtreeIds(cursor.id));
+        cursor = cursor.parentId === null
+            ? null
+            : gameState.getNode(cursor.parentId);
     }
 
     return {
         nodesToDelete: [...new Set(nodesToDelete)],
-        freezeTargetId
+        freezeTargetId: stopNode ? stopNode.id : null
     };
 }
