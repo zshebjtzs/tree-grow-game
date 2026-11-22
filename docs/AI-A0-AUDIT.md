@@ -220,6 +220,7 @@ npm run tournament:ai -- --seed-count 10 --pair-games 2 --max-plies 120
 5. 将原仅供 hard/expert 使用的内部入口重命名为通用 `_search`。
 6. 新增 `TreeGrowAIAdapter`，将状态创建、基地校验、合法行动生成、模拟生长/战斗/Pass、位置键、距离缓存、评估器、战术分析、决策解释和对外行动映射收口到 TreeGrow 适配器。控制器负责通用决策流程；`SearchEngine` 通过 `isTerminal` 与 `getSideToMove` 回调读取状态，不再假定状态必须具有 TreeGrow 的字段结构。
 7. Worker 的难度校验改为读取 `DIFFICULTY_LEVELS`，避免与难度配置维护两份列表。
+8. 新增 `AIAdapterRegistry`，Worker 请求支持可选 `mode` 字段，缺省为 `tree-grow`；当前只注册 TreeGrow 适配器，未来模式只需增加适配器实现并注册工厂，不在共享控制器/搜索器中添加模式分支。
 
 A1 当前仍需重点验证：低预算档在较高分支数局面是否能稳定完成至少一层搜索；全根候选搜索对 hard/expert 的耗时和完成深度影响；不同预算是否形成可观测、稳定的棋力梯度；适配器接口是否覆盖未来模式所需的全部状态操作。不能仅凭预算大小推断难度排序成立。
 
