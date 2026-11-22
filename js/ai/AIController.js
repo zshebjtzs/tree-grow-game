@@ -103,7 +103,7 @@ export class AIController {
             if (tacticallyRanked.length < ranked.length) selectionReason = 'defense-priority';
 
             selectedMove = this._search(game, tacticallyRanked, playerSide, bases);
-            selectionReason = 'search-selection';
+            if (selectionReason !== 'defense-priority') selectionReason = 'search-selection';
         }
 
         this.lastDecisionExplanation = this._createDecisionExplanation(
@@ -207,14 +207,15 @@ export class AIController {
 
                 const scored = [];
                 const children = new Map();
+                const movingSide = this.adapter.getSideToMove(state);
                 for (const move of moves) {
                     checkBudget();
-                    const next = this._simulateMove(state, move, this.adapter.getSideToMove(state), bases, { alreadyValidated: true });
+                    const next = this._simulateMove(state, move, movingSide, bases, { alreadyValidated: true });
                     if (!next) continue;
                     children.set(moveKey(move), next);
                     scored.push({
                         move,
-                        score: this._scoreMove(state, move, this.adapter.getSideToMove(state), bases, next)
+                        score: this._scoreMove(state, move, movingSide, bases, next)
                     });
                 }
                 // Scores are from the side-to-move's own perspective, so
