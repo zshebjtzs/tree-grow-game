@@ -26,7 +26,7 @@ export class SearchEngine {
         maxNodes = Infinity,
         principalVariationSearch = true,
         aspirationWindows = true,
-        aspirationWindow = 150,
+        aspirationWindow = 500,
         onProgress = () => {}
     }) {
         if (!Array.isArray(rootMoves) || !rootMoves.length) {
