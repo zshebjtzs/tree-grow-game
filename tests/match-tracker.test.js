@@ -10,7 +10,7 @@ test('MatchTracker accepts all six supported AI difficulty levels', () => {
 });
 
 test('MatchTracker serializes and restores all six supported AI difficulty levels', () => {
-    for (const difficulty of DIFFICULTIES) {
+    for (const difficulty of DIFFICULTY_LEVELS) {
         const tracker = new MatchTracker({ mode: 'pve', difficulty });
         const restored = MatchTracker.fromJSON(tracker.toJSON());
         assert.ok(restored, difficulty);
