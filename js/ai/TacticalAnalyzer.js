@@ -105,10 +105,13 @@ export class TacticalAnalyzer {
                 return { move, rootLossReplies: Infinity };
             }
             if (next.isGameOver) {
-                return { move, rootLossReplies: 0 };
+                return { move, immediateWinningReplies: 0, maxRootLoss: 0, rootLossReplies: 0, maxCascadeLoss: 0 };
             }
             return {
                 move,
+                immediateWinningReplies: this.countImmediateWinningMoves(
+                    next, opponent, bases, generateMoves, simulateMove
+                ),
                 ...this.measureAttackRisk(
                     next, side, opponent, bases, generateMoves, simulateMove
                 )
@@ -117,11 +120,13 @@ export class TacticalAnalyzer {
         const finiteRisk = rootRisk.filter(item => Number.isFinite(item.maxRootLoss));
         if (!finiteRisk.length) return moves;
 
-        // Root survival dominates. When root risk is equal, minimize the
-        // largest cascading structural loss; ordinary single-node captures
-        // are not treated as chain-collapse threats.
-        const minimumRootLoss = Math.min(...finiteRisk.map(item => item.maxRootLoss));
-        const rootSafe = finiteRisk.filter(item => item.maxRootLoss === minimumRootLoss);
+        // Do not create a new immediate win for the opponent. Once those
+        // replies are minimized, root survival dominates; when root risk is
+        // equal, minimize cascading structural loss.
+        const minimumImmediateWins = Math.min(...finiteRisk.map(item => item.immediateWinningReplies));
+        const immediateSafe = finiteRisk.filter(item => item.immediateWinningReplies === minimumImmediateWins);
+        const minimumRootLoss = Math.min(...immediateSafe.map(item => item.maxRootLoss));
+        const rootSafe = immediateSafe.filter(item => item.maxRootLoss === minimumRootLoss);
         const minimumRootLossReplies = Math.min(...rootSafe.map(item => item.rootLossReplies));
         const rootStable = rootSafe.filter(item => item.rootLossReplies === minimumRootLossReplies);
         const minimumCascadeLoss = Math.min(...rootStable.map(item => item.maxCascadeLoss));
