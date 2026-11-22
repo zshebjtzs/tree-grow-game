@@ -405,11 +405,12 @@ test('PVS and aspiration windows match full-window alpha-beta across determinist
 
 test('budget exhaustion during aspiration re-search preserves the last completed depth', () => {
     const engine = new SearchEngine({ now: () => 0 });
+    let orderCalls = 0;
     const result = engine.search({
         rootState: { turn: 'red', phase: 'root', score: 0 },
         rootMoves: ['a', 'b'],
         maxDepth: 2,
-        maxNodes: 3,
+        maxNodes: 100,
         timeBudgetMs: 100,
         getPositionKey: state => `${state.phase}:${state.turn}:${state.rootMove || ''}`,
         getMoveKey: move => move,
@@ -420,11 +421,16 @@ test('budget exhaustion during aspiration re-search preserves the last completed
         generateMoves: state => state.phase === 'reply' ? ['reply'] : [],
         isTerminal: state => state.phase === 'leaf',
         evaluate: state => state.score,
-        orderMoves: (state, moves) => moves,
+        orderMoves: (state, moves) => {
+            orderCalls++;
+            if (orderCalls === 4) throw SearchEngine.BUDGET_EXHAUSTED;
+            return moves;
+        },
         aspirationWindows: true,
         aspirationWindow: 100
     });
 
+    assert.equal(orderCalls, 4);
     assert.equal(result.completedDepth, 1);
     assert.equal(result.move, 'a');
     assert.equal(result.value, 0);
