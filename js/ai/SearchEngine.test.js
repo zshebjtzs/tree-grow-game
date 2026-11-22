@@ -49,6 +49,31 @@ test('budget exhaustion keeps the last fully completed iteration', () => {
 });
 
 
+test('search never exceeds the configured node budget', () => {
+    const engine = new SearchEngine({ now: () => 0 });
+    const result = engine.search({
+        rootState: { currentTurn: 'red', isGameOver: false, ply: 0 },
+        rootMoves: ['first', 'second'],
+        maxDepth: 4,
+        timeBudgetMs: 100,
+        maxNodes: 1,
+        getPositionKey: state => `${state.ply}:${state.currentTurn}`,
+        applyMove: state => ({
+            currentTurn: state.currentTurn === 'red' ? 'blue' : 'red',
+            isGameOver: false,
+            ply: state.ply + 1
+        }),
+        generateMoves: state => state.ply < 4 ? ['reply-a', 'reply-b'] : [],
+        evaluate: state => state.ply,
+        orderMoves: (state, moves) => moves
+    });
+
+    assert.equal(result.nodes, 1);
+    assert.ok(result.nodes <= 1);
+    assert.equal(result.completedDepth, 0,
+        'an incomplete first iteration must not be reported as completed');
+});
+
 test('search models a skipped turn and continues after freeze cleanup', () => {
     const engine = new SearchEngine({ now: () => 0 });
     const result = engine.search({
