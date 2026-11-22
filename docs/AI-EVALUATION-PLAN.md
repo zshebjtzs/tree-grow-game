@@ -122,7 +122,7 @@ Configured search depths remained unchanged. This confirms the lazy fallback avo
 Iterative deepening now uses the previous completed iteration's score as a prediction for the next depth:
 
 - Depth 1 and any search without a previous score use a full window.
-- Later iterations begin with `previousValue ± 150`.
+- Later iterations begin with `previousValue ± 500`.
 - A fail-high or fail-low triggers a full-window re-search; a failed narrow-window result is never committed as a completed iteration.
 - The previous iteration's best root move is promoted before search, preserving principal-variation ordering.
 - Every root candidate checks the same time/node budget guard; the search still retains the complete legal root candidate set.
@@ -146,3 +146,6 @@ A deterministic pseudo-random test generator creates 50 independent four-ply gam
 - aspiration-window PVS.
 
 All configurations must complete the same depth and return the same minimax value and selected root move. The sample also asserts that aspiration fail recovery is exercised. This complements the existing hand-authored PVS and fail-high/fail-low fixtures.
+
+
+Aspiration-window calibration note: the first CI sample with a 150-point window showed roughly 6–7 full re-searches per hard/expert sparse-fixture decision. The default window has therefore been widened to 500 before the next benchmark run. This is a tuning hypothesis; accept it only if the next run lowers re-search frequency without reducing completed depth or worsening decision time.
