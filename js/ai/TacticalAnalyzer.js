@@ -19,6 +19,10 @@ export class TacticalAnalyzer {
                 count++;
                 continue;
             }
+            // A non-attack growth cannot destroy the opponent's roots. Direct
+            // base entries were handled above, so avoid simulating irrelevant
+            // quiet moves while checking terminal combat threats.
+            if (!move.attacks) continue;
             const next = move._nextState || simulateMove(game, move, side, bases);
             if (next?.isGameOver && !next.getPlayerRootNodes(side === 'red' ? 'blue' : 'red').length) {
                 count++;
