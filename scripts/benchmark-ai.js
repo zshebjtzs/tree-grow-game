@@ -165,6 +165,14 @@ for (const fixture of fixtures) {
                 ? Math.round(searchStats.reduce((sum, item) => sum + item.nodes, 0) / searchStats.length)
                 : 0,
             maxNodes: searchStats.length ? Math.max(...searchStats.map(item => item.nodes)) : 0,
+            meanAspirationResearches: searchStats.length
+                ? Number((searchStats.reduce((sum, item) => sum + (item.aspirationResearches || 0), 0) /
+                    searchStats.length).toFixed(2))
+                : 0,
+            aspirationFailHighCount: searchStats.reduce((sum, item) =>
+                sum + (item.aspirationFailHigh || 0), 0),
+            aspirationFailLowCount: searchStats.reduce((sum, item) =>
+                sum + (item.aspirationFailLow || 0), 0),
             completedDepthMin: searchStats.length
                 ? Math.min(...searchStats.map(item => item.completedDepth))
                 : 0,
