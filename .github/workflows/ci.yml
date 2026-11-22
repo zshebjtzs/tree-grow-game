@@ -30,7 +30,9 @@ jobs:
         run: npm run benchmark:ai
       - name: Run full paired AI tournament
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: node scripts/tournament-ai.js --seed-count "${{ inputs.tournament_seed_count || '5' }}" --pair-games 2 --max-plies 80 > ai-tournament-results.json
+        env:
+          TOURNAMENT_SEED_COUNT: ${{ inputs.tournament_seed_count || '5' }}
+        run: node scripts/tournament-ai.js --seed-count "$TOURNAMENT_SEED_COUNT" --pair-games 2 --max-plies 80 > ai-tournament-results.json
       - name: Upload AI tournament results
         if: always() && github.event_name == 'workflow_dispatch' && hashFiles('ai-tournament-results.json') != ''
         uses: actions/upload-artifact@v4
