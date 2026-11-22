@@ -205,12 +205,13 @@ function runTournament(options) {
             for (let gameIndex = 0; gameIndex < options.pairGames; gameIndex++) {
                 const redDifficulty = gameIndex % 2 === 0 ? first : second;
                 const blueDifficulty = gameIndex % 2 === 0 ? second : first;
-                const randomSeed = (seed + pairIndex * 997 + gameIndex * 7919) >>> 0;
+                const mapSeed = (seed + pairIndex * 997) >>> 0;
+                const randomSeed = (seed + pairIndex * 997 + Math.floor(gameIndex / 2) * 7919) >>> 0;
                 const originalRandom = Math.random;
                 Math.random = createRandom(randomSeed);
                 try {
                     matches.push(playGame({
-                        seed: randomSeed,
+                        seed: mapSeed,
                         redDifficulty,
                         blueDifficulty,
                         maxPlies: options.maxPlies
