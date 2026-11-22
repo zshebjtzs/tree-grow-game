@@ -1,6 +1,6 @@
 # AI A0：现状审计与棋力基线
 
-状态：A0–A3.2、A4.1 和 A4.2 均已通过当前轮 CI；后续继续优化搜索效率并完成多种子棋力校准。
+状态：A0–A3.2、A4.1–A4.3 均已通过当前轮 CI；后续继续优化搜索效率并完成多种子棋力校准。
 
 审计基准：`main`，提交 `fb49e70d844a1c2687c23a68ec902603e4c3a387`（2026-11-22）。
 
@@ -375,3 +375,30 @@ A4.1 将 `softDistanceToBase` 改为惰性计算：当硬路径可达时，不�
 ### Aspiration 窗口调参
 
 首次 150 分窗口的 benchmark telemetry 显示 sparse fixture 中 hard/expert 平均每次决策触发约 6–7 次全窗口重搜，说明窄窗口偏紧。固定 500 分没有明显减少重搜次数，且部分基准耗时略有上升；当前改为按上一轮估值变化自适应扩窗。后续 CI 将比较重搜次数、平均耗时、节点数和完成深度。
+
+
+## 15. A4.3：自适应 Aspiration Window 与随机树差分测试（已通过 CI）
+
+默认窄窗口保持 150 分基础宽度，并根据上一轮已完成迭代的估值变化调整下一轮宽度：
+
+`window = 150 + 2 × |lastScoreDelta|`
+
+新增 50 棵确定性随机四层博弈树差分测试，分别运行全窗口 Alpha-Beta、全窗口 PVS、Aspiration Alpha-Beta、Aspiration PVS。四种配置必须完成相同深度，并返回相同最优根着法与 minimax 值。benchmark 同时输出平均重搜次数和 fail-high / fail-low 计数。
+
+提交 `636bf62652f87e8d366528d61d438bd3555a023c` 的 CI：
+- `npm test`：235 项通过，0 失败。
+- 六档 AI 基准、回放基准、六局锦标赛冒烟：通过。
+- 构建、Pages 资源验证、Windows Desktop Build：通过。
+
+相较固定 150 分窗口，自适应窗口在 sparse fixture 的 PVS 平均耗时变化：
+
+| 难度 | 固定窗口 | 自适应窗口 | 变化 |
+|---|---:|---:|---:|
+| beginner | 0.850 ms | 0.438 ms | -48.5% |
+| easy | 2.556 ms | 1.632 ms | -36.1% |
+| medium | 12.289 ms | 7.107 ms | -42.2% |
+| advanced | 20.889 ms | 12.090 ms | -42.1% |
+| hard | 113.892 ms | 70.725 ms | -37.9% |
+| expert | 283.636 ms | 164.403 ms | -42.0% |
+
+hard/expert 的平均 aspiration re-search 从约 6–7 次降至 2 次；六档完成深度仍为原配置值，PVS/Alpha-Beta 一致性检查通过。该结果支持采用自适应窗口，但仍需在更多地图与真实局面中复测，不能将单一 fixture 的加速比例视为普遍保证。
