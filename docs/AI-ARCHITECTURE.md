@@ -6,7 +6,8 @@ The AI is split into a shared decision pipeline and a game-mode adapter.
 
 | Layer | Responsibility | Game-mode dependency |
 |---|---|---|
-| `AIWorker` | Request validation, progress and result transport | Difficulty IDs only |
+| `AIWorker` | Worker request validation, progress and result transport | Mode and difficulty IDs |
+| `AIAdapterRegistry` | Resolve a mode ID to its adapter factory | Registry entries |
 | `AIController` | Candidate evaluation flow, tactical priority, search orchestration and telemetry | Adapter contract |
 | `SearchEngine` | Iterative deepening, Alpha-Beta/PVS, transposition table and search budgets | None; state access is callback-driven |
 | `DifficultyProfiles` | Shared evaluation weights and per-level computation budgets | None |
@@ -64,4 +65,4 @@ When a mode adds a rule-relevant persistent field, its adapter's position-key im
 
 ## Adding a future mode
 
-A future mode should add a new adapter and its own domain evaluator/tactical analyzer. The shared controller and search engine should not gain mode-name conditionals or duplicate rule branches. This document defines only the extension boundary; it does not specify or implement any future mode's gameplay rules.
+A future mode should add a new adapter and its own domain evaluator/tactical analyzer, then register its factory in `AIAdapterRegistry`. The worker accepts an optional `mode` field and defaults to `tree-grow` for backward compatibility. The shared controller and search engine should not gain mode-name conditionals or duplicate rule branches. Only `tree-grow` is registered currently; Quick/Campaign gameplay and their adapters are not implemented.
