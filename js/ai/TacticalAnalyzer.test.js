@@ -106,3 +106,24 @@ test('defense ranking avoids multi-node cascade when root risk is equal', () => 
         [safe]
     );
 });
+
+
+test('defense ranking rejects a move that creates an immediate enemy base invasion', () => {
+    const analyzer = new TacticalAnalyzer();
+    const game = position();
+    const safe = { parentNodeId: 1, targetAreaId: 4 };
+    const exposed = { parentNodeId: 2, targetAreaId: 5 };
+    const generateMoves = (state, side) => side === 'red' && state.exposesBase
+        ? [{ parentNodeId: 9, targetAreaId: 1, attacks: false }]
+        : [];
+    const simulateMove = (state, move, side) => side === 'blue'
+        ? { ...position(), exposesBase: move.targetAreaId === exposed.targetAreaId }
+        : state;
+
+    assert.deepEqual(
+        analyzer.rankDefenses(
+            game, [safe, exposed], 'blue', { red: 6, blue: 1 }, simulateMove, generateMoves
+        ),
+        [safe]
+    );
+});
