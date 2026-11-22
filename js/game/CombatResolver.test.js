@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameState } from './GameState.js';
 import { resolveCombat } from './CombatResolver.js';
+import { createCombatEvent } from '../presentation/CombatEvent.js';
 
 function addChild(game, parent, areaId, owner) {
     game.currentTurn = owner;
@@ -25,7 +26,7 @@ test('combat resolver rejects fortress targets as an invariant guard', () => {
     assert.equal(game.getNode(fortress.id), fortress);
 });
 
-test('low-degree branching defender loses its complete subtree', () => {
+test('direct attack on a branching node destroys its complete tree when no ancestor branch exists', () => {
     const game = new GameState();
     const redRoot = game.addNode(null, 0, 0, 1, 'red');
     const attacker = addChild(game, redRoot, 2, 'red');
@@ -35,9 +36,12 @@ test('low-degree branching defender loses its complete subtree', () => {
     const right = addChild(game, branch, 6, 'blue');
 
     const result = resolveCombat(game, attacker, branch);
-    assert.deepEqual(new Set(result.nodesToDelete), new Set([branch.id, left.id, right.id]));
+    assert.deepEqual(new Set(result.nodesToDelete), new Set([blueRoot.id, branch.id, left.id, right.id]));
     assert.equal(result.freezeTargetId, null);
-    assert.ok(game.getNode(blueRoot.id));
+    assert.ok(!result.nodesToDelete.includes(attacker.id));
+    game.deleteNodes(result.nodesToDelete);
+    assert.equal(game.getNode(blueRoot.id), undefined);
+    assert.equal(game.getAliveNodesByOwner('blue').length, 0);
 });
 
 test('chain attack removes the path below a branching point and freezes that point', () => {
@@ -91,4 +95,58 @@ test('chain destruction does not stop at a branching root and removes its entire
     assert.equal(game.getPlayerRootNodes('blue').length, 0);
     assert.equal(game.getAliveNodesByOwner('blue').length, 0);
     assert.equal(game.addNode(blueRoot.id, 80, 80, 8, 'blue'), null, 'destroyed AI root cannot be used for further growth');
+});
+
+
+test('direct attack on a branching node stops at the nearest ancestor branching node', () => {
+    const game = new GameState();
+    const redRoot = game.addNode(null, 0, 0, 1, 'red');
+    const attacker = addChild(game, redRoot, 2, 'red');
+    const blueRoot = game.addNode(null, 0, 0, 3, 'blue');
+    const ancestorBranch = addChild(game, blueRoot, 4, 'blue');
+    const attackedBranch = addChild(game, ancestorBranch, 5, 'blue');
+    const attackedLeaf = addChild(game, attackedBranch, 6, 'blue');
+    const attackedSecondLeaf = addChild(game, attackedBranch, 8, 'blue');
+    const protectedSibling = addChild(game, ancestorBranch, 7, 'blue');
+
+    const result = resolveCombat(game, attacker, attackedBranch);
+    assert.deepEqual(
+        new Set(result.nodesToDelete),
+        new Set([attackedBranch.id, attackedLeaf.id, attackedSecondLeaf.id])
+    );
+    assert.equal(result.freezeTargetId, ancestorBranch.id);
+    assert.ok(!result.nodesToDelete.includes(ancestorBranch.id));
+    assert.ok(!result.nodesToDelete.includes(protectedSibling.id));
+});
+
+test('combat event reports whole-tree destruction for direct branching-node attack', () => {
+    const game = new GameState();
+    const redRoot = game.addNode(null, 0, 0, 1, 'red');
+    const attacker = addChild(game, redRoot, 2, 'red');
+    const blueRoot = game.addNode(null, 0, 0, 3, 'blue');
+    const branch = addChild(game, blueRoot, 4, 'blue');
+    addChild(game, branch, 5, 'blue');
+    addChild(game, branch, 6, 'blue');
+
+    const result = resolveCombat(game, attacker, branch);
+    const event = createCombatEvent(game, attacker, branch, result);
+    assert.equal(event.outcome, 'tree-destroyed');
+    assert.match(event.description, /整棵/);
+    assert.ok(event.affectedNodes.some(node => node.id === blueRoot.id));
+});
+
+test('combat event reports protected ancestor branch when directly attacking a descendant branch', () => {
+    const game = new GameState();
+    const redRoot = game.addNode(null, 0, 0, 1, 'red');
+    const attacker = addChild(game, redRoot, 2, 'red');
+    const blueRoot = game.addNode(null, 0, 0, 3, 'blue');
+    const ancestorBranch = addChild(game, blueRoot, 4, 'blue');
+    const attackedBranch = addChild(game, ancestorBranch, 5, 'blue');
+    addChild(game, attackedBranch, 6, 'blue');
+    addChild(game, ancestorBranch, 7, 'blue');
+
+    const result = resolveCombat(game, attacker, attackedBranch);
+    const event = createCombatEvent(game, attacker, attackedBranch, result);
+    assert.equal(event.outcome, 'branch-cut');
+    assert.equal(event.freezeTarget.id, ancestorBranch.id);
 });
