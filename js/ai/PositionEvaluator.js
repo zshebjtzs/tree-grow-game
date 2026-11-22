@@ -80,7 +80,7 @@ export class PositionEvaluator {
             const firstChild = root.childrenIds
                 .map(childId => game.getNode(childId))
                 .find(Boolean);
-            if (!firstChild || firstChild.childrenIds.length < 2) {
+            if (!firstChild || firstChild.getDegree() <= 3) {
                 unsafeRoots++;
                 let cursor = firstChild;
                 const visited = new Set();
