@@ -162,6 +162,7 @@ export class SearchEngine {
                     iterationMove = move;
                 }
                 alpha = Math.max(alpha, iterationValue);
+                if (alpha >= beta) break;
             }
             return { move: iterationMove, value: iterationValue };
         };
