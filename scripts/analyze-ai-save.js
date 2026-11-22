@@ -363,7 +363,7 @@ async function main() {
     const output = JSON.stringify(report, null, 2);
     if (options.output) {
         const outputPath = resolve(options.output);
-        writeFileSync(outputPath, `${output}\\n`, 'utf8');
+        writeFileSync(outputPath, `${output}\n`, 'utf8');
         console.log(`AI save analysis written to: ${outputPath}`);
     } else {
         console.log(output);
