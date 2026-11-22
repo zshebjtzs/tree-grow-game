@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { performance } from 'node:perf_hooks';
 import { resolve } from 'node:path';
@@ -24,7 +24,7 @@ function readSave(path) {
 }
 
 function parseArgs(argv) {
-    const options = { path: null, difficulties: [...DEFAULT_DIFFICULTIES], side: DEFAULT_AI_SIDE, baselineController: null };
+    const options = { path: null, difficulties: [...DEFAULT_DIFFICULTIES], side: DEFAULT_AI_SIDE, baselineController: null, output: null };
     for (let index = 0; index < argv.length; index++) {
         const arg = argv[index];
         if (arg === '--difficulty') {
@@ -33,8 +33,10 @@ function parseArgs(argv) {
             options.side = argv[++index];
         } else if (arg === '--baseline-controller') {
             options.baselineController = argv[++index] || null;
+        } else if (arg === '--output') {
+            options.output = argv[++index] || null;
         } else if (arg === '--help' || arg === '-h') {
-            console.log('Usage: node scripts/analyze-ai-save.js <save.sav> [--difficulty beginner,easy,...] [--side red|blue] [--baseline-controller <legacy-worktree>/js/ai/AIController.js]');
+            console.log('Usage: node scripts/analyze-ai-save.js <save.sav> [--difficulty beginner,easy,...] [--side red|blue] [--baseline-controller <legacy-worktree>/js/ai/AIController.js] [--output <file.json>]');
             process.exit(0);
         } else if (!arg.startsWith('--') && options.path === null) {
             options.path = arg;
@@ -49,6 +51,9 @@ function parseArgs(argv) {
     }
     if (argv.includes('--baseline-controller') && !options.baselineController) {
         throw new Error('Missing path after --baseline-controller.');
+    }
+    if (argv.includes('--output') && !options.output) {
+        throw new Error('Missing path after --output.');
     }
     return options;
 }
@@ -338,7 +343,7 @@ async function main() {
         BaselineAIController
     }));
 
-    console.log(JSON.stringify({
+    const report = {
         benchmark: 'tree-grow-historical-save-analysis',
         save: options.path,
         mode: raw.isAIMode ? 'pve' : 'pvp',
@@ -354,7 +359,15 @@ async function main() {
         actionCount: validated.history.actions.length,
         analyzedPositions: positions.length,
         positions
-    }, null, 2));
+    };
+    const output = JSON.stringify(report, null, 2);
+    if (options.output) {
+        const outputPath = resolve(options.output);
+        writeFileSync(outputPath, `${output}\\n`, 'utf8');
+        console.log(`AI save analysis written to: ${outputPath}`);
+    } else {
+        console.log(output);
+    }
 }
 
 try {
