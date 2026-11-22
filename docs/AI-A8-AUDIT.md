@@ -157,3 +157,27 @@ npm run analyze:ai-save -- ./match.sav --side blue
 - A8.1：待建立可自动复现的历史局面决策对照。
 - A8.2–A8.4：待基于审计结果实施。
 - PR #33 保持 Open，未合并。
+
+### A8.1 数据结构复核与回放兼容修复
+
+对分析器调用链逐项核对了当前分支实现：
+
+- `ReplaySaveValidator.validate(raw)` 返回的 `history` 是 `MatchHistory` 实例，行动记录字段为 `sequence / side / action / before / after`；分析器读取 `validated.history.actions` 和 `record.before.gameState` 的方式与实际结构一致。
+- 存档基地 ID 位于顶层 `redBaseId / blueBaseId`；地图种子位于 `mapSeeds`，长度为 50。上传样本的基地 ID 为 11 和 26。
+- `MapManager` 的正式实现位于 `js/core/MapManager.js`，构造尺寸为 1800×1200；`loadMapFromSeeds` 重建区域中心和邻接关系。分析器使用的模块路径和尺寸与正式实现一致。
+- `GameState.currentTurn`、`getAliveNodesByOwner`、`getPlayerRootNodes` 均为真实 API；`AIController._generateMoves` 委托 Adapter 的 `generateMoves`，其参数为 `(game, side, bases)`；`simulateMove` 的调用参数也与 Adapter 签名一致。
+- 上传样本包含 11 条完整行动记录，行动类型均为 `growth`；蓝方 AI 的历史决策位于第 2、4、6、8、10 步。存档顶层元数据和分析器所需字段均存在。
+
+审查时另外发现一个独立的六档兼容缺陷：`ReplaySaveValidator.js` 仍硬编码旧四档难度白名单。这样会拒绝带有 beginner / advanced 元数据的新存档，即使其他模块已支持六档。
+
+已修复：
+- 改为导入 `DifficultyProfiles.js` 导出的权威 `DIFFICULTY_LEVELS`，不再维护第二份难度白名单。
+- 在 `tests/replay-save-validator.test.js` 增加六档循环验证，覆盖存档元数据校验和返回的 metadata。
+
+提交：
+- `97b86d5` — `fix: accept all canonical AI difficulty levels in replay saves`
+- `9a0652b` — `test: cover replay saves for all six AI difficulties`
+
+需要注意：上述工作完成了静态 API/数据结构核对，并未执行 Node 分析器。反事实枚举仍然是单层对手回应分析，不等于完整 minimax；且候选生成、逐个模拟和回应枚举可能使完整运行耗时明显高于 AI 本身的一次决策耗时。
+
+**当前仍未完成的证据项：** 在本地项目工作区执行上传存档，取得六档在四个蓝方历史决策局面的选择与风险报告；随后用旧版代码在完全相同局面上运行 Hard/Expert 基准。未完成这两项前，不进入 A8.2 的算法修复与参数校准。
