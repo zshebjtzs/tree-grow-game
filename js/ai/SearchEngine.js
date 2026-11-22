@@ -44,7 +44,7 @@ export class SearchEngine {
             aspirationFailHigh: 0
         };
         const checkBudget = () => {
-            if (stats.nodes > maxNodes || this.now() >= deadline) {
+            if (stats.nodes >= maxNodes || this.now() >= deadline) {
                 throw SearchEngine.BUDGET_EXHAUSTED;
             }
         };
@@ -62,10 +62,10 @@ export class SearchEngine {
         let preferredRootMoveKey;
 
         const visit = (state, depth, alpha, beta, maximizing) => {
-            stats.nodes++;
-            if (stats.nodes > maxNodes || this.now() >= deadline) {
+            if (stats.nodes >= maxNodes || this.now() >= deadline) {
                 throw SearchEngine.BUDGET_EXHAUSTED;
             }
+            stats.nodes++;
             if (isTerminal(state) || depth === 0) return evaluate(state);
 
             const key = getPositionKey(state);
