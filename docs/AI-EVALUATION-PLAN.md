@@ -79,3 +79,12 @@ The tournament runner must treat two games played on the same map with the same 
 This fixes the statistical unit: the two color-swapped games are not treated as independent observations. It does not make a small tournament conclusive; multiple independent map seeds and sufficiently long games are still required.
 
 Automated tests cover pair aggregation, sample counting, incomplete pairs, seed mismatch, color-swap validation, and even pair-game constraints.
+
+
+## A4.1: Lazy soft-distance fallback
+
+The structural-metric cache now defers `softDistanceToBase` until evaluation actually needs it. If the hard legal route is finite, the evaluator does not run the fallback Dijkstra search. If the hard route is blocked, only the affected side computes soft distance.
+
+This preserves the evaluation formula and all difficulty budgets; it changes when the fallback metric is computed, not its value. A regression test verifies zero fallback calls when both hard routes are reachable and exactly one call when only one side's route is blocked.
+
+Acceptance requires the existing six-tier / three-fixture benchmark to complete and show no regression in selected moves, evaluation values, or completed search depth. Performance impact must be measured on the same CI environment; no speedup is assumed before the run completes.
