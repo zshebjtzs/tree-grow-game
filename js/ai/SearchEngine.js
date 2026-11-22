@@ -11,6 +11,8 @@ export class SearchEngine {
     search({
         rootState,
         rootMoves,
+        isTerminal = state => Boolean(state.isGameOver),
+        getSideToMove = state => state.currentTurn,
         getPositionKey,
         getMoveKey = move => move,
         applyMove,
@@ -52,7 +54,7 @@ export class SearchEngine {
             if (stats.nodes > maxNodes || this.now() >= deadline) {
                 throw SearchEngine.BUDGET_EXHAUSTED;
             }
-            if (state.isGameOver || depth === 0) return evaluate(state);
+            if (isTerminal(state) || depth === 0) return evaluate(state);
 
             const key = getPositionKey(state);
             const cached = table.get(key);
@@ -66,7 +68,7 @@ export class SearchEngine {
                 if (alpha >= beta) return cached.value;
             }
 
-            const side = state.currentTurn;
+            const side = getSideToMove(state);
             let moves = generateMoves(state, side);
             checkBudget();
             if (!moves.length) {
@@ -139,9 +141,9 @@ export class SearchEngine {
                 let ordered = orderMoves(rootState, rootMoves, true, checkBudget);
                 ordered = promoteMove(ordered, preferredRootMoveKey);
                 for (const move of ordered) {
-                    const next = applyMove(rootState, move, rootState.currentTurn);
+                    const next = applyMove(rootState, move, getSideToMove(rootState));
                     if (!next) continue;
-                    const value = next.isGameOver
+                    const value = isTerminal(next)
                         ? evaluate(next)
                         : visit(next, depth - 1, alpha, beta, false);
                     if (value > iterationValue) {
