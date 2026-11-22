@@ -133,3 +133,16 @@ Correctness requirements:
 - Both fail-high and fail-low must trigger a full-window recovery.
 - Budget exhaustion during a re-search must preserve the last fully completed depth.
 - PVS/Alpha-Beta parity and the six-tier benchmark remain mandatory.
+
+
+## A4.3: Search telemetry and randomized differential tests
+
+The AI benchmark now reports mean aspiration re-searches plus total fail-high/fail-low counts for each fixture/difficulty/search variant.
+
+A deterministic pseudo-random test generator creates 50 independent four-ply game trees. Each tree is evaluated by four search configurations:
+- full-window Alpha-Beta,
+- full-window PVS,
+- aspiration-window Alpha-Beta,
+- aspiration-window PVS.
+
+All configurations must complete the same depth and return the same minimax value and selected root move. The sample also asserts that aspiration fail recovery is exercised. This complements the existing hand-authored PVS and fail-high/fail-low fixtures.
