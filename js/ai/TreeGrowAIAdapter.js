@@ -151,6 +151,31 @@ export class TreeGrowAIAdapter {
         return state.currentTurn;
     }
 
+    getRootGrowthTargets(parent, context) {
+        const maxDistance = Math.min(context.ownAreaCount, 2);
+        if (maxDistance <= 0) return [];
+
+        const targets = [];
+        const visited = new Set([parent.areaId]);
+        const queue = [{ areaId: parent.areaId, distance: 0 }];
+        for (let head = 0; head < queue.length; head++) {
+            const current = queue[head];
+            if (current.distance >= maxDistance) continue;
+            for (const next of this.adjacency[current.areaId] || []) {
+                if (visited.has(next)) continue;
+                visited.add(next);
+                if (this.areaCenters[next - 1]) targets.push(next);
+
+                // An occupied area can be an attack destination, but cannot
+                // serve as an intermediate cell on a root's first-branch path.
+                if (!context.occupiedAreas.has(next)) {
+                    queue.push({ areaId: next, distance: current.distance + 1 });
+                }
+            }
+        }
+        return targets;
+    }
+
     generateMoves(game, side, bases) {
         const aliveNodes = game.getAliveNodes();
         const occupiedBySide = new Set(game.getAliveNodesByOwner(side).map(node => node.areaId));
@@ -163,7 +188,7 @@ export class TreeGrowAIAdapter {
             if (parent.isFrozen || (parent.isRoot && parent.hasUsedRootGrowth)) continue;
             const isFirstRootBranch = parent.isRoot && !parent.hasUsedRootGrowth && parent.childrenIds.length === 0;
             const targets = isFirstRootBranch
-                ? this.areaCenters.map((_, index) => index + 1)
+                ? this.getRootGrowthTargets(parent, growthContext)
                 : (this.adjacency[parent.areaId] || []);
             for (const targetAreaId of targets) {
                 if (!this.areaCenters[targetAreaId - 1] || occupiedBySide.has(targetAreaId)) continue;
@@ -309,9 +334,10 @@ export class TreeGrowAIAdapter {
 
             for (const parent of game.getAliveNodesByOwner(side)) {
                 if (parent.isFrozen || (parent.isRoot && parent.hasUsedRootGrowth)) continue;
-                const targets = parent.isRoot && !parent.hasUsedRootGrowth &&
-                    parent.childrenIds.length === 0
-                    ? this.areaCenters.map((_, index) => index + 1)
+                const isFirstRootBranch = parent.isRoot && !parent.hasUsedRootGrowth &&
+                    parent.childrenIds.length === 0;
+                const targets = isFirstRootBranch
+                    ? this.getRootGrowthTargets(parent, context)
                     : (this.adjacency[parent.areaId] || []);
                 const options = {
                     ownBaseId: bases[side],
