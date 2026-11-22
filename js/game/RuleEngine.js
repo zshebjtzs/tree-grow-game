@@ -72,7 +72,7 @@ export class RuleEngine {
         }
         if (parentNode.owner !== gameState.currentTurn) return { allowed: false, reason: '不能操作对方的节点' };
         if (parentNode.isFrozen) return { allowed: false, reason: '该节点本回合被冻结' };
-        if (parentNode.isRoot && parentNode.childrenIds.length > 0) {
+        if (parentNode.isRoot && (parentNode.hasUsedRootGrowth || parentNode.childrenIds.length > 0)) {
             return { allowed: false, reason: '根节点只能生长第一根枝条，不能再次分叉' };
         }
         if (!Number.isInteger(childAreaId) || childAreaId < 1) {
@@ -109,7 +109,7 @@ export class RuleEngine {
         if (!path) return { allowed: false, reason: '目标区域与父节点不连通，或所有可用路径均经过已占据区域' };
         const distance = path.length - 1;
 
-        const isFirstRootBranch = parentNode.isRoot && parentNode.childrenIds.length === 0;
+        const isFirstRootBranch = parentNode.isRoot && !parentNode.hasUsedRootGrowth && parentNode.childrenIds.length === 0;
         if (isFirstRootBranch) {
             const ownedCount = context?.ownAreaCount ??
                 this.getPlayerOccupiedAreasCount(gameState, parentNode.owner);
