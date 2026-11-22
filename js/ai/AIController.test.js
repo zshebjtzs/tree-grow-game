@@ -489,3 +489,20 @@ test('deep search receives every legal root candidate without a static width cut
     assert.equal(receivedMoves.length, candidates.length);
     assert.deepEqual(receivedMoves, candidates);
 });
+
+
+test('all existing difficulties execute the shared search pipeline on non-terminal positions', () => {
+    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+        const game = new GameState();
+        game.currentTurn = 'blue';
+        game.addNode(null, 0, 0, 6, 'red');
+        game.addNode(null, 0, 0, 1, 'blue');
+        const ai = new AIController(difficulty, line, centers);
+        const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+
+        assert.ok(move, `${difficulty} should return a legal move`);
+        assert.ok(ai.lastSearchStats, `${difficulty} should use SearchEngine`);
+        assert.ok(ai.lastSearchStats.completedDepth >= 1,
+            `${difficulty} should complete at least one search iteration`);
+    }
+});
