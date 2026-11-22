@@ -106,12 +106,13 @@ test('direct attack on a branching node stops at the nearest ancestor branching 
     const ancestorBranch = addChild(game, blueRoot, 4, 'blue');
     const attackedBranch = addChild(game, ancestorBranch, 5, 'blue');
     const attackedLeaf = addChild(game, attackedBranch, 6, 'blue');
+    const attackedSecondLeaf = addChild(game, attackedBranch, 8, 'blue');
     const protectedSibling = addChild(game, ancestorBranch, 7, 'blue');
 
     const result = resolveCombat(game, attacker, attackedBranch);
     assert.deepEqual(
         new Set(result.nodesToDelete),
-        new Set([attackedBranch.id, attackedLeaf.id])
+        new Set([attackedBranch.id, attackedLeaf.id, attackedSecondLeaf.id])
     );
     assert.equal(result.freezeTargetId, ancestorBranch.id);
     assert.ok(!result.nodesToDelete.includes(ancestorBranch.id));
