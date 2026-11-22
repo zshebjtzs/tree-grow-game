@@ -115,7 +115,7 @@ A5.1 暴露出零方差样本会使 Student-t 区间退化为单点区间的问�
 - 节点数完全相同，当前数据没有证明单侧重搜减少了搜索节点。
 - 大部分高难度 sparse fixture 耗时略有下降，但差异约 4%–8%，且不同 fixture / 难度并非全部改善；不能据此宣称获得稳定性能提升。
 - 当前 A5.2 的主要价值是缩小重搜窗口边界，而不是已证实的棋力或节点效率提升。
-- 原 benchmark 汇总没有输出 `aspirationOneSidedResearches`，后续补充该 telemetry。
+- 后续已在 `benchmark-ai.js` 中补充 `meanAspirationOneSidedResearches` 与 `aspirationOneSidedResearchCount`，并同时统计 fail-high / fail-low 次数；这些指标可用于观察单侧重搜是否按预期发生。
 
 ### 对局结果对照
 
