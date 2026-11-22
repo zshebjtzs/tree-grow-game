@@ -156,7 +156,7 @@ A4.3 CI result: 50 deterministic four-ply random trees passed all four-way diffe
 ## A4.4: Budget interruption and transposition validation
 
 - A deterministic test forces the budget sentinel during a fail-high aspiration full-window re-search and verifies that the result remains the last fully completed depth, move, and value.
-- Twenty deterministic random four-layer DAGs include shared child states to exercise the transposition table. Full-window Alpha-Beta and aspiration PVS must agree on completed depth, root move, and minimax value; Alpha-Beta must record transposition hits.
+- Twenty deterministic random four-layer DAGs include shared child states to exercise the transposition table. Aspiration Alpha-Beta and aspiration PVS must agree on completed depth, root move, and minimax value; Alpha-Beta must record transposition hits.
 - These tests complement the 50 random tree four-way differential test and explicit fail-high/fail-low recovery tests.
 
 
