@@ -21,7 +21,7 @@ A mode adapter supplied to `AIController` must provide:
 - Search identity: `getPositionKey`, `getMoveKey`.
 - Rules and transitions: `generateMoves`, `simulateMove`, `simulatePass`.
 - Evaluation and tactics: `positionEvaluator.scoreMove`, `positionEvaluator.evaluateState`, `tacticalAnalyzer.findImmediateWinningMove`, `tacticalAnalyzer.rankDefenses`.
-- Presentation boundary: `toPublicMove`, `createDecisionExplanation`.
+- Presentation boundary: `toPublicMove`, `createDecisionExplanation`, `createNoMoveExplanation`.
 - Topology/evaluation support: `distanceToBase`.
 
 The adapter owns domain-specific state transitions. It must use the authoritative game rules and combat resolver rather than maintaining a second rules implementation.
