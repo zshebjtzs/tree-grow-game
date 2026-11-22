@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { GameState } from '../js/game/GameState.js';
 import { MatchHistory } from '../js/game/MatchHistory.js';
 import { ReplaySaveValidator } from '../js/replay/ReplaySaveValidator.js';
+import { DIFFICULTY_LEVELS } from '../js/ai/DifficultyProfiles.js';
 
-function createFixture({ includeHistory = true } = {}) {
+function createFixture({ includeHistory = true, difficulty = 'medium' } = {}) {
     const seeds = Array.from({ length: 50 }, (_, i) => [
         90 + (i % 10) * 170,
         100 + Math.floor(i / 10) * 200
@@ -34,7 +35,7 @@ function createFixture({ includeHistory = true } = {}) {
         gamePhase: 'playing',
         isAIMode: false,
         playerSide: 'red',
-        difficulty: 'medium',
+        difficulty,
         matchTracker: null,
         lastMatchResult: null,
         ...(includeHistory ? { matchHistory: history.toJSON() } : {})
@@ -143,4 +144,13 @@ test('validates a long skip-only timeline while reusing the prior validated posi
     const result = ReplaySaveValidator.validate(data);
     assert.equal(result.history.actionCount, 251);
     assert.equal(result.data.gameState.currentTurn, current.gameState.currentTurn);
+});
+
+
+test('accepts every canonical AI difficulty in replay save metadata', () => {
+    for (const difficulty of DIFFICULTY_LEVELS) {
+        const { data } = createFixture({ difficulty });
+        const result = ReplaySaveValidator.validate(data);
+        assert.equal(result.metadata.difficulty, difficulty);
+    }
 });
