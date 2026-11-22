@@ -19,9 +19,9 @@ function addRoot(game, areaId, side) {
 test('unsafe root and single-chain metrics follow the authoritative combat ancestor rule', () => {
     const adjacency = {
         1: [2], 2: [1, 3], 3: [2, 4], 4: [3, 5], 5: [4],
-        6: [7], 7: [6, 8, 9], 8: [7], 9: [7]
+        6: [7], 7: [6, 8, 9, 10], 8: [7], 9: [7], 10: [7]
     };
-    const adapter = createAdapter(adjacency, 9);
+    const adapter = createAdapter(adjacency, 10);
     const game = new GameState();
     game.currentTurn = 'red';
     const root = addRoot(game, 1, 'red');
@@ -43,6 +43,7 @@ test('unsafe root and single-chain metrics follow the authoritative combat ances
     const fork = safeGame.addNode(safeRoot.id, 70, 0, 7, 'red');
     safeGame.addNode(fork.id, 80, 0, 8, 'red');
     safeGame.addNode(fork.id, 90, 0, 9, 'red');
+    safeGame.addNode(fork.id, 100, 0, 10, 'red');
     safeGame.currentTurn = 'blue';
     addRoot(safeGame, 5, 'blue');
 
