@@ -143,12 +143,17 @@ for (const fixture of fixtures) {
         }
 
         const samples = [];
+        const preparationSamples = [];
         const searchStats = [];
         for (let index = 0; index < ITERATIONS; index++) {
             const start = performance.now();
             ai.getBestMove(fixture.snapshot, 'blue');
-            samples.push(performance.now() - start);
-            if (ai.lastSearchStats) searchStats.push(ai.lastSearchStats);
+            const totalElapsedMs = performance.now() - start;
+            samples.push(totalElapsedMs);
+            if (ai.lastSearchStats) {
+                searchStats.push(ai.lastSearchStats);
+                preparationSamples.push(Math.max(0, totalElapsedMs - ai.lastSearchStats.elapsedMs));
+            }
         }
         samples.sort((a, b) => a - b);
         results.push({
@@ -161,6 +166,17 @@ for (const fixture of fixtures) {
             p50Ms: Number(percentile(samples, 0.50).toFixed(3)),
             p95Ms: Number(percentile(samples, 0.95).toFixed(3)),
             maxMs: Number(samples.at(-1).toFixed(3)),
+            meanPreparationMs: preparationSamples.length
+                ? Number((preparationSamples.reduce((sum, value) => sum + value, 0) /
+                    preparationSamples.length).toFixed(3))
+                : 0,
+            p95PreparationMs: preparationSamples.length
+                ? Number(percentile([...preparationSamples].sort((a, b) => a - b), 0.95).toFixed(3))
+                : 0,
+            meanSearchMs: searchStats.length
+                ? Number((searchStats.reduce((sum, item) => sum + item.elapsedMs, 0) /
+                    searchStats.length).toFixed(3))
+                : 0,
             meanNodes: searchStats.length
                 ? Math.round(searchStats.reduce((sum, item) => sum + item.nodes, 0) / searchStats.length)
                 : 0,
