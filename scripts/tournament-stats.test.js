@@ -65,3 +65,13 @@ test('pair game count must guarantee a complete color swap', () => {
     assert.throws(() => validatePairGames(1), /even integer/);
     assert.throws(() => validatePairGames(3), /even integer/);
 });
+
+test('zero-variance paired samples do not produce a misleading point confidence interval', () => {
+    const result = scoreInterval([0.5, 0.5, 0.5, 0.5, 0.5]);
+
+    assert.equal(result.mean, 0.5);
+    assert.equal(result.lower95, null);
+    assert.equal(result.upper95, null);
+    assert.equal(result.samples, 5);
+    assert.equal(result.method, 'zero-variance');
+});

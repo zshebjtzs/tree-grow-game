@@ -306,6 +306,7 @@ test('aspiration windows re-search fail-high iterations and preserve full-window
     assert.equal(windowed.aspirationResearches, 1);
     assert.equal(windowed.aspirationFailHigh, 1);
     assert.equal(windowed.aspirationFailLow, 0);
+    assert.equal(windowed.aspirationOneSidedResearches, 1);
 });
 
 test('aspiration windows re-search fail-low iterations', () => {
@@ -330,6 +331,7 @@ test('aspiration windows re-search fail-low iterations', () => {
     assert.equal(result.value, 0);
     assert.equal(result.aspirationResearches, 1);
     assert.equal(result.aspirationFailLow, 1);
+    assert.equal(result.aspirationOneSidedResearches, 1);
 });
 
 

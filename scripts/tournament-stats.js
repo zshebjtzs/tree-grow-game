@@ -25,12 +25,21 @@ export function scoreInterval(scores) {
             lower95: null,
             upper95: null,
             samples: 1,
-            method: 'paired-t'
+            method: 'insufficient-samples'
         };
     }
 
     const variance = scores.reduce((sum, score) => sum + (score - mean) ** 2, 0) /
         (scores.length - 1);
+    if (variance === 0) {
+        return {
+            mean: Number(mean.toFixed(3)),
+            lower95: null,
+            upper95: null,
+            samples: scores.length,
+            method: 'zero-variance'
+        };
+    }
     const standardError = Math.sqrt(variance / scores.length);
     const degreesOfFreedom = scores.length - 1;
     const criticalValue = T_95[degreesOfFreedom] ?? 1.96;

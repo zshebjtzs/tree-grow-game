@@ -39,6 +39,7 @@ export class SearchEngine {
             cutoffs: 0,
             transpositionHits: 0,
             aspirationResearches: 0,
+            aspirationOneSidedResearches: 0,
             aspirationFailLow: 0,
             aspirationFailHigh: 0
         };
@@ -182,9 +183,18 @@ export class SearchEngine {
                 if (aspirationWindows && depth > 1 &&
                     (iteration.value <= alpha || iteration.value >= beta)) {
                     stats.aspirationResearches++;
-                    if (iteration.value <= alpha) stats.aspirationFailLow++;
-                    if (iteration.value >= beta) stats.aspirationFailHigh++;
-                    iteration = searchRoot(depth, -Infinity, Infinity);
+                    const failedLow = iteration.value <= alpha;
+                    if (failedLow) stats.aspirationFailLow++;
+                    else stats.aspirationFailHigh++;
+
+                    // A fail-low only needs a wider lower bound; a fail-high
+                    // only needs a wider upper bound. Retaining the opposite
+                    // aspiration bound preserves pruning without accepting
+                    // the failed probe as an exact result.
+                    stats.aspirationOneSidedResearches++;
+                    iteration = failedLow
+                        ? searchRoot(depth, -Infinity, beta)
+                        : searchRoot(depth, alpha, Infinity);
                 }
 
                 if (!Number.isFinite(iteration.value)) break;
@@ -225,6 +235,7 @@ export class SearchEngine {
             cutoffs: stats.cutoffs,
             transpositionHits: stats.transpositionHits,
             aspirationResearches: stats.aspirationResearches,
+            aspirationOneSidedResearches: stats.aspirationOneSidedResearches,
             aspirationFailLow: stats.aspirationFailLow,
             aspirationFailHigh: stats.aspirationFailHigh,
             elapsedMs: Math.max(0, this.now() - startedAt)
