@@ -3,8 +3,6 @@ import { SearchEngine } from './SearchEngine.js';
 import { getDifficultyProfile, DIFFICULTY_LEVELS } from './DifficultyProfiles.js';
 import { TreeGrowAIAdapter } from './TreeGrowAIAdapter.js';
 
-const WIN_SCORE = 100000;
-
 export class AIController {
     constructor(difficulty = 'medium', adjacency, areaCenters, adapter = null) {
         if (!DIFFICULTY_LEVELS.includes(difficulty)) {
@@ -128,9 +126,6 @@ export class AIController {
         );
     }
 
-    _publicMove(move) {
-        return this.adapter.toPublicMove(move);
-    }
 
     _generateMoves(game, side, bases) {
         return this.adapter.generateMoves(game, side, bases);
