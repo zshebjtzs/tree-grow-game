@@ -69,6 +69,33 @@ test('unsafe root and single-chain metrics follow the authoritative combat ances
     assert.equal(forkedMetrics.rootChainRisk, 1);
 });
 
+test('terminal base invasion is scored as a win for the side that moved', () => {
+    const adjacency = { 1: [2], 2: [1, 3], 3: [2] };
+    const adapter = createAdapter(adjacency, 3);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const redRoot = addRoot(game, 1, 'red');
+    const attacker = game.addNode(redRoot.id, 20, 0, 2, 'red');
+    game.currentTurn = 'blue';
+    addRoot(game, 3, 'blue');
+    game.currentTurn = 'red';
+
+    const bases = { red: 1, blue: 3 };
+    const terminal = adapter.simulateMove(game, {
+        parentNodeId: attacker.id,
+        targetAreaId: 3,
+        x: 20,
+        y: 0
+    }, 'red', bases);
+
+    assert.ok(terminal);
+    assert.equal(terminal.isGameOver, true);
+    assert.equal(terminal.currentTurn, 'red',
+        'base invasion ends the game before the turn switches');
+    assert.equal(adapter.positionEvaluator.evaluateState(terminal, 'red', bases), 100000);
+    assert.equal(adapter.positionEvaluator.evaluateState(terminal, 'blue', bases), -100000);
+});
+
 test('soft distance preserves a gradient through an enemy-occupied intermediate area', () => {
     const adjacency = { 1: [2], 2: [1, 3], 3: [2] };
     const adapter = createAdapter(adjacency, 3);
