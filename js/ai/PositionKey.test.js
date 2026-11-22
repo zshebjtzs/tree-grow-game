@@ -42,9 +42,13 @@ test('position key remains stable across cloned search states', () => {
     assert.equal(getPositionKey(clone), getPositionKey(game));
 });
 
-test('position key distinguishes otherwise identical frozen and destroyed flags', () => {
+test('position key distinguishes frozen and destroyed node state', () => {
     const { game, root } = createRootState();
-    const clone = game.clone();
-    clone.getNode(root.id).isFrozen = true;
-    assert.notEqual(getPositionKey(game), getPositionKey(clone));
+    const frozen = game.clone();
+    frozen.getNode(root.id).isFrozen = true;
+    const destroyed = game.clone();
+    destroyed.getNode(root.id).isDestroyed = true;
+
+    assert.notEqual(getPositionKey(game), getPositionKey(frozen));
+    assert.notEqual(getPositionKey(game), getPositionKey(destroyed));
 });
