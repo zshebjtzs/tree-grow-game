@@ -19,7 +19,7 @@ export class AIController {
         });
 
         const requiredMethods = [
-            'createState', 'getBases', 'isValidSide', 'setSideToMove',
+            'createState', 'getBases', 'isValidSide', 'createNoMoveExplanation', 'setSideToMove',
             'getPositionKey', 'isTerminal', 'getSideToMove', 'getMoveKey',
             'toPublicMove', 'createDecisionExplanation', 'generateMoves',
             'distanceToBase', 'simulateMove', 'simulatePass'
@@ -52,12 +52,7 @@ export class AIController {
         this._emitProgress({ phase: 'generating', completedCandidates: 0, totalCandidates: 0 });
         const moves = this._generateMoves(game, playerSide, bases);
         if (!moves.length) {
-            this.lastDecisionExplanation = {
-                title: 'AI 跳过回合',
-                summary: '当前局面没有可执行的合法生长行动。',
-                details: ['AI 未找到通过规则引擎验证的合法候选行动。'],
-                search: null
-            };
+            this.lastDecisionExplanation = this.adapter.createNoMoveExplanation();
             this._emitProgress({ phase: 'complete', completedCandidates: 0, totalCandidates: 0 });
             return null;
         }
