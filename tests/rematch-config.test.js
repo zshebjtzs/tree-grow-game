@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRematchConfig } from '../js/app/RematchConfig.js';
+import { DIFFICULTY_LEVELS } from '../js/ai/DifficultyProfiles.js';
 
 test('rematch preserves PVP configuration as a fresh immutable snapshot', () => {
     const previous = Object.freeze({ mode: 'pvp', difficulty: 'medium', playerSide: 'red' });
@@ -11,7 +12,7 @@ test('rematch preserves PVP configuration as a fresh immutable snapshot', () => 
 });
 
 test('rematch preserves PVE mode and every supported AI difficulty', () => {
-    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+    for (const difficulty of DIFFICULTY_LEVELS) {
         assert.deepEqual(
             createRematchConfig({ mode: 'pve', difficulty, playerSide: 'blue' }),
             { mode: 'pve', difficulty, playerSide: 'blue' }
