@@ -222,7 +222,7 @@ export class AIController {
         const moves = [];
         for (const parent of game.getAliveNodesByOwner(side)) {
             if (parent.isFrozen) continue;
-            const isFirstRootBranch = parent.isRoot && parent.childrenIds.length === 0;
+            const isFirstRootBranch = parent.isRoot && !parent.hasUsedRootGrowth && parent.childrenIds.length === 0;
             const targets = isFirstRootBranch
                 ? this.areaCenters.map((_, index) => index + 1)
                 : (this.adjacency[parent.areaId] || []);
