@@ -221,8 +221,8 @@ export class AIController {
         const growthContext = this.ruleEngine.createGrowthContext(game, side);
         const moves = [];
         for (const parent of game.getAliveNodesByOwner(side)) {
-            if (parent.isFrozen) continue;
-            const isFirstRootBranch = parent.isRoot && parent.childrenIds.length === 0;
+            if (parent.isFrozen || (parent.isRoot && parent.hasUsedRootGrowth)) continue;
+            const isFirstRootBranch = parent.isRoot && !parent.hasUsedRootGrowth && parent.childrenIds.length === 0;
             const targets = isFirstRootBranch
                 ? this.areaCenters.map((_, index) => index + 1)
                 : (this.adjacency[parent.areaId] || []);

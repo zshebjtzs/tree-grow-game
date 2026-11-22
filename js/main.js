@@ -1704,7 +1704,7 @@ document.getElementById('gameCanvas').addEventListener('click', (e) => {
         }
 
         // 1.3 如果是已有子节点的根节点，直接拦截
-        if (clickedNode.isRoot && clickedNode.childrenIds.length > 0) {
+        if (clickedNode.isRoot && (clickedNode.hasUsedRootGrowth || clickedNode.childrenIds.length > 0)) {
             showFeedback('根节点不能作为分叉点再次生长。', 'warning');
             selectedNodeId = null;
             renderGame();

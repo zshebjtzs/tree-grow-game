@@ -399,3 +399,43 @@ test('AI explains an immediate win as a verified tactical result', () => {
     assert.equal(move.targetAreaId, 6);
     assert.match(ai.lastDecisionExplanation.summary, /立即获胜/);
 });
+
+
+test('AI excludes an already-grown root while retaining unused roots as growth candidates', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+
+    const usedRoot = game.addNode(null, 0, 0, 1, 'blue');
+    const unusedRootA = game.addNode(null, 0, 0, 3, 'blue');
+    const unusedRootB = game.addNode(null, 0, 0, 5, 'blue');
+    game.addNode(usedRoot.id, 10, 0, 2, 'blue');
+
+    assert.equal(usedRoot.hasUsedRootGrowth, true);
+    assert.equal(unusedRootA.hasUsedRootGrowth, false);
+    assert.equal(unusedRootB.hasUsedRootGrowth, false);
+
+    const ai = new AIController('hard', line, centers);
+    const moves = ai._generateMoves(game, 'blue', { red: 6, blue: 1 });
+    const parentIds = new Set(moves.map(move => move.parentNodeId));
+
+    assert.equal(parentIds.has(usedRoot.id), false,
+        'an already-grown root with a surviving child must never be selected again');
+    assert.equal(parentIds.has(unusedRootA.id), true,
+        'an unused root must remain eligible for its first growth');
+    assert.equal(parentIds.has(unusedRootB.id), true,
+        'another unused root must remain eligible for its first growth');
+});
+
+test('AI never generates a second root branch after the original branch is destroyed', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    const root = game.addNode(null, 0, 0, 1, 'blue');
+    const firstBranch = game.addNode(root.id, 10, 0, 2, 'blue');
+    game.deleteNodes([firstBranch.id]);
+    assert.deepEqual(root.childrenIds, []);
+    assert.equal(root.hasUsedRootGrowth, true);
+
+    const ai = new AIController('hard', line, centers);
+    assert.deepEqual(ai._generateMoves(game, 'blue', { red: 6, blue: 1 }), []);
+    assert.equal(ai.getBestMove(snapshot(game, 6, 1), 'blue'), null);
+});
