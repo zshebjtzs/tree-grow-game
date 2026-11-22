@@ -48,6 +48,15 @@ export class TreeGrowAIAdapter {
         return side === 'red' || side === 'blue';
     }
 
+    createNoMoveExplanation() {
+        return {
+            title: 'AI 跳过回合',
+            summary: '当前局面没有可执行的合法生长行动。',
+            details: ['AI 未找到通过规则引擎验证的合法候选行动。'],
+            search: null
+        };
+    }
+
     setSideToMove(state, side) {
         state.currentTurn = side;
     }
