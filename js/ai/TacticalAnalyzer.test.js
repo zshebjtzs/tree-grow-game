@@ -154,3 +154,61 @@ test('immediate-win scan simulates attacks only after checking direct base entri
     assert.equal(count, 2);
     assert.deepEqual(calls, [8]);
 });
+
+
+test('tactical reply generation and attack simulation are reused per candidate position', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = position();
+    const candidates = [
+        { parentNodeId: 1, targetAreaId: 4, _nextState: position() },
+        { parentNodeId: 2, targetAreaId: 5, _nextState: position() }
+    ];
+    let generated = 0;
+    let simulatedAttacks = 0;
+    const generateMoves = (_state, side) => {
+        generated++;
+        return side === 'red' && _state !== root
+            ? [{ targetAreaId: 8, attacks: true }]
+            : [];
+    };
+    const simulateMove = (state, move, side) => {
+        if (side === 'red') simulatedAttacks++;
+        return state;
+    };
+
+    analyzer.rankDefenses(
+        root, candidates, 'blue', { red: 6, blue: 1 }, simulateMove, generateMoves
+    );
+
+    assert.equal(generated, 3,
+        'generate opponent replies once for the current position and once per candidate position');
+    assert.equal(simulatedAttacks, 2,
+        'each candidate position should simulate its attack reply only once');
+});
+
+test('cascade loss counts descendants correctly when the directly attacked target is a root', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = { id: 1, areaId: 2 };
+    const child = { id: 2, areaId: 3 };
+    const grandchild = { id: 3, areaId: 4 };
+    const game = {
+        isGameOver: false,
+        getAliveNodesByOwner: side => side === 'blue' ? [root, child, grandchild] : [{ id: 9 }],
+        getPlayerRootNodes: side => side === 'blue' ? [root] : [{ id: 9 }]
+    };
+    const next = {
+        isGameOver: false,
+        getAliveNodesByOwner: side => side === 'blue' ? [] : [{ id: 9 }],
+        getPlayerRootNodes: side => side === 'blue' ? [] : [{ id: 9 }]
+    };
+    const risk = analyzer.measureAttackRisk(
+        game, 'blue', 'red', { red: 6, blue: 1 },
+        () => [{ targetAreaId: 2, attacks: true }],
+        () => next
+    );
+
+    assert.equal(risk.maxRootLoss, 1);
+    assert.equal(risk.maxNodeLoss, 3);
+    assert.equal(risk.maxCascadeLoss, 2,
+        'both non-root descendants are cascade losses; the attacked root is not subtracted twice');
+});
