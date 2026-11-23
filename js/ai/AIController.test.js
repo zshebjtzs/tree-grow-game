@@ -409,6 +409,10 @@ test('AI decision explanation reports measurable route and search evidence', () 
     assert.ok(ai.lastDecisionExplanation.details.some(detail => detail.includes('图论距离')));
     assert.ok(ai.lastDecisionExplanation.search.completedDepth > 0);
     assert.ok(ai.lastDecisionExplanation.search.nodes > 0);
+    assert.ok(ai.lastSearchStats.preparationMs >= 0);
+    assert.ok(ai.lastSearchStats.totalMs >= ai.lastSearchStats.preparationMs);
+    assert.equal(ai.lastSearchStats.deadlineMs, ai.profile.searchBudgetMs);
+    assert.equal(typeof ai.lastSearchStats.deadlineExceeded, 'boolean');
     assert.ok(progress.some(item => item.phase === 'evaluating'));
     assert.ok(progress.some(item => item.phase === 'search'));
     assert.equal(progress.at(-1).phase, 'complete');
