@@ -143,9 +143,6 @@ function createInitialState(map) {
                 if (node) nodes.push(node);
             }
         }
-        if (nodes.length !== count) {
-            throw new Error(`Unable to place ${count} production roots for ${owner} in area ${areaId}`);
-        }
         return nodes;
     };
 
