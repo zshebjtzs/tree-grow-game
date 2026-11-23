@@ -559,7 +559,8 @@ test('search honors an absolute deadline shared with decision preparation', () =
         getPositionKey: () => 'root',
         applyMove: () => null,
         generateMoves: () => [],
-        evaluate: () => 0
+        evaluate: () => 0,
+        orderMoves: (_state, moves) => moves
     });
 
     assert.equal(result.move, fallback);
