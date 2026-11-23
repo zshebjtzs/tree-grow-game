@@ -544,3 +544,26 @@ test('PVS and aspiration match alpha-beta across random DAGs with transpositions
         assert.ok(baseline.transpositionHits > 0, `DAG seed ${seed} should exercise transpositions`);
     }
 });
+
+
+test('search honors an absolute deadline shared with decision preparation', () => {
+    const fallback = { id: 'prepared-root-move' };
+    const engine = new SearchEngine({ now: () => 100 });
+    const result = engine.search({
+        rootState: { currentTurn: 'red' },
+        rootMoves: [fallback],
+        maxDepth: 4,
+        timeBudgetMs: 1000,
+        deadline: 99,
+        maxNodes: 100,
+        getPositionKey: () => 'root',
+        applyMove: () => null,
+        generateMoves: () => [],
+        evaluate: () => 0
+    });
+
+    assert.equal(result.move, fallback);
+    assert.equal(result.completedDepth, 0);
+    assert.equal(result.nodes, 0,
+        'the search phase must not restart a fresh budget after preparation used the shared deadline');
+});
