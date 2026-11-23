@@ -428,6 +428,9 @@ test('AI explains an immediate win as a verified tactical result', () => {
     assert.equal(move.parentNodeId, blueRoot.id);
     assert.equal(move.targetAreaId, 6);
     assert.match(ai.lastDecisionExplanation.summary, /立即获胜/);
+    assert.equal(ai.lastSearchStats.completedDepth, 0);
+    assert.ok(ai.lastSearchStats.preparationMs >= 0);
+    assert.ok(ai.lastSearchStats.totalMs >= ai.lastSearchStats.preparationMs);
 });
 
 
