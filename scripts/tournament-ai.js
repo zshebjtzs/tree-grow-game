@@ -150,9 +150,9 @@ function createInitialState(map) {
     };
 
     game.currentTurn = 'red';
-    addRootsInArea(bases.redBaseId, 'red', 3);
+    addRootsInArea(map.redBaseId, 'red', 3);
     game.currentTurn = 'blue';
-    addRootsInArea(bases.blueBaseId, 'blue', 3);
+    addRootsInArea(map.blueBaseId, 'blue', 3);
     game.currentTurn = 'red';
     return game;
 }
