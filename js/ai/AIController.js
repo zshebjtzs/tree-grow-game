@@ -59,6 +59,7 @@ export class AIController {
         const moves = this._generateMoves(game, playerSide, bases);
         if (!moves.length) {
             this.lastDecisionExplanation = this.adapter.createNoMoveExplanation();
+            this._recordDecisionTiming(decisionStartedAt, decisionDeadline);
             this._emitProgress({ phase: 'complete', completedCandidates: 0, totalCandidates: 0 });
             return null;
         }
@@ -110,8 +111,28 @@ export class AIController {
         this.lastDecisionExplanation = this._createDecisionExplanation(
             game, selectedMove, playerSide, bases, ranked, selectionReason
         );
+        this._recordDecisionTiming(decisionStartedAt, decisionDeadline);
         this._emitProgress({ phase: 'complete', completedCandidates: moves.length, totalCandidates: moves.length });
         return this.adapter.toPublicMove(selectedMove);
+    }
+
+    _recordDecisionTiming(decisionStartedAt, deadline) {
+        const completedAt = this.searchEngine.now();
+        const existing = this.lastSearchStats || {
+            difficulty: this.difficulty,
+            nodes: 0,
+            cutoffs: 0,
+            transpositionHits: 0,
+            completedDepth: 0,
+            elapsedMs: 0
+        };
+        this.lastSearchStats = {
+            ...existing,
+            preparationMs: existing.preparationMs ?? Math.max(0, completedAt - decisionStartedAt),
+            totalMs: Math.max(0, completedAt - decisionStartedAt),
+            deadlineMs: this.profile.searchBudgetMs,
+            deadlineExceeded: completedAt > deadline
+        };
     }
 
     _emitProgress(progress) {
