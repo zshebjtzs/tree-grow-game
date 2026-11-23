@@ -1,4 +1,6 @@
 import { performance } from 'node:perf_hooks';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { GameState } from '../js/game/GameState.js';
 import { MapManager } from '../js/core/MapManager.js';
 import { AIController } from '../js/ai/AIController.js';
@@ -9,7 +11,7 @@ const LEVELS = DIFFICULTY_LEVELS;
 const DEFAULTS = { pairGames: 2, seedCount: 2, maxPlies: 120 };
 
 function parseArgs(argv) {
-    const options = { ...DEFAULTS, seeds: null, only: null };
+    const options = { ...DEFAULTS, seeds: null, only: null, baselineController: null };
     for (let index = 0; index < argv.length; index++) {
         const [key, inlineValue] = argv[index].split('=', 2);
         const value = inlineValue ?? argv[++index];
@@ -18,7 +20,11 @@ function parseArgs(argv) {
         else if (key === '--max-plies') options.maxPlies = Number(value);
         else if (key === '--seeds') options.seeds = value.split(',').map(Number);
         else if (key === '--only') options.only = value.split(',').map(pair => pair.split(':'));
-        else throw new TypeError(`Unknown argument: ${key}`);
+        else if (key === '--baseline-controller') options.baselineController = value;
+        else if (key === '--help' || key === '-h') {
+            console.log('Usage: node scripts/tournament-ai.js [--seed-count N] [--pair-games N] [--max-plies N] [--only hard:expert,...] [--baseline-controller <legacy-worktree>/js/ai/AIController.js]');
+            process.exit(0);
+        } else throw new TypeError(`Unknown argument: ${key}`);
     }
     validatePairGames(options.pairGames);
     for (const key of ['seedCount', 'maxPlies']) {
@@ -29,8 +35,12 @@ function parseArgs(argv) {
     if (options.seeds && (!options.seeds.length || options.seeds.some(seed => !Number.isSafeInteger(seed)))) {
         throw new TypeError('--seeds must contain comma-separated safe integers');
     }
-    if (options.only?.some(pair => pair.length !== 2 || pair.some(level => !LEVELS.includes(level)))) {
-        throw new TypeError(`--only pairs must use: ${LEVELS.join(', ')}`);
+    if (options.baselineController !== null && !options.baselineController) {
+        throw new TypeError('--baseline-controller requires a module path');
+    }
+    const supportedLevels = options.baselineController ? [...LEVELS, 'legacy-hard'] : LEVELS;
+    if (options.only?.some(pair => pair.length !== 2 || pair.some(level => !supportedLevels.includes(level)))) {
+        throw new TypeError(`--only pairs must use: ${supportedLevels.join(', ')}`);
     }
     return options;
 }
@@ -128,14 +138,17 @@ function summarizeDecisions(samples) {
     };
 }
 
-function playGame({ seed, pairId, randomSeed, redDifficulty, blueDifficulty, maxPlies }) {
+function playGame({ seed, pairId, randomSeed, redDifficulty, blueDifficulty, maxPlies, BaselineAIController }) {
     const map = createMap(seed);
     const { adjacency, areaCenters } = map;
     let game = createInitialState(areaCenters, map);
     const bases = { red: map.redBaseId, blue: map.blueBaseId };
+    const createController = difficulty => difficulty === 'legacy-hard'
+        ? new BaselineAIController('hard', adjacency, areaCenters)
+        : new AIController(difficulty, adjacency, areaCenters);
     const controllers = {
-        red: new AIController(redDifficulty, adjacency, areaCenters),
-        blue: new AIController(blueDifficulty, adjacency, areaCenters)
+        red: createController(redDifficulty),
+        blue: createController(blueDifficulty)
     };
     const decisionSamples = { red: [], blue: [] };
     let winner = null;
@@ -197,22 +210,23 @@ function playGame({ seed, pairId, randomSeed, redDifficulty, blueDifficulty, max
     };
 }
 
-function buildPairs(only) {
+function buildPairs(only, levels) {
     if (only) return only;
     const pairs = [];
-    for (let left = 0; left < LEVELS.length; left++) {
-        for (let right = left + 1; right < LEVELS.length; right++) {
-            pairs.push([LEVELS[left], LEVELS[right]]);
+    for (let left = 0; left < levels.length; left++) {
+        for (let right = left + 1; right < levels.length; right++) {
+            pairs.push([levels[left], levels[right]]);
         }
     }
     return pairs;
 }
 
-function runTournament(options) {
+function runTournament(options, BaselineAIController = null) {
+    const levels = BaselineAIController ? [...LEVELS, 'legacy-hard'] : LEVELS;
     const seeds = options.seeds || Array.from(
         { length: options.seedCount }, (_, index) => 20261122 + index
     );
-    const pairs = buildPairs(options.only);
+    const pairs = buildPairs(options.only, levels);
     const matches = [];
 
     for (let pairIndex = 0; pairIndex < pairs.length; pairIndex++) {
@@ -234,7 +248,8 @@ function runTournament(options) {
                         randomSeed,
                         redDifficulty,
                         blueDifficulty,
-                        maxPlies: options.maxPlies
+                        maxPlies: options.maxPlies,
+                        BaselineAIController
                     }));
                 } finally {
                     Math.random = originalRandom;
@@ -266,12 +281,30 @@ function runTournament(options) {
 
     return {
         tournament: 'tree-grow-ai-round-robin',
-        levels: LEVELS,
-        settings: { seeds, pairGames: options.pairGames, maxPlies: options.maxPlies },
+        levels,
+        settings: {
+            seeds,
+            pairGames: options.pairGames,
+            maxPlies: options.maxPlies,
+            mapGenerator: 'voronoi-lloyd',
+            baselineController: Boolean(BaselineAIController)
+        },
         summaries,
         matches
     };
 }
 
+async function loadBaselineController(path) {
+    const moduleUrl = pathToFileURL(resolve(path)).href;
+    const module = await import(moduleUrl);
+    if (typeof module.AIController !== 'function') {
+        throw new TypeError('Baseline module must export AIController');
+    }
+    return module.AIController;
+}
+
 const options = parseArgs(process.argv.slice(2));
-console.log(JSON.stringify(runTournament(options), null, 2));
+const BaselineAIController = options.baselineController
+    ? await loadBaselineController(options.baselineController)
+    : null;
+console.log(JSON.stringify(runTournament(options, BaselineAIController), null, 2));
