@@ -97,7 +97,8 @@ function createMap(seed, areaCount = 50) {
             redBaseId,
             blueBaseId,
             baseDistance,
-            generator: 'voronoi-lloyd'
+            generator: 'voronoi-lloyd',
+            mapManager: manager
         };
     } finally {
         Math.random = originalRandom;
@@ -105,12 +106,49 @@ function createMap(seed, areaCount = 50) {
     }
 }
 
-function createInitialState(areaCenters, bases) {
+function createInitialState(map, bases) {
     const game = new GameState();
+    const mapManager = map.mapManager;
+
+    const addRootsInArea = (areaId, owner, count = 3) => {
+        const area = mapManager.areas.find(item => item.id === areaId);
+        if (!area) return [];
+        const center = area.center;
+        const nodes = [];
+        let attempts = 0;
+        while (nodes.length < count && attempts < 1000) {
+            attempts++;
+            const px = center[0] + (Math.random() - 0.5) * 80;
+            const py = center[1] + (Math.random() - 0.5) * 80;
+            if (mapManager.getAreaAtPoint(px, py) !== areaId) continue;
+            if (nodes.some(node => Math.hypot(node.x - px, node.y - py) < 15)) continue;
+            const node = game.addNode(null, px, py, areaId, owner);
+            if (node) nodes.push(node);
+        }
+
+        // Match the live game's deterministic fallback when random placement
+        // cannot fit all three roots inside a narrow Voronoi cell.
+        for (let radius = 2; nodes.length < count && radius <= 40; radius += 2) {
+            for (let angle = 0; angle < 360 && nodes.length < count; angle += 15) {
+                const radians = angle * Math.PI / 180;
+                const px = center[0] + Math.cos(radians) * radius;
+                const py = center[1] + Math.sin(radians) * radius;
+                if (mapManager.getAreaAtPoint(px, py) !== areaId) continue;
+                if (nodes.some(node => Math.hypot(node.x - px, node.y - py) < 15)) continue;
+                const node = game.addNode(null, px, py, areaId, owner);
+                if (node) nodes.push(node);
+            }
+        }
+        if (nodes.length !== count) {
+            throw new Error(`Unable to place ${count} production roots for ${owner} in area ${areaId}`);
+        }
+        return nodes;
+    };
+
     game.currentTurn = 'red';
-    game.addNode(null, ...areaCenters[bases.redBaseId - 1], bases.redBaseId, 'red');
+    addRootsInArea(bases.redBaseId, 'red', 3);
     game.currentTurn = 'blue';
-    game.addNode(null, ...areaCenters[bases.blueBaseId - 1], bases.blueBaseId, 'blue');
+    addRootsInArea(bases.blueBaseId, 'blue', 3);
     game.currentTurn = 'red';
     return game;
 }
@@ -146,7 +184,7 @@ function summarizeDecisions(samples) {
 function playGame({ seed, pairId, randomSeed, redDifficulty, blueDifficulty, maxPlies, BaselineAIController }) {
     const map = createMap(seed);
     const { adjacency, areaCenters } = map;
-    let game = createInitialState(areaCenters, map);
+    let game = createInitialState(map, map);
     const bases = { red: map.redBaseId, blue: map.blueBaseId };
     const createController = difficulty => difficulty === 'legacy-hard'
         ? new BaselineAIController('hard', adjacency, areaCenters)
