@@ -6,7 +6,7 @@ const T_95 = [
     2.042
 ];
 
-function studentTCritical95(degreesOfFreedom) {
+export function studentTCritical95(degreesOfFreedom) {
     if (degreesOfFreedom < 1) return Infinity;
     if (degreesOfFreedom < T_95.length) return T_95[degreesOfFreedom];
 
