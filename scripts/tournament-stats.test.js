@@ -75,3 +75,14 @@ test('zero-variance paired samples do not produce a misleading point confidence 
     assert.equal(result.samples, 5);
     assert.equal(result.method, 'zero-variance');
 });
+
+
+test('paired t interval uses finite-sample critical values beyond 30 degrees of freedom', () => {
+    const scores = Array.from({ length: 41 }, (_, index) => index % 2);
+    const result = scoreInterval(scores);
+    const standardError = Math.sqrt(0.25 / scores.length);
+    const criticalValue = (result.upper95 - result.mean) / standardError;
+
+    assert.ok(Math.abs(criticalValue - 2.021) < 0.001,
+        `expected t(40) critical value near 2.021, got ${criticalValue}`);
+});
