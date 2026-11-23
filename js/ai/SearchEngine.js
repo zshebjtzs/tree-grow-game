@@ -23,6 +23,7 @@ export class SearchEngine {
         orderMoves,
         maxDepth,
         timeBudgetMs,
+        deadline: sharedDeadline = null,
         maxNodes = Infinity,
         principalVariationSearch = true,
         aspirationWindows = true,
@@ -33,7 +34,9 @@ export class SearchEngine {
             return { move: null, value: evaluate(rootState), completedDepth: 0, nodes: 0, cutoffs: 0 };
         }
         const startedAt = this.now();
-        const deadline = startedAt + Math.max(1, timeBudgetMs);
+        const deadline = Number.isFinite(sharedDeadline)
+            ? sharedDeadline
+            : startedAt + Math.max(1, timeBudgetMs);
         const stats = {
             nodes: 0,
             cutoffs: 0,
