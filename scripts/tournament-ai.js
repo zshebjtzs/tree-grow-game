@@ -106,7 +106,7 @@ function createMap(seed, areaCount = 50) {
     }
 }
 
-function createInitialState(map, bases) {
+function createInitialState(map) {
     const game = new GameState();
     const mapManager = map.mapManager;
 
@@ -184,7 +184,7 @@ function summarizeDecisions(samples) {
 function playGame({ seed, pairId, randomSeed, redDifficulty, blueDifficulty, maxPlies, BaselineAIController }) {
     const map = createMap(seed);
     const { adjacency, areaCenters } = map;
-    let game = createInitialState(map, map);
+    let game = createInitialState(map);
     const bases = { red: map.redBaseId, blue: map.blueBaseId };
     const createController = difficulty => difficulty === 'legacy-hard'
         ? new BaselineAIController('hard', adjacency, areaCenters)
