@@ -46,6 +46,11 @@ export class AIController {
         }
         this.lastSearchStats = null;
         this.lastDecisionExplanation = null;
+        // One deadline covers state preparation, tactical filtering, and search.
+        // Preparation remains non-interruptible to preserve mandatory tactical checks;
+        // SearchEngine receives the same absolute deadline and uses only the remainder.
+        const decisionStartedAt = this.searchEngine.now();
+        const decisionDeadline = decisionStartedAt + this.profile.searchBudgetMs;
         const game = this.adapter.createState(gameStateData);
         this.adapter.setSideToMove(game, playerSide);
         const bases = this.adapter.getBases(gameStateData);
@@ -98,7 +103,7 @@ export class AIController {
             const tacticallyRanked = ranked.filter(move => defenseSet.has(move));
             if (tacticallyRanked.length < ranked.length) selectionReason = 'defense-priority';
 
-            selectedMove = this._search(game, tacticallyRanked, playerSide, bases);
+            selectedMove = this._search(game, tacticallyRanked, playerSide, bases, decisionDeadline, decisionStartedAt);
             if (selectionReason !== 'defense-priority') selectionReason = 'search-selection';
         }
 
@@ -147,7 +152,7 @@ export class AIController {
         return this.positionEvaluator.evaluateState(game, perspective, bases);
     }
 
-    _search(game, rankedMoves, side, bases) {
+    _search(game, rankedMoves, side, bases, deadline = null, decisionStartedAt = this.searchEngine.now()) {
         // Search every legal root candidate; static ordering must not permanently
         // discard a move before the search can evaluate its consequences.
         const rootMoves = rankedMoves;
@@ -168,6 +173,10 @@ export class AIController {
         }
         preparedChildren.set(game, rootChildren);
 
+        const sharedDeadline = Number.isFinite(deadline)
+            ? deadline
+            : decisionStartedAt + this.profile.searchBudgetMs;
+        const searchStartedAt = this.searchEngine.now();
         const result = this.searchEngine.search({
             rootState: game,
             rootMoves,
@@ -175,7 +184,8 @@ export class AIController {
             getSideToMove: state => this.adapter.getSideToMove(state),
             getMoveKey: moveKey,
             maxDepth: this.profile.maxDepth,
-            timeBudgetMs: this.profile.searchBudgetMs,
+            timeBudgetMs: Math.max(0, sharedDeadline - searchStartedAt),
+            deadline: sharedDeadline,
             maxNodes: this.profile.maxNodes,
             getPositionKey: state => {
                 let key = positionKeyCache.get(state);
@@ -223,9 +233,14 @@ export class AIController {
                 return orderedMoves;
             }
         });
+        const completedAt = this.searchEngine.now();
         this.lastSearchStats = {
             difficulty: this.difficulty,
-            ...result
+            ...result,
+            preparationMs: Math.max(0, searchStartedAt - decisionStartedAt),
+            totalMs: Math.max(0, completedAt - decisionStartedAt),
+            deadlineMs: this.profile.searchBudgetMs,
+            deadlineExceeded: completedAt > sharedDeadline
         };
         return result.move || rootMoves[0];
     }
