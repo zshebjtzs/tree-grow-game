@@ -100,7 +100,6 @@ function analyzeReplies(controller, state, move, side, bases) {
     }
 
     const enemy = side === 'red' ? 'blue' : 'red';
-    const before = countAlive(afterMove, side);
     const replyState = adapter.createState(afterMove.toJSON());
     adapter.setSideToMove(replyState, enemy);
     const replies = adapter.generateMoves(replyState, enemy, bases);
@@ -170,7 +169,6 @@ function analyzeBaselineMove(controller, state, selectedMove, side, bases) {
         };
     }
 
-    const before = countAlive(afterMove, side);
     const replyState = afterMove.clone();
     replyState.currentTurn = enemy;
     const replies = controller._generateMoves(replyState, enemy, bases);
