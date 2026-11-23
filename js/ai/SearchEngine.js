@@ -1,7 +1,8 @@
 // js/ai/SearchEngine.js
 /**
- * Iterative-deepening alpha-beta search with a depth-aware transposition table.
- * Search is synchronous and intended to run inside AIWorker, never the UI thread.
+ * Iterative-deepening alpha-beta search with a depth-aware transposition table,
+ * principal-variation ordering, and aspiration windows. Search is synchronous
+ * and intended to run inside AIWorker, never the UI thread.
  */
 export class SearchEngine {
     constructor({ now = () => performance.now() } = {}) {
@@ -11,6 +12,8 @@ export class SearchEngine {
     search({
         rootState,
         rootMoves,
+        isTerminal = state => Boolean(state.isGameOver),
+        getSideToMove = state => state.currentTurn,
         getPositionKey,
         getMoveKey = move => move,
         applyMove,
@@ -20,18 +23,31 @@ export class SearchEngine {
         orderMoves,
         maxDepth,
         timeBudgetMs,
+        deadline: sharedDeadline = null,
         maxNodes = Infinity,
         principalVariationSearch = true,
+        aspirationWindows = true,
+        aspirationWindow = 150,
         onProgress = () => {}
     }) {
         if (!Array.isArray(rootMoves) || !rootMoves.length) {
             return { move: null, value: evaluate(rootState), completedDepth: 0, nodes: 0, cutoffs: 0 };
         }
         const startedAt = this.now();
-        const deadline = startedAt + Math.max(1, timeBudgetMs);
-        const stats = { nodes: 0, cutoffs: 0, transpositionHits: 0 };
+        const deadline = Number.isFinite(sharedDeadline)
+            ? sharedDeadline
+            : startedAt + Math.max(1, timeBudgetMs);
+        const stats = {
+            nodes: 0,
+            cutoffs: 0,
+            transpositionHits: 0,
+            aspirationResearches: 0,
+            aspirationOneSidedResearches: 0,
+            aspirationFailLow: 0,
+            aspirationFailHigh: 0
+        };
         const checkBudget = () => {
-            if (stats.nodes > maxNodes || this.now() >= deadline) {
+            if (stats.nodes >= maxNodes || this.now() >= deadline) {
                 throw SearchEngine.BUDGET_EXHAUSTED;
             }
         };
@@ -44,15 +60,16 @@ export class SearchEngine {
         };
         let bestMove = rootMoves[0];
         let bestValue = -Infinity;
+        let previousScoreDelta = 0;
         let completedDepth = 0;
         let preferredRootMoveKey;
 
         const visit = (state, depth, alpha, beta, maximizing) => {
-            stats.nodes++;
-            if (stats.nodes > maxNodes || this.now() >= deadline) {
+            if (stats.nodes >= maxNodes || this.now() >= deadline) {
                 throw SearchEngine.BUDGET_EXHAUSTED;
             }
-            if (state.isGameOver || depth === 0) return evaluate(state);
+            stats.nodes++;
+            if (isTerminal(state) || depth === 0) return evaluate(state);
 
             const key = getPositionKey(state);
             const cached = table.get(key);
@@ -66,7 +83,7 @@ export class SearchEngine {
                 if (alpha >= beta) return cached.value;
             }
 
-            const side = state.currentTurn;
+            const side = getSideToMove(state);
             let moves = generateMoves(state, side);
             checkBudget();
             if (!moves.length) {
@@ -130,30 +147,66 @@ export class SearchEngine {
             return value;
         };
 
-        for (let depth = 1; depth <= maxDepth; depth++) {
+        const searchRoot = (depth, initialAlpha, initialBeta) => {
             let iterationMove = bestMove;
             let iterationValue = -Infinity;
-            let alpha = -Infinity;
-            const beta = Infinity;
-            try {
-                let ordered = orderMoves(rootState, rootMoves, true, checkBudget);
-                ordered = promoteMove(ordered, preferredRootMoveKey);
-                for (const move of ordered) {
-                    const next = applyMove(rootState, move, rootState.currentTurn);
-                    if (!next) continue;
-                    const value = next.isGameOver
-                        ? evaluate(next)
-                        : visit(next, depth - 1, alpha, beta, false);
-                    if (value > iterationValue) {
-                        iterationValue = value;
-                        iterationMove = move;
-                    }
-                    alpha = Math.max(alpha, iterationValue);
+            let alpha = initialAlpha;
+            const beta = initialBeta;
+            let ordered = orderMoves(rootState, rootMoves, true, checkBudget);
+            ordered = promoteMove(ordered, preferredRootMoveKey);
+
+            for (const move of ordered) {
+                checkBudget();
+                const next = applyMove(rootState, move, getSideToMove(rootState));
+                if (!next) continue;
+                const value = isTerminal(next)
+                    ? evaluate(next)
+                    : visit(next, depth - 1, alpha, beta, false);
+                if (value > iterationValue) {
+                    iterationValue = value;
+                    iterationMove = move;
                 }
-                if (!Number.isFinite(iterationValue)) break;
-                bestMove = iterationMove;
-                bestValue = iterationValue;
-                preferredRootMoveKey = getMoveKey(iterationMove);
+                alpha = Math.max(alpha, iterationValue);
+                if (alpha >= beta) break;
+            }
+            return { move: iterationMove, value: iterationValue };
+        };
+
+        for (let depth = 1; depth <= maxDepth; depth++) {
+            try {
+                const window = Math.max(1, aspirationWindow + previousScoreDelta * 2);
+                const alpha = aspirationWindows && depth > 1 && Number.isFinite(bestValue)
+                    ? bestValue - window
+                    : -Infinity;
+                const beta = aspirationWindows && depth > 1 && Number.isFinite(bestValue)
+                    ? bestValue + window
+                    : Infinity;
+                let iteration = searchRoot(depth, alpha, beta);
+
+                if (aspirationWindows && depth > 1 &&
+                    (iteration.value <= alpha || iteration.value >= beta)) {
+                    stats.aspirationResearches++;
+                    const failedLow = iteration.value <= alpha;
+                    if (failedLow) stats.aspirationFailLow++;
+                    else stats.aspirationFailHigh++;
+
+                    // A fail-low only needs a wider lower bound; a fail-high
+                    // only needs a wider upper bound. Retaining the opposite
+                    // aspiration bound preserves pruning without accepting
+                    // the failed probe as an exact result.
+                    stats.aspirationOneSidedResearches++;
+                    iteration = failedLow
+                        ? searchRoot(depth, -Infinity, beta)
+                        : searchRoot(depth, alpha, Infinity);
+                }
+
+                if (!Number.isFinite(iteration.value)) break;
+                if (Number.isFinite(bestValue)) {
+                    previousScoreDelta = Math.abs(iteration.value - bestValue);
+                }
+                bestMove = iteration.move;
+                bestValue = iteration.value;
+                preferredRootMoveKey = getMoveKey(iteration.move);
                 completedDepth = depth;
                 try {
                     onProgress({
@@ -163,6 +216,7 @@ export class SearchEngine {
                         nodes: stats.nodes,
                         cutoffs: stats.cutoffs,
                         transpositionHits: stats.transpositionHits,
+                        aspirationResearches: stats.aspirationResearches,
                         value: bestValue,
                         elapsedMs: Math.max(0, this.now() - startedAt)
                     });
@@ -183,6 +237,10 @@ export class SearchEngine {
             nodes: stats.nodes,
             cutoffs: stats.cutoffs,
             transpositionHits: stats.transpositionHits,
+            aspirationResearches: stats.aspirationResearches,
+            aspirationOneSidedResearches: stats.aspirationOneSidedResearches,
+            aspirationFailLow: stats.aspirationFailLow,
+            aspirationFailHigh: stats.aspirationFailHigh,
             elapsedMs: Math.max(0, this.now() - startedAt)
         };
     }

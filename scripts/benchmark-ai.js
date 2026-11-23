@@ -1,6 +1,7 @@
 import { performance } from 'node:perf_hooks';
 import { GameState } from '../js/game/GameState.js';
 import { AIController } from '../js/ai/AIController.js';
+import { DIFFICULTY_LEVELS } from '../js/ai/DifficultyProfiles.js';
 
 const AREA_COUNT = 50;
 const ITERATIONS = 40;
@@ -93,10 +94,10 @@ const fixtures = [
 const results = [];
 
 for (const fixture of fixtures) {
-    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+    for (const difficulty of DIFFICULTY_LEVELS) {
         const variants = ['hard', 'expert'].includes(difficulty)
             ? ['alpha-beta', 'pvs']
-            : ['heuristic'];
+            : ['pvs'];
         const createAI = variant => {
             const ai = new AIController(difficulty, fixture.adjacency, fixture.areaCenters);
             if (variant === 'alpha-beta') {
@@ -134,22 +135,26 @@ for (const fixture of fixtures) {
             red: fixture.snapshot.redBaseId,
             blue: fixture.snapshot.blueBaseId
         }).length;
-        if (difficulty === 'hard' || difficulty === 'expert') {
-            if (legalMoveCount === 0 && fixture.name !== 'sparse') {
-                throw new Error(`Benchmark fixture ${fixture.name} has no legal blue moves`);
-            }
+        if (legalMoveCount === 0) {
+            throw new Error(`Benchmark fixture ${fixture.name} has no legal blue moves for ${difficulty}`);
         }
         for (let index = 0; index < WARMUP; index++) {
             ai.getBestMove(fixture.snapshot, 'blue');
         }
 
         const samples = [];
+        const preparationSamples = [];
         const searchStats = [];
         for (let index = 0; index < ITERATIONS; index++) {
             const start = performance.now();
             ai.getBestMove(fixture.snapshot, 'blue');
-            samples.push(performance.now() - start);
-            if (ai.lastSearchStats) searchStats.push(ai.lastSearchStats);
+            const totalElapsedMs = performance.now() - start;
+            samples.push(totalElapsedMs);
+            if (ai.lastSearchStats) {
+                searchStats.push(ai.lastSearchStats);
+                preparationSamples.push(ai.lastSearchStats.preparationMs ??
+                    Math.max(0, totalElapsedMs - ai.lastSearchStats.elapsedMs));
+            }
         }
         samples.sort((a, b) => a - b);
         results.push({
@@ -162,10 +167,36 @@ for (const fixture of fixtures) {
             p50Ms: Number(percentile(samples, 0.50).toFixed(3)),
             p95Ms: Number(percentile(samples, 0.95).toFixed(3)),
             maxMs: Number(samples.at(-1).toFixed(3)),
+            meanPreparationMs: preparationSamples.length
+                ? Number((preparationSamples.reduce((sum, value) => sum + value, 0) /
+                    preparationSamples.length).toFixed(3))
+                : 0,
+            p95PreparationMs: preparationSamples.length
+                ? Number(percentile([...preparationSamples].sort((a, b) => a - b), 0.95).toFixed(3))
+                : 0,
+            meanSearchMs: searchStats.length
+                ? Number((searchStats.reduce((sum, item) => sum + item.elapsedMs, 0) /
+                    searchStats.length).toFixed(3))
+                : 0,
             meanNodes: searchStats.length
                 ? Math.round(searchStats.reduce((sum, item) => sum + item.nodes, 0) / searchStats.length)
                 : 0,
             maxNodes: searchStats.length ? Math.max(...searchStats.map(item => item.nodes)) : 0,
+            meanAspirationResearches: searchStats.length
+                ? Number((searchStats.reduce((sum, item) => sum + (item.aspirationResearches || 0), 0) /
+                    searchStats.length).toFixed(2))
+                : 0,
+            meanAspirationOneSidedResearches: searchStats.length
+                ? Number((searchStats.reduce((sum, item) =>
+                    sum + (item.aspirationOneSidedResearches || 0), 0) /
+                    searchStats.length).toFixed(2))
+                : 0,
+            aspirationOneSidedResearchCount: searchStats.reduce((sum, item) =>
+                sum + (item.aspirationOneSidedResearches || 0), 0),
+            aspirationFailHighCount: searchStats.reduce((sum, item) =>
+                sum + (item.aspirationFailHigh || 0), 0),
+            aspirationFailLowCount: searchStats.reduce((sum, item) =>
+                sum + (item.aspirationFailLow || 0), 0),
             completedDepthMin: searchStats.length
                 ? Math.min(...searchStats.map(item => item.completedDepth))
                 : 0,
@@ -179,6 +210,7 @@ for (const fixture of fixtures) {
 
 console.log(JSON.stringify({
     benchmark: 'tree-grow-ai-multi-position',
+    difficulties: DIFFICULTY_LEVELS,
     node: process.version,
     platform: process.platform,
     architecture: process.arch,

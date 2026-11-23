@@ -1,10 +1,12 @@
+import { DIFFICULTY_LEVELS } from '../ai/DifficultyProfiles.js';
+
 const SIDES=['red','blue'];
 const empty=()=>({growthCount:0,attackCount:0,successfulAttackCount:0,destroyedNodes:0,freezeCount:0,rootDestroyedCount:0,maxTreeSize:0,maxBranching:0,maxDepth:0,uniqueAreas:[]});
 const copy=value=>JSON.parse(JSON.stringify(value));
 const freeze=value=>{if(value&&typeof value==='object'&&!Object.isFrozen(value)){Object.freeze(value);Object.values(value).forEach(freeze);}return value;};
 export class MatchTracker{
  constructor({startedAt=Date.now(),mode='pvp',difficulty='medium',historyIncomplete=false}={}){
-  if(!Number.isFinite(startedAt)||!['pvp','pve'].includes(mode)||!['easy','medium','hard','expert'].includes(difficulty))throw new TypeError('对局统计初始化参数无效');
+  if(!Number.isFinite(startedAt)||!['pvp','pve'].includes(mode)||!DIFFICULTY_LEVELS.includes(difficulty))throw new TypeError('对局统计初始化参数无效');
   this.startedAt=startedAt;this.endedAt=null;this.mode=mode;this.difficulty=difficulty;this.historyIncomplete=!!historyIncomplete;this.totalTurns=0;
   this.players={red:empty(),blue:empty()};this.events=[];this.maxDestructionPerAttack={red:0,blue:0};this.rootCounts={red:0,blue:0};this.finished=false;
  }

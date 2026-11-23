@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AppState } from '../js/app/AppState.js';
+import { DIFFICULTY_LEVELS } from '../js/ai/DifficultyProfiles.js';
 
 test('application starts at the main menu', () => {
     const app = new AppState();
@@ -48,8 +49,8 @@ test('result and replay are valid navigation states', () => {
     assert.throws(() => app.navigate('unknown'), TypeError);
 });
 
-test('all four AI difficulty levels are accepted by application state', () => {
-    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+test('all six AI difficulty levels are accepted by application state', () => {
+    for (const difficulty of DIFFICULTY_LEVELS) {
         const app = new AppState();
         const config = app.startMatch({ mode: 'pve', difficulty, playerSide: 'blue' });
         assert.equal(config.difficulty, difficulty);

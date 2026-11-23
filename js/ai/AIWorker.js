@@ -1,5 +1,7 @@
 // js/ai/AIWorker.js
 import { AIController } from './AIController.js';
+import { DIFFICULTY_LEVELS, getDifficultyProfile } from './DifficultyProfiles.js';
+import { AI_MODES, createAIAdapter } from './AIAdapterRegistry.js';
 
 console.log('【AI 追踪 0】AIWorker 脚本已被浏览器成功加载！');
 
@@ -32,7 +34,7 @@ self.onmessage = function(event) {
         }
         const {
             gameStateData, adjacency, areaCenters, difficulty,
-            playerSide, redBaseId, blueBaseId
+            playerSide, redBaseId, blueBaseId, mode = 'tree-grow'
         } = request;
 
         if (!gameStateData || typeof gameStateData !== 'object' ||
@@ -41,13 +43,19 @@ self.onmessage = function(event) {
             !areaCenters.every(center => Array.isArray(center) && center.length >= 2 &&
                 Number.isFinite(center[0]) && Number.isFinite(center[1])) ||
             !['red', 'blue'].includes(playerSide) ||
-            !['easy', 'medium', 'hard', 'expert'].includes(difficulty) ||
+            !DIFFICULTY_LEVELS.includes(difficulty) ||
+            !AI_MODES.includes(mode) ||
             !Number.isInteger(redBaseId) || !Number.isInteger(blueBaseId)) {
             throw new TypeError('AI 请求数据字段无效');
         }
 
         const snapshot = { ...gameStateData, redBaseId, blueBaseId };
-        const ai = new AIController(difficulty, adjacency, areaCenters);
+        const adapter = createAIAdapter(mode, {
+            adjacency,
+            areaCenters,
+            profile: getDifficultyProfile(difficulty)
+        });
+        const ai = new AIController(difficulty, adjacency, areaCenters, adapter);
         ai.onProgress = progress => postWorkerMessage({
             requestId,
             type: 'progress',

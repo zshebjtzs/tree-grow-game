@@ -36,7 +36,7 @@ test('root first branch can target map areas without a direct adjacency entry', 
 });
 
 test('all difficulties take an immediate legal winning move', () => {
-    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+    for (const difficulty of ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
         game.addNode(null, 0, 0, 6, 'red');
@@ -68,8 +68,8 @@ test('AI rejects an unsupported player side and invalid difficulty', () => {
 });
 
 
-test('all three difficulty levels only return moves accepted by RuleEngine', () => {
-    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+test('all six difficulty levels only return moves accepted by RuleEngine', () => {
+    for (const difficulty of ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
         game.addNode(null, 0, 0, 6, 'red');
@@ -93,7 +93,7 @@ test('all AI difficulties reject a fortress as the only possible attack target',
         1: [2], 2: [1, 3, 4, 5, 6],
         3: [2], 4: [2], 5: [2], 6: [2]
     };
-    for (const difficulty of ['easy', 'medium', 'hard', 'expert']) {
+    for (const difficulty of ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']) {
         const game = new GameState();
         game.currentTurn = 'blue';
         const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
@@ -227,31 +227,57 @@ test('expert difficulty is accepted and returns a RuleEngine-legal move', () => 
     assert.equal(validation.allowed, true);
 });
 
-test('difficulty profiles encode distinct strategic priorities and expert search breadth', async () => {
+test('all difficulty profiles share evaluation weights and vary only by search budget', async () => {
     const { getDifficultyProfile, DIFFICULTY_LEVELS } = await import('./DifficultyProfiles.js');
-    assert.deepEqual(DIFFICULTY_LEVELS, ['easy', 'medium', 'hard', 'expert']);
-    const easy = getDifficultyProfile('easy');
-    const medium = getDifficultyProfile('medium');
-    const hard = getDifficultyProfile('hard');
-    const expert = getDifficultyProfile('expert');
-    assert.ok(easy.expansionWeight > medium.expansionWeight);
-    assert.ok(easy.attackWeight < medium.attackWeight);
-    assert.ok(hard.attackWeight > medium.attackWeight);
-    assert.ok(expert.safetyWeight > hard.safetyWeight);
-    assert.ok(expert.structureWeight > hard.structureWeight);
-    assert.ok(expert.searchWidth > hard.searchWidth);
+    assert.deepEqual(DIFFICULTY_LEVELS, ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']);
+    const profiles = DIFFICULTY_LEVELS.map(getDifficultyProfile);
+    const weightKeys = [
+        'progressWeight', 'attackWeight', 'rootAttackWeight',
+        'expansionWeight', 'safetyWeight', 'structureWeight', 'branchingWeight',
+        'rootSafetyWeight', 'rootChainRiskWeight', 'softDistanceWeight',
+        'growthHeadroomWeight', 'baseThreatWeight', 'siegePreparationWeight',
+        'siegeFortressWeight'
+    ];
+    const baselineWeights = Object.fromEntries(weightKeys.map(key => [key, profiles[0][key]]));
+    for (const profile of profiles) {
+        assert.deepEqual(
+            Object.fromEntries(weightKeys.map(key => [key, profile[key]])),
+            baselineWeights
+        );
+        assert.ok(profile.maxDepth > 0);
+        assert.ok(profile.searchBudgetMs > 0);
+        assert.ok(profile.maxNodes > 0);
+        assert.equal('selection' in profile, false);
+        assert.equal('searchWidth' in profile, false);
+    }
+    for (let index = 1; index < profiles.length; index++) {
+        assert.ok(profiles[index].maxDepth > profiles[index - 1].maxDepth);
+        assert.ok(profiles[index].searchBudgetMs > profiles[index - 1].searchBudgetMs);
+        assert.ok(profiles[index].maxNodes > profiles[index - 1].maxNodes);
+    }
+    assert.deepEqual(
+        DIFFICULTY_LEVELS.map(getDifficultyProfile).map(profile => profile.label),
+        ['入门', '简单', '普通', '进阶', '困难', '专家']
+    );
     assert.throws(() => getDifficultyProfile('unknown'), /难度无效/);
 });
 
 
-test('hard and expert profiles configure bounded iterative search', async () => {
+test('all six difficulties configure bounded iterative search', async () => {
     const { getDifficultyProfile } = await import('./DifficultyProfiles.js');
-    const hard = getDifficultyProfile('hard');
-    const expert = getDifficultyProfile('expert');
-    assert.equal(hard.maxDepth, 7);
-    assert.equal(expert.maxDepth, 8);
-    assert.ok(hard.searchBudgetMs > 0 && expert.searchBudgetMs > hard.searchBudgetMs);
-    assert.ok(hard.maxNodes > 0 && expert.maxNodes > hard.maxNodes);
+    const expectedDepths = [1, 2, 4, 5, 7, 8];
+    const profiles = ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']
+        .map(getDifficultyProfile);
+
+    assert.deepEqual(profiles.map(profile => profile.maxDepth), expectedDepths);
+    for (let index = 0; index < profiles.length; index++) {
+        assert.ok(profiles[index].searchBudgetMs > 0);
+        assert.ok(profiles[index].maxNodes > 0);
+        if (index > 0) {
+            assert.ok(profiles[index].searchBudgetMs > profiles[index - 1].searchBudgetMs);
+            assert.ok(profiles[index].maxNodes > profiles[index - 1].maxNodes);
+        }
+    }
 });
 
 
@@ -351,7 +377,7 @@ test('search reuses prepared root states and orders opponent replies by their ow
         return state.lastMove || 0;
     };
 
-    ai._searchHard(root, [
+    ai._search(root, [
         { parentNodeId: 1, targetAreaId: 2, x: 0, y: 0, score: 10 }
     ], 'blue', { red: 6, blue: 1 });
 
@@ -383,6 +409,10 @@ test('AI decision explanation reports measurable route and search evidence', () 
     assert.ok(ai.lastDecisionExplanation.details.some(detail => detail.includes('图论距离')));
     assert.ok(ai.lastDecisionExplanation.search.completedDepth > 0);
     assert.ok(ai.lastDecisionExplanation.search.nodes > 0);
+    assert.ok(ai.lastSearchStats.preparationMs >= 0);
+    assert.ok(ai.lastSearchStats.totalMs >= ai.lastSearchStats.preparationMs);
+    assert.equal(ai.lastSearchStats.deadlineMs, ai.profile.searchBudgetMs);
+    assert.equal(typeof ai.lastSearchStats.deadlineExceeded, 'boolean');
     assert.ok(progress.some(item => item.phase === 'evaluating'));
     assert.ok(progress.some(item => item.phase === 'search'));
     assert.equal(progress.at(-1).phase, 'complete');
@@ -398,6 +428,9 @@ test('AI explains an immediate win as a verified tactical result', () => {
     assert.equal(move.parentNodeId, blueRoot.id);
     assert.equal(move.targetAreaId, 6);
     assert.match(ai.lastDecisionExplanation.summary, /立即获胜/);
+    assert.equal(ai.lastSearchStats.completedDepth, 0);
+    assert.ok(ai.lastSearchStats.preparationMs >= 0);
+    assert.ok(ai.lastSearchStats.totalMs >= ai.lastSearchStats.preparationMs);
 });
 
 
@@ -438,4 +471,62 @@ test('AI never generates a second root branch after the original branch is destr
     const ai = new AIController('hard', line, centers);
     assert.deepEqual(ai._generateMoves(game, 'blue', { red: 6, blue: 1 }), []);
     assert.equal(ai.getBestMove(snapshot(game, 6, 1), 'blue'), null);
+});
+
+
+test('deep search receives every legal root candidate without a static width cutoff', () => {
+    const ai = new AIController('hard', line, centers);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    game.addNode(null, 0, 0, 1, 'red');
+    const candidates = Array.from({ length: 14 }, (_, index) => ({
+        parentNodeId: 1,
+        targetAreaId: index + 2,
+        x: index * 10,
+        y: 0,
+        score: 100 - index,
+        _nextState: {}
+    }));
+    let receivedMoves = null;
+    ai.searchEngine.search = options => {
+        receivedMoves = options.rootMoves;
+        return {
+            move: options.rootMoves[0],
+            value: 0,
+            completedDepth: 0,
+            nodes: 0,
+            cutoffs: 0,
+            transpositionHits: 0,
+            elapsedMs: 0
+        };
+    };
+
+    ai._search(game, candidates, 'red', { red: 1, blue: 50 });
+    assert.equal(receivedMoves.length, candidates.length);
+    assert.deepEqual(receivedMoves, candidates);
+});
+
+
+test('all six difficulties execute the shared search pipeline on non-terminal positions', () => {
+    for (const difficulty of ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']) {
+        const game = new GameState();
+        game.currentTurn = 'blue';
+        game.addNode(null, 0, 0, 6, 'red');
+        game.addNode(null, 0, 0, 1, 'blue');
+        const ai = new AIController(difficulty, line, centers);
+        const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+
+        assert.ok(move, `${difficulty} should return a legal move`);
+        assert.ok(ai.lastSearchStats, `${difficulty} should use SearchEngine`);
+        assert.ok(ai.lastSearchStats.completedDepth >= 1,
+            `${difficulty} should complete at least one search iteration`);
+    }
+});
+
+
+test('AIController rejects adapters that do not satisfy the game-mode contract', () => {
+    assert.throws(
+        () => new AIController('medium', line, centers, {}),
+        /AI 适配器接口无效/
+    );
 });

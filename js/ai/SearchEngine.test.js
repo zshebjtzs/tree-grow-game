@@ -49,6 +49,31 @@ test('budget exhaustion keeps the last fully completed iteration', () => {
 });
 
 
+test('search never exceeds the configured node budget', () => {
+    const engine = new SearchEngine({ now: () => 0 });
+    const result = engine.search({
+        rootState: { currentTurn: 'red', isGameOver: false, ply: 0 },
+        rootMoves: ['first', 'second'],
+        maxDepth: 4,
+        timeBudgetMs: 100,
+        maxNodes: 1,
+        getPositionKey: state => `${state.ply}:${state.currentTurn}`,
+        applyMove: state => ({
+            currentTurn: state.currentTurn === 'red' ? 'blue' : 'red',
+            isGameOver: false,
+            ply: state.ply + 1
+        }),
+        generateMoves: state => state.ply < 4 ? ['reply-a', 'reply-b'] : [],
+        evaluate: state => state.ply,
+        orderMoves: (state, moves) => moves
+    });
+
+    assert.equal(result.nodes, 1);
+    assert.ok(result.nodes <= 1);
+    assert.equal(result.completedDepth, 0,
+        'an incomplete first iteration must not be reported as completed');
+});
+
 test('search models a skipped turn and continues after freeze cleanup', () => {
     const engine = new SearchEngine({ now: () => 0 });
     const result = engine.search({
@@ -244,4 +269,302 @@ test('search progress reports only fully completed iterative-deepening depths', 
     assert.deepEqual(progress.map(item => item.completedDepth), [1, 2, 3]);
     assert.ok(progress.every(item => item.phase === 'search'));
     assert.ok(progress.every(item => item.nodes > 0 && item.elapsedMs >= 0));
+});
+
+
+test('search engine uses adapter callbacks instead of assuming a TreeGrow state shape', () => {
+    const engine = new SearchEngine({ now: () => 0 });
+    const result = engine.search({
+        rootState: { turn: 'north', terminal: false, value: 0 },
+        rootMoves: ['safe', 'winning'],
+        isTerminal: state => state.terminal,
+        getSideToMove: state => state.turn,
+        getPositionKey: state => `${state.turn}:${state.terminal}:${state.value}`,
+        applyMove: (state, move, side) => ({
+            turn: side === 'north' ? 'south' : 'north',
+            terminal: move === 'winning',
+            value: move === 'winning' ? 10 : 0
+        }),
+        generateMoves: () => [],
+        passTurn: state => ({
+            turn: state.turn === 'north' ? 'south' : 'north',
+            terminal: true,
+            value: -1
+        }),
+        evaluate: state => state.value,
+        orderMoves: (state, moves) => moves,
+        maxDepth: 2,
+        timeBudgetMs: 100,
+        maxNodes: 100
+    });
+
+    assert.equal(result.move, 'winning');
+    assert.equal(result.value, 10);
+    assert.equal(result.completedDepth, 2);
+});
+
+
+test('aspiration windows re-search fail-high iterations and preserve full-window results', () => {
+    const run = aspirationWindows => new SearchEngine({ now: () => 0 }).search({
+        rootState: { turn: 'red', phase: 'root', score: 0 },
+        rootMoves: ['a', 'b'],
+        maxDepth: 2,
+        timeBudgetMs: 100,
+        getPositionKey: state => `${state.phase}:${state.turn}:${state.rootMove || ''}`,
+        getMoveKey: move => move,
+        applyMove: (state, move, side) => state.phase === 'root'
+            ? { turn: 'blue', phase: 'reply', rootMove: move, score: 0 }
+            : { turn: 'red', phase: 'leaf', rootMove: state.rootMove,
+                score: state.rootMove === 'a' ? 500 : 400 },
+        generateMoves: state => state.phase === 'reply' ? ['reply'] : [],
+        evaluate: state => state.score,
+        orderMoves: (state, moves) => moves,
+        aspirationWindows,
+        aspirationWindow: 100
+    });
+
+    const windowed = run(true);
+    const fullWindow = run(false);
+    assert.equal(windowed.completedDepth, 2);
+    assert.equal(windowed.move, fullWindow.move);
+    assert.equal(windowed.value, fullWindow.value);
+    assert.equal(windowed.aspirationResearches, 1);
+    assert.equal(windowed.aspirationFailHigh, 1);
+    assert.equal(windowed.aspirationFailLow, 0);
+    assert.equal(windowed.aspirationOneSidedResearches, 1);
+});
+
+test('aspiration fail-low re-search matches full-window alpha-beta', () => {
+    const run = aspirationWindows => new SearchEngine({ now: () => 0 }).search({
+        rootState: { turn: 'red', phase: 'root', score: 0 },
+        rootMoves: ['a', 'b'],
+        maxDepth: 2,
+        timeBudgetMs: 100,
+        getPositionKey: state => `${state.phase}:${state.turn}:${state.rootMove || ''}`,
+        getMoveKey: move => move,
+        applyMove: (state, move) => state.phase === 'root'
+            ? { turn: 'blue', phase: 'reply', rootMove: move, score: 500 }
+            : { turn: 'red', phase: 'leaf', rootMove: state.rootMove, score: 0 },
+        generateMoves: state => state.phase === 'reply' ? ['reply'] : [],
+        evaluate: state => state.score,
+        orderMoves: (state, moves) => moves,
+        aspirationWindows,
+        aspirationWindow: 100
+    });
+
+    const result = run(true);
+    const fullWindow = run(false);
+    assert.equal(result.completedDepth, 2);
+    assert.equal(result.value, 0);
+    assert.equal(result.move, fullWindow.move);
+    assert.equal(result.value, fullWindow.value);
+    assert.equal(result.aspirationResearches, 1);
+    assert.equal(result.aspirationFailLow, 1);
+    assert.equal(result.aspirationOneSidedResearches, 1);
+});
+
+
+test('PVS and aspiration windows match full-window alpha-beta across deterministic random trees', () => {
+    let totalAspirationResearches = 0;
+
+    for (let seed = 1; seed <= 50; seed++) {
+        let randomState = seed >>> 0;
+        const random = () => {
+            randomState = (randomState * 1664525 + 1013904223) >>> 0;
+            return randomState / 0x100000000;
+        };
+        const nodes = new Map();
+        let nextId = 0;
+        const build = (depth, side) => {
+            const id = `seed-${seed}-node-${nextId++}`;
+            const node = {
+                id,
+                currentTurn: side,
+                isGameOver: depth === 4,
+                depth,
+                score: Math.floor(random() * 2001) - 1000,
+                children: []
+            };
+            nodes.set(id, node);
+            if (depth < 4) {
+                const childCount = 2 + Math.floor(random() * 3);
+                for (let index = 0; index < childCount; index++) {
+                    const child = build(depth + 1, side === 'red' ? 'blue' : 'red');
+                    node.children.push(child.id);
+                }
+            }
+            return node;
+        };
+        const root = build(0, 'red');
+        const rootMoves = [...root.children];
+        const run = (principalVariationSearch, aspirationWindows) =>
+            new SearchEngine({ now: () => 0 }).search({
+                rootState: root,
+                rootMoves,
+                isTerminal: state => state.isGameOver,
+                getSideToMove: state => state.currentTurn,
+                getPositionKey: state => state.id,
+                getMoveKey: move => move,
+                applyMove: (state, move) => nodes.get(move),
+                generateMoves: state => state.children,
+                evaluate: state => state.score,
+                orderMoves: (state, moves) => moves,
+                maxDepth: 4,
+                timeBudgetMs: 1000,
+                maxNodes: 100000,
+                principalVariationSearch,
+                aspirationWindows,
+                aspirationWindow: 25
+            });
+
+        const baseline = run(false, false);
+        const pvsOnly = run(true, false);
+        const aspirationOnly = run(false, true);
+        const combined = run(true, true);
+        for (const candidate of [pvsOnly, aspirationOnly, combined]) {
+            assert.equal(candidate.completedDepth, 4, `seed ${seed} must complete depth 4`);
+            assert.equal(candidate.move, baseline.move, `seed ${seed} selected a different move`);
+            assert.equal(candidate.value, baseline.value, `seed ${seed} changed the minimax value`);
+        }
+        totalAspirationResearches += combined.aspirationResearches;
+    }
+
+    assert.ok(totalAspirationResearches > 0,
+        'the randomized sample should exercise fail-high or fail-low recovery');
+});
+
+
+test('budget exhaustion during aspiration re-search preserves the last completed depth', () => {
+    const engine = new SearchEngine({ now: () => 0 });
+    let orderCalls = 0;
+    const result = engine.search({
+        rootState: { turn: 'red', phase: 'root', score: 0 },
+        rootMoves: ['a', 'b'],
+        maxDepth: 2,
+        maxNodes: 100,
+        timeBudgetMs: 100,
+        getPositionKey: state => `${state.phase}:${state.turn}:${state.rootMove || ''}`,
+        getMoveKey: move => move,
+        applyMove: (state, move) => state.phase === 'root'
+            ? { turn: 'blue', phase: 'reply', rootMove: move, score: 0 }
+            : { turn: 'red', phase: 'leaf', rootMove: state.rootMove,
+                score: state.rootMove === 'a' ? 500 : 400 },
+        generateMoves: state => state.phase === 'reply' ? ['reply'] : [],
+        isTerminal: state => state.phase === 'leaf',
+        evaluate: state => state.score,
+        orderMoves: (state, moves) => {
+            orderCalls++;
+            if (orderCalls === 4) throw SearchEngine.BUDGET_EXHAUSTED;
+            return moves;
+        },
+        aspirationWindows: true,
+        aspirationWindow: 100
+    });
+
+    assert.equal(orderCalls, 4);
+    assert.equal(result.completedDepth, 1);
+    assert.equal(result.move, 'a');
+    assert.equal(result.value, 0);
+    assert.equal(result.aspirationResearches, 1);
+});
+
+test('PVS and aspiration match alpha-beta across random DAGs with transpositions', () => {
+    for (let seed = 101; seed <= 120; seed++) {
+        let randomState = seed >>> 0;
+        const random = () => {
+            randomState = (randomState * 1664525 + 1013904223) >>> 0;
+            return randomState / 0x100000000;
+        };
+        const nodes = new Map();
+        const layers = [];
+        for (let depth = 0; depth <= 4; depth++) {
+            const count = depth === 0 ? 1 : 5;
+            const layer = [];
+            for (let index = 0; index < count; index++) {
+                const id = `dag-${seed}-d${depth}-n${index}`;
+                const node = {
+                    id,
+                    depth,
+                    currentTurn: depth % 2 === 0 ? 'red' : 'blue',
+                    isGameOver: depth === 4,
+                    score: Math.floor(random() * 2001) - 1000,
+                    children: []
+                };
+                nodes.set(id, node);
+                layer.push(node);
+            }
+            layers.push(layer);
+        }
+        for (let depth = 0; depth < 4; depth++) {
+            for (const node of layers[depth]) {
+                const candidates = [...layers[depth + 1]];
+                for (let index = candidates.length - 1; index > 0; index--) {
+                    const target = Math.floor(random() * (index + 1));
+                    [candidates[index], candidates[target]] = [candidates[target], candidates[index]];
+                }
+                const childCount = 2 + Math.floor(random() * 3);
+                node.children = candidates.slice(0, childCount).map(child => child.id);
+            }
+        }
+
+        const root = layers[0][0];
+        const run = (principalVariationSearch, aspirationWindows) =>
+            new SearchEngine({ now: () => 0 }).search({
+                rootState: root,
+                rootMoves: [...root.children],
+                isTerminal: state => state.isGameOver,
+                getSideToMove: state => state.currentTurn,
+                getPositionKey: state => state.id,
+                getMoveKey: move => move,
+                applyMove: (state, move) => nodes.get(move),
+                generateMoves: state => state.children,
+                evaluate: state => state.score,
+                orderMoves: (state, moves) => moves,
+                maxDepth: 4,
+                timeBudgetMs: 1000,
+                maxNodes: 100000,
+                principalVariationSearch,
+                aspirationWindows,
+                aspirationWindow: 25
+            });
+
+        const baseline = run(false, false);
+        const pvsOnly = run(true, false);
+        const aspirationOnly = run(false, true);
+        const combined = run(true, true);
+        for (const [name, candidate] of [
+            ['PVS', pvsOnly],
+            ['aspiration', aspirationOnly],
+            ['combined', combined]
+        ]) {
+            assert.equal(candidate.completedDepth, 4, `DAG seed ${seed} ${name} must complete depth 4`);
+            assert.equal(candidate.value, baseline.value, `DAG seed ${seed} ${name} changed minimax value`);
+            assert.equal(candidate.move, baseline.move, `DAG seed ${seed} ${name} changed root move`);
+        }
+        assert.ok(baseline.transpositionHits > 0, `DAG seed ${seed} should exercise transpositions`);
+    }
+});
+
+
+test('search honors an absolute deadline shared with decision preparation', () => {
+    const fallback = { id: 'prepared-root-move' };
+    const engine = new SearchEngine({ now: () => 100 });
+    const result = engine.search({
+        rootState: { currentTurn: 'red' },
+        rootMoves: [fallback],
+        maxDepth: 4,
+        timeBudgetMs: 1000,
+        deadline: 99,
+        maxNodes: 100,
+        getPositionKey: () => 'root',
+        applyMove: () => null,
+        generateMoves: () => [],
+        evaluate: () => 0,
+        orderMoves: (_state, moves) => moves
+    });
+
+    assert.equal(result.move, fallback);
+    assert.equal(result.completedDepth, 0);
+    assert.equal(result.nodes, 0,
+        'the search phase must not restart a fresh budget after preparation used the shared deadline');
 });
