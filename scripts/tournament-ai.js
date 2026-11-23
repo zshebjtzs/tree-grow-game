@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import { GameState } from '../js/game/GameState.js';
+import { MapManager } from '../js/core/MapManager.js';
 import { AIController } from '../js/ai/AIController.js';
 import { DIFFICULTY_LEVELS } from '../js/ai/DifficultyProfiles.js';
 import { calculatePairedScoreRate, validatePairGames } from './tournament-stats.js';
@@ -43,55 +44,55 @@ function createRandom(seed) {
 }
 
 function createMap(seed, areaCount = 50) {
-    const random = createRandom(seed);
-    const edges = Array.from({ length: areaCount + 1 }, () => new Set());
-    const connect = (left, right) => {
-        if (left === right) return;
-        edges[left].add(right);
-        edges[right].add(left);
-    };
-    for (let area = 1; area <= areaCount; area++) {
-        connect(area, area === areaCount ? 1 : area + 1);
-    }
-    // Add sparse deterministic shortcuts while keeping the map strategically connected.
-    for (let area = 1; area <= areaCount; area += 4) {
-        const target = 1 + Math.floor(random() * areaCount);
-        connect(area, target);
-    }
-    const adjacency = Object.fromEntries(
-        Array.from({ length: areaCount }, (_, index) => [
-            index + 1, [...edges[index + 1]].sort((a, b) => a - b)
-        ])
-    );
-    const areaCenters = Array.from({ length: areaCount }, (_, index) => [
-        (index % 10) * 100, Math.floor(index / 10) * 100
-    ]);
+    // Use the same Voronoi + Lloyd-relaxation generator as the live game.
+    // The seeded Math.random stream makes the generated map reproducible.
+    const originalRandom = Math.random;
+    const originalLog = console.log;
+    Math.random = createRandom(seed);
+    console.log = () => {};
+    try {
+        const manager = new MapManager(1800, 1200);
+        manager.generateMap(areaCount, 6);
+        const adjacency = manager.adjacency;
+        const areaCenters = manager.areas.map(area => [...area.center]);
 
-    let redBaseId = 1;
-    let blueBaseId = areaCount;
-    let baseDistance = -1;
-    for (let start = 1; start <= areaCount; start++) {
-        const distances = new Map([[start, 0]]);
-        const queue = [start];
-        for (let head = 0; head < queue.length; head++) {
-            const current = queue[head];
-            for (const next of adjacency[current] || []) {
-                if (distances.has(next)) continue;
-                distances.set(next, distances.get(current) + 1);
-                queue.push(next);
+        let redBaseId = 1;
+        let blueBaseId = areaCount;
+        let baseDistance = -1;
+        for (let start = 1; start <= areaCount; start++) {
+            const distances = new Map([[start, 0]]);
+            const queue = [start];
+            for (let head = 0; head < queue.length; head++) {
+                const current = queue[head];
+                for (const next of adjacency[current] || []) {
+                    if (distances.has(next)) continue;
+                    distances.set(next, distances.get(current) + 1);
+                    queue.push(next);
+                }
+            }
+            for (let target = start + 1; target <= areaCount; target++) {
+                const distance = distances.get(target);
+                if (distance !== undefined && distance > baseDistance) {
+                    redBaseId = start;
+                    blueBaseId = target;
+                    baseDistance = distance;
+                }
             }
         }
-        for (let target = start + 1; target <= areaCount; target++) {
-            const distance = distances.get(target);
-            if (distance !== undefined && distance > baseDistance) {
-                redBaseId = start;
-                blueBaseId = target;
-                baseDistance = distance;
-            }
-        }
-    }
 
-    return { adjacency, areaCenters, areaCount, redBaseId, blueBaseId, baseDistance };
+        return {
+            adjacency,
+            areaCenters,
+            areaCount: manager.areas.length,
+            redBaseId,
+            blueBaseId,
+            baseDistance,
+            generator: 'voronoi-lloyd'
+        };
+    } finally {
+        Math.random = originalRandom;
+        console.log = originalLog;
+    }
 }
 
 function createInitialState(areaCenters, bases) {
