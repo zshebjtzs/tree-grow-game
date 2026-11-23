@@ -152,7 +152,8 @@ for (const fixture of fixtures) {
             samples.push(totalElapsedMs);
             if (ai.lastSearchStats) {
                 searchStats.push(ai.lastSearchStats);
-                preparationSamples.push(Math.max(0, totalElapsedMs - ai.lastSearchStats.elapsedMs));
+                preparationSamples.push(ai.lastSearchStats.preparationMs ??
+                    Math.max(0, totalElapsedMs - ai.lastSearchStats.elapsedMs));
             }
         }
         samples.sort((a, b) => a - b);
