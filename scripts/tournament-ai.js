@@ -125,12 +125,17 @@ function summarizeDecisions(samples) {
     const times = samples.map(sample => sample.elapsedMs);
     const nodes = samples.map(sample => sample.nodes);
     const depths = samples.map(sample => sample.depth).filter(depth => depth > 0);
+    const preparationTimes = samples.map(sample => sample.preparationMs);
+    const searchTimes = samples.map(sample => sample.searchMs);
     return {
         decisions: samples.length,
         meanMs: times.length ? Number((times.reduce((sum, value) => sum + value, 0) / times.length).toFixed(2)) : 0,
         p50Ms: Number(percentile(times, 0.50).toFixed(2)),
         p95Ms: Number(percentile(times, 0.95).toFixed(2)),
         maxMs: Number(Math.max(0, ...times).toFixed(2)),
+        meanPreparationMs: preparationTimes.length ? Number((preparationTimes.reduce((sum, value) => sum + value, 0) / preparationTimes.length).toFixed(2)) : 0,
+        meanSearchMs: searchTimes.length ? Number((searchTimes.reduce((sum, value) => sum + value, 0) / searchTimes.length).toFixed(2)) : 0,
+        deadlineExceeded: samples.filter(sample => sample.deadlineExceeded).length,
         meanNodes: nodes.length ? Math.round(nodes.reduce((sum, value) => sum + value, 0) / nodes.length) : 0,
         maxNodes: Math.max(0, ...nodes),
         minCompletedDepth: depths.length ? Math.min(...depths) : 0,
@@ -167,7 +172,10 @@ function playGame({ seed, pairId, randomSeed, redDifficulty, blueDifficulty, max
         decisionSamples[side].push({
             elapsedMs,
             nodes: stats?.nodes ?? 0,
-            depth: stats?.completedDepth ?? 0
+            depth: stats?.completedDepth ?? 0,
+            preparationMs: stats?.preparationMs ?? 0,
+            searchMs: stats?.elapsedMs ?? 0,
+            deadlineExceeded: stats?.deadlineExceeded ?? false
         });
 
         let next;
