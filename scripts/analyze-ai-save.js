@@ -70,6 +70,20 @@ function countAlive(game, side) {
     };
 }
 
+function measureLoss(beforeGame, afterGame, side, targetAreaId) {
+    const beforeNodes = beforeGame.getAliveNodesByOwner(side);
+    const afterIds = new Set(afterGame.getAliveNodesByOwner(side).map(node => node.id));
+    const beforeRootIds = new Set(beforeGame.getPlayerRootNodes(side).map(node => node.id));
+    const afterRootIds = new Set(afterGame.getPlayerRootNodes(side).map(node => node.id));
+    const directTargetId = beforeNodes.find(node => node.areaId === targetAreaId)?.id;
+    const removedNodes = beforeNodes.filter(node => !afterIds.has(node.id));
+    const rootLoss = [...beforeRootIds].filter(id => !afterRootIds.has(id)).length;
+    const cascadeLoss = removedNodes.filter(node =>
+        node.id !== directTargetId && !beforeRootIds.has(node.id)
+    ).length;
+    return { rootLoss, nodeLoss: removedNodes.length, cascadeLoss };
+}
+
 function analyzeReplies(controller, state, move, side, bases) {
     const adapter = controller.adapter;
     const afterMove = adapter.simulateMove(state, move, side, bases, { alreadyValidated: true });
@@ -101,11 +115,11 @@ function analyzeReplies(controller, state, move, side, bases) {
             replyState, reply, enemy, bases, { alreadyValidated: true }
         );
         if (!afterReply) continue;
-        const remaining = countAlive(afterReply, side);
-        const rootLoss = before.roots - remaining.roots;
-        const nodeLoss = before.nodes - remaining.nodes;
+        const { rootLoss, nodeLoss, cascadeLoss } = measureLoss(
+            afterMove, afterReply, side, reply.targetAreaId
+        );
         if (rootLoss > 0) rootLossReplies++;
-        maxCascadeLoss = Math.max(maxCascadeLoss, Math.max(0, nodeLoss - rootLoss - 1));
+        maxCascadeLoss = Math.max(maxCascadeLoss, cascadeLoss);
         if (rootLoss > maxRootLoss || (rootLoss === maxRootLoss && nodeLoss > maxNodeLoss)) {
             maxRootLoss = rootLoss;
             maxNodeLoss = nodeLoss;
@@ -171,11 +185,11 @@ function analyzeBaselineMove(controller, state, selectedMove, side, bases) {
             replyState, reply, enemy, bases, { alreadyValidated: true }
         );
         if (!afterReply) continue;
-        const remaining = countAlive(afterReply, side);
-        const rootLoss = before.roots - remaining.roots;
-        const nodeLoss = before.nodes - remaining.nodes;
+        const { rootLoss, nodeLoss, cascadeLoss } = measureLoss(
+            afterMove, afterReply, side, reply.targetAreaId
+        );
         if (rootLoss > 0) rootLossReplies++;
-        maxCascadeLoss = Math.max(maxCascadeLoss, Math.max(0, nodeLoss - rootLoss - 1));
+        maxCascadeLoss = Math.max(maxCascadeLoss, cascadeLoss);
         if (rootLoss > maxRootLoss || (rootLoss === maxRootLoss && nodeLoss > maxNodeLoss)) {
             maxRootLoss = rootLoss;
             maxNodeLoss = nodeLoss;
