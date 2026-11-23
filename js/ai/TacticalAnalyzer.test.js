@@ -143,7 +143,8 @@ test('immediate-win scan simulates attacks only after checking direct base entri
         calls.push(move.targetAreaId);
         return {
             isGameOver: true,
-            getPlayerRootNodes: side => side === 'blue' ? [] : [{}]
+            getPlayerRootNodes: side => side === 'blue' ? [] : [{}],
+            getAliveNodesByOwner: () => []
         };
     };
 
