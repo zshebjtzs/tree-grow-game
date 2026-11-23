@@ -147,10 +147,19 @@ function createInitialState(map) {
     };
 
     game.currentTurn = 'red';
-    addRootsInArea(map.redBaseId, 'red', 3);
+    const redRoots = addRootsInArea(map.redBaseId, 'red', 3);
     game.currentTurn = 'blue';
-    addRootsInArea(map.blueBaseId, 'blue', 3);
+    const blueRoots = addRootsInArea(map.blueBaseId, 'blue', 3);
     game.currentTurn = 'red';
+
+    // Never silently run a tournament fixture with an incomplete opening.
+    // A narrow Voronoi cell can prevent random placement and its deterministic
+    // fallback from fitting all three roots; such a seed must be rejected.
+    if (redRoots.length !== 3 || blueRoots.length !== 3) {
+        throw new Error(
+            `Invalid tournament opening for seed map: red roots ${redRoots.length}/3, blue roots ${blueRoots.length}/3`
+        );
+    }
     return game;
 }
 
