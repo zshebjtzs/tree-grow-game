@@ -6,6 +6,24 @@ const T_95 = [
     2.042
 ];
 
+function studentTCritical95(degreesOfFreedom) {
+    if (degreesOfFreedom < 1) return Infinity;
+    if (degreesOfFreedom < T_95.length) return T_95[degreesOfFreedom];
+
+    // Cornish-Fisher expansion around the 97.5th percentile of N(0, 1).
+    // This avoids the premature 1.96 normal approximation for finite samples.
+    const z = 1.959963984540054;
+    const v = degreesOfFreedom;
+    const z2 = z * z;
+    const z3 = z2 * z;
+    const z5 = z3 * z2;
+    const z7 = z5 * z2;
+    return z
+        + (z3 + z) / (4 * v)
+        + (5 * z5 + 16 * z3 + 3 * z) / (96 * v * v)
+        + (3 * z7 + 19 * z5 + 17 * z3 - 15 * z) / (384 * v * v * v);
+}
+
 export function validatePairGames(value) {
     if (!Number.isInteger(value) || value < 2 || value % 2 !== 0) {
         throw new TypeError('--pair-games must be an even integer greater than or equal to 2');
@@ -41,8 +59,7 @@ export function scoreInterval(scores) {
         };
     }
     const standardError = Math.sqrt(variance / scores.length);
-    const degreesOfFreedom = scores.length - 1;
-    const criticalValue = T_95[degreesOfFreedom] ?? 1.96;
+    const criticalValue = studentTCritical95(scores.length - 1);
     const margin = criticalValue * standardError;
 
     return {
