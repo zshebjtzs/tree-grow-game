@@ -34,7 +34,7 @@ export class TacticalAnalyzer {
 
             const next = move._nextState || simulateMove(game, move, attackerSide, bases);
             if (!next) continue;
-            if (next.isGameOver && !next.getPlayerRootNodes(attackerSide).length) {
+            if (next.isGameOver && !next.getPlayerRootNodes(defenderSide).length) {
                 risk.immediateWinningMoves++;
             }
 
