@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculatePairedScoreRate, scoreInterval, validatePairGames } from './tournament-stats.js';
+import { calculatePairedScoreRate, scoreInterval, studentTCritical95, validatePairGames } from './tournament-stats.js';
 
 function swappedPair(pairId, seed, randomSeed, firstWinner, secondWinner) {
     return [
@@ -78,11 +78,7 @@ test('zero-variance paired samples do not produce a misleading point confidence 
 
 
 test('paired t interval uses finite-sample critical values beyond 30 degrees of freedom', () => {
-    const scores = Array.from({ length: 41 }, (_, index) => index % 2);
-    const result = scoreInterval(scores);
-    const standardError = Math.sqrt(0.25 / scores.length);
-    const criticalValue = (result.upper95 - result.mean) / standardError;
-
-    assert.ok(Math.abs(criticalValue - 2.021) < 0.001,
-        `expected t(40) critical value near 2.021, got ${criticalValue}`);
+    assert.ok(Math.abs(studentTCritical95(40) - 2.021075) < 0.0001);
+    assert.ok(studentTCritical95(40) > 1.96);
+    assert.equal(studentTCritical95(30), 2.042);
 });
