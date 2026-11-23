@@ -24,35 +24,41 @@ export class TacticalAnalyzer {
         const beforeRootIds = new Set(beforeRoots.map(node => node.id));
         if (game.isGameOver || !beforeRoots.length) return risk;
 
-        const replies = generateMoves(game, attackerSide, bases);
-        for (const move of replies) {
-            if (move.targetAreaId === bases[defenderSide]) {
-                risk.immediateWinningMoves++;
-                continue;
+        const originalTurn = game.currentTurn;
+        game.currentTurn = attackerSide;
+        try {
+            const replies = generateMoves(game, attackerSide, bases);
+            for (const move of replies) {
+                if (move.targetAreaId === bases[defenderSide]) {
+                    risk.immediateWinningMoves++;
+                    continue;
+                }
+                if (!move.attacks) continue;
+
+                const next = move._nextState || simulateMove(game, move, attackerSide, bases);
+                if (!next) continue;
+                if (next.isGameOver && !next.getPlayerRootNodes(defenderSide).length) {
+                    risk.immediateWinningMoves++;
+                }
+
+                const afterNodes = next.getAliveNodesByOwner(defenderSide);
+                const afterIds = new Set(afterNodes.map(node => node.id));
+                const removedIds = [...beforeIds].filter(id => !afterIds.has(id));
+                const afterRootIds = new Set(next.getPlayerRootNodes(defenderSide).map(node => node.id));
+                const rootLoss = [...beforeRootIds].filter(id => !afterRootIds.has(id)).length;
+                const directTarget = beforeNodes.find(node => node.areaId === move.targetAreaId);
+                const directTargetId = directTarget?.id;
+                const cascadeLoss = removedIds.filter(id =>
+                    id !== directTargetId && !beforeRootIds.has(id)
+                ).length;
+
+                if (rootLoss > 0) risk.rootLossReplies++;
+                risk.maxRootLoss = Math.max(risk.maxRootLoss, rootLoss);
+                risk.maxNodeLoss = Math.max(risk.maxNodeLoss, removedIds.length);
+                risk.maxCascadeLoss = Math.max(risk.maxCascadeLoss, cascadeLoss);
             }
-            if (!move.attacks) continue;
-
-            const next = move._nextState || simulateMove(game, move, attackerSide, bases);
-            if (!next) continue;
-            if (next.isGameOver && !next.getPlayerRootNodes(defenderSide).length) {
-                risk.immediateWinningMoves++;
-            }
-
-            const afterNodes = next.getAliveNodesByOwner(defenderSide);
-            const afterIds = new Set(afterNodes.map(node => node.id));
-            const removedIds = [...beforeIds].filter(id => !afterIds.has(id));
-            const afterRootIds = new Set(next.getPlayerRootNodes(defenderSide).map(node => node.id));
-            const rootLoss = [...beforeRootIds].filter(id => !afterRootIds.has(id)).length;
-            const directTarget = beforeNodes.find(node => node.areaId === move.targetAreaId);
-            const directTargetId = directTarget?.id;
-            const cascadeLoss = removedIds.filter(id =>
-                id !== directTargetId && !beforeRootIds.has(id)
-            ).length;
-
-            if (rootLoss > 0) risk.rootLossReplies++;
-            risk.maxRootLoss = Math.max(risk.maxRootLoss, rootLoss);
-            risk.maxNodeLoss = Math.max(risk.maxNodeLoss, removedIds.length);
-            risk.maxCascadeLoss = Math.max(risk.maxCascadeLoss, cascadeLoss);
+        } finally {
+            game.currentTurn = originalTurn;
         }
         return risk;
     }
