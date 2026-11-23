@@ -213,3 +213,26 @@ test('cascade loss counts descendants correctly when the directly attacked targe
     assert.equal(risk.maxCascadeLoss, 2,
         'both non-root descendants are cascade losses; the attacked root is not subtracted twice');
 });
+
+
+test('tactical reply analysis sets and restores the attacker turn', () => {
+    const analyzer = new TacticalAnalyzer();
+    const game = position();
+    game.currentTurn = 'blue';
+    let observedTurn = null;
+
+    analyzer.countImmediateWinningMoves(
+        game,
+        'red',
+        { red: 1, blue: 6 },
+        state => {
+            observedTurn = state.currentTurn;
+            return [];
+        },
+        () => null
+    );
+
+    assert.equal(observedTurn, 'red');
+    assert.equal(game.currentTurn, 'blue',
+        'tactical analysis must not leak its temporary turn change into the caller');
+});
