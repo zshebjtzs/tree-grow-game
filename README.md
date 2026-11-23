@@ -151,7 +151,7 @@ npm run build
 ```text
 tree-grow-game/
 ├── .github/
-│   └── workflows/          # CI、GitHub Pages 与离线发行工作流
+│   └── workflows/          # CI、Pages、桌面构建与 Draft Release 工作流
 ├── css/
 │   └── style.css           # 页面样式
 ├── js/
@@ -172,8 +172,6 @@ tree-grow-game/
 │   └── archive/               # 历史审计、计划与验收记录
 │       ├── ai/
 │       └── replay/
-├── .github/
-│   └── workflows/release-draft.yml # 手动生成 Draft Release
 ├── GAME-RULES.md            # 完整游戏规则
 ├── LICENSE                  # 源代码许可证：GPL-3.0-or-later
 ├── LICENSE-DOCUMENTATION    # 文档许可证：CC BY-NC-SA 4.0
