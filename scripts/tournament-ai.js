@@ -233,7 +233,7 @@ function playGame({ seed, pairId, randomSeed, redDifficulty, blueDifficulty, max
             elapsedMs,
             nodes: stats?.nodes ?? 0,
             depth: stats?.completedDepth ?? 0,
-            preparationMs: stats?.preparationMs ?? 0,
+            preparationMs: stats?.preparationMs ?? Math.max(0, elapsedMs - (stats?.elapsedMs ?? 0)),
             searchMs: stats?.elapsedMs ?? 0,
             deadlineExceeded: stats?.deadlineExceeded ?? false
         });
