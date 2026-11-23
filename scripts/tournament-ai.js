@@ -11,7 +11,7 @@ const LEVELS = DIFFICULTY_LEVELS;
 const DEFAULTS = { pairGames: 2, seedCount: 2, maxPlies: 120 };
 
 function parseArgs(argv) {
-    const options = { ...DEFAULTS, seeds: null, only: null, baselineController: null };
+    const options = { ...DEFAULTS, seeds: null, only: null, baselineController: null, inspectMapSeed: null };
     for (let index = 0; index < argv.length; index++) {
         const [key, inlineValue] = argv[index].split('=', 2);
         const value = inlineValue ?? argv[++index];
@@ -21,8 +21,9 @@ function parseArgs(argv) {
         else if (key === '--seeds') options.seeds = value.split(',').map(Number);
         else if (key === '--only') options.only = value.split(',').map(pair => pair.split(':'));
         else if (key === '--baseline-controller') options.baselineController = value;
+        else if (key === '--inspect-map') options.inspectMapSeed = Number(value);
         else if (key === '--help' || key === '-h') {
-            console.log('Usage: node scripts/tournament-ai.js [--seed-count N] [--pair-games N] [--max-plies N] [--only hard:expert,...] [--baseline-controller <legacy-worktree>/js/ai/AIController.js]');
+            console.log('Usage: node scripts/tournament-ai.js [--seed-count N] [--pair-games N] [--max-plies N] [--only hard:expert,...] [--baseline-controller <legacy-worktree>/js/ai/AIController.js] [--inspect-map SEED]');
             process.exit(0);
         } else throw new TypeError(`Unknown argument: ${key}`);
     }
@@ -34,6 +35,9 @@ function parseArgs(argv) {
     }
     if (options.seeds && (!options.seeds.length || options.seeds.some(seed => !Number.isSafeInteger(seed)))) {
         throw new TypeError('--seeds must contain comma-separated safe integers');
+    }
+    if (options.inspectMapSeed !== null && !Number.isSafeInteger(options.inspectMapSeed)) {
+        throw new TypeError('--inspect-map requires a safe integer seed');
     }
     if (options.baselineController !== null && !options.baselineController) {
         throw new TypeError('--baseline-controller requires a module path');
@@ -151,6 +155,27 @@ function createInitialState(map) {
     addRootsInArea(bases.blueBaseId, 'blue', 3);
     game.currentTurn = 'red';
     return game;
+}
+
+
+function inspectMap(seed) {
+    const map = createMap(seed);
+    const originalRandom = Math.random;
+    Math.random = createRandom((seed ^ 0x9e3779b9) >>> 0);
+    try {
+        const game = createInitialState(map);
+        return {
+            seed,
+            generator: map.generator,
+            areaCount: map.areaCount,
+            portalCount: Object.keys(map.mapManager.portals).length,
+            baseDistance: map.baseDistance,
+            redRoots: game.getPlayerRootNodes('red').length,
+            blueRoots: game.getPlayerRootNodes('blue').length
+        };
+    } finally {
+        Math.random = originalRandom;
+    }
 }
 
 function percentile(values, fraction) {
@@ -350,7 +375,11 @@ async function loadBaselineController(path) {
 }
 
 const options = parseArgs(process.argv.slice(2));
-const BaselineAIController = options.baselineController
-    ? await loadBaselineController(options.baselineController)
-    : null;
-console.log(JSON.stringify(runTournament(options, BaselineAIController), null, 2));
+if (options.inspectMapSeed !== null) {
+    console.log(JSON.stringify(inspectMap(options.inspectMapSeed), null, 2));
+} else {
+    const BaselineAIController = options.baselineController
+        ? await loadBaselineController(options.baselineController)
+        : null;
+    console.log(JSON.stringify(runTournament(options, BaselineAIController), null, 2));
+}
