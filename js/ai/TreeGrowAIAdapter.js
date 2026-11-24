@@ -145,6 +145,7 @@ export class TreeGrowAIAdapter {
             nodes: searchStats.nodes,
             workUnits: searchStats.workUnits ?? searchStats.nodes,
             preparationWorkUnits: searchStats.preparationWorkUnits ?? 0,
+            preparationComplete: searchStats.preparationComplete ?? true,
             totalWorkUnits: searchStats.totalWorkUnits ?? searchStats.workUnits ?? searchStats.nodes,
             rootEvaluationComplete: searchStats.rootEvaluationComplete ?? true,
             tacticalSequenceWorkUnits: searchStats.tacticalSequenceWorkUnits ?? searchStats.tacticalSequenceNodes ?? 0,
