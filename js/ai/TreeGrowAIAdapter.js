@@ -151,6 +151,16 @@ export class TreeGrowAIAdapter {
         if (selectionReason === 'defense-priority') {
             details.unshift('战术筛选优先保留能最大限度减少对手立即获胜机会的行动。');
         }
+        if ((searchStats?.advantageConversionFactor ?? 0) >= 0.35) {
+            details.unshift(
+                `当前局面具有可转化优势；排序额外考虑了正向交换、敌方根节点损失和向敌方基地推进。`
+            );
+        }
+        if ((searchStats?.offensiveNegativeExchangeCount ?? 0) > 0) {
+            details.push(
+                `已识别 ${searchStats.offensiveNegativeExchangeCount} 个净收益为负的攻击候选，未将敌方表面损失直接视为有利交换。`
+            );
+        }
         if (!details.length) details.push('该行动在当前难度配置的候选评分中排名靠前。');
         if (selectionReason === 'immediate-win') summary = '识别到立即获胜机会，优先执行胜利行动。';
         else if (selectionReason === 'defense-priority') summary = '当前存在紧急威胁，优先选择防守效果最好的候选行动。';
