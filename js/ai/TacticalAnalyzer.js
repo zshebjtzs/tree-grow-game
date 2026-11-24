@@ -26,7 +26,14 @@ export class TacticalAnalyzer {
             maxNodeLoss: 0,
             totalNodeLoss: 0,
             maxCascadeLoss: 0,
-            totalCascadeLoss: 0
+            totalCascadeLoss: 0,
+            // Metrics from one coherent opponent reply. Never synthesize a
+            // worst case by combining losses from mutually exclusive moves.
+            worstReply: {
+                rootLoss: 0,
+                cascadeLoss: 0,
+                nodeLoss: 0
+            }
         };
         const beforeNodes = game.getAliveNodesByOwner(defenderSide);
         const beforeIds = new Set(beforeNodes.map(node => node.id));
@@ -70,6 +77,16 @@ export class TacticalAnalyzer {
                 risk.totalNodeLoss += removedIds.length;
                 risk.maxCascadeLoss = Math.max(risk.maxCascadeLoss, cascadeLoss);
                 risk.totalCascadeLoss += cascadeLoss;
+
+                const replyRisk = { rootLoss, cascadeLoss, nodeLoss: removedIds.length };
+                const currentWorst = risk.worstReply;
+                const isWorse = replyRisk.rootLoss > currentWorst.rootLoss ||
+                    (replyRisk.rootLoss === currentWorst.rootLoss &&
+                        replyRisk.cascadeLoss > currentWorst.cascadeLoss) ||
+                    (replyRisk.rootLoss === currentWorst.rootLoss &&
+                        replyRisk.cascadeLoss === currentWorst.cascadeLoss &&
+                        replyRisk.nodeLoss > currentWorst.nodeLoss);
+                if (isWorse) risk.worstReply = replyRisk;
             }
         } finally {
             game.currentTurn = originalTurn;
@@ -755,14 +772,13 @@ export class TacticalAnalyzer {
         });
         const compareRisk = (left, right) =>
             (left.immediateWinningMoves - right.immediateWinningMoves) ||
-            (left.maxRootLoss - right.maxRootLoss) ||
+            (left.worstReply.rootLoss - right.worstReply.rootLoss) ||
+            (left.worstReply.cascadeLoss - right.worstReply.cascadeLoss) ||
+            (left.worstReply.nodeLoss - right.worstReply.nodeLoss) ||
+            // Reply counts are secondary frequency signals. Aggregate losses
+            // are deliberately excluded because different replies are alternatives.
             (left.rootLossReplies - right.rootLossReplies) ||
-            (left.totalRootLoss - right.totalRootLoss) ||
-            (left.maxCascadeLoss - right.maxCascadeLoss) ||
-            (left.totalCascadeLoss - right.totalCascadeLoss) ||
             (left.structuralLossReplies - right.structuralLossReplies) ||
-            (left.maxNodeLoss - right.maxNodeLoss) ||
-            (left.totalNodeLoss - right.totalNodeLoss) ||
             (left.index - right.index);
 
         return rootRisk.sort(compareRisk).map(item => item.move);
