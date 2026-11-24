@@ -648,3 +648,31 @@ test('AIController selects a verified three-action counterattack sacrifice befor
     assert.equal(ai.lastSearchStats.guaranteedTacticalSelfLoss, 2);
     assert.match(ai.lastDecisionExplanation.summary, /局部损失换取更大整体收益/);
 });
+
+
+test('AI keeps offensive candidates available to search when no immediate defense is mandatory', () => {
+    const game = new GameState();
+    game.currentTurn = 'red';
+    game.addNode(null, 0, 0, 6, 'red');
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 3, 'blue');
+
+    const ai = new AIController('medium', line, centers);
+    let searchedCandidateCount = 0;
+    ai.tacticalAnalyzer.findMandatoryDefenses = (_game, moves) => ({
+        moves: moves.slice(0, 1),
+        hasImmediateThreat: false,
+        immediateWinningMoves: 0
+    });
+    ai._search = (_game, moves) => {
+        searchedCandidateCount = moves.length;
+        return moves[moves.length - 1];
+    };
+
+    const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+
+    assert.ok(move);
+    assert.ok(searchedCandidateCount >= 2);
+    assert.equal(searchedCandidateCount, ai.lastOffensiveAnalysis.candidateCount);
+    assert.equal(ai.lastSearchStats.offensiveCandidateCount, searchedCandidateCount);
+});
