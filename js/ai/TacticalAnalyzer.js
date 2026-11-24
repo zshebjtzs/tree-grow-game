@@ -263,9 +263,7 @@ export class TacticalAnalyzer {
             const opponentMoves = generateMoves(afterCandidate, defenderSide, bases);
             const responses = opponentMoves.length ? opponentMoves : [null];
             let survivesEveryReply = true;
-            let minRootLoss = Infinity;
-            let minCascadeLoss = Infinity;
-            let minNodeLoss = Infinity;
+            let worstCaseGain = null;
 
             for (const response of responses) {
                 if (!visit()) {
@@ -309,9 +307,9 @@ export class TacticalAnalyzer {
                     survivesEveryReply = false;
                     break;
                 }
-                minRootLoss = Math.min(minRootLoss, bestReplyGain.rootLoss);
-                minCascadeLoss = Math.min(minCascadeLoss, bestReplyGain.cascadeLoss);
-                minNodeLoss = Math.min(minNodeLoss, bestReplyGain.nodeLoss);
+                if (!worstCaseGain || betterGain(worstCaseGain, bestReplyGain)) {
+                    worstCaseGain = bestReplyGain;
+                }
                 if (!result.complete) {
                     survivesEveryReply = false;
                     break;
@@ -319,12 +317,7 @@ export class TacticalAnalyzer {
             }
 
             if (survivesEveryReply && result.complete) {
-                const candidateGain = {
-                    move: candidate,
-                    rootLoss: minRootLoss,
-                    cascadeLoss: minCascadeLoss,
-                    nodeLoss: minNodeLoss
-                };
+                const candidateGain = { move: candidate, ...worstCaseGain };
                 if (!bestCandidate || betterGain(candidateGain, bestCandidate)) {
                     bestCandidate = candidateGain;
                 }
