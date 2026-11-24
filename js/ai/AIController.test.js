@@ -704,3 +704,55 @@ test('AI keeps offensive candidates available to search when no immediate defens
     assert.equal(searchedCandidateCount, ai.lastOffensiveAnalysis.candidateCount);
     assert.equal(ai.lastSearchStats.offensiveCandidateCount, searchedCandidateCount);
 });
+
+
+test('expert AI neutralizes a branch-cut threat instead of growing past it', () => {
+    const adjacency = {
+        10: [30],
+        25: [29],
+        29: [25, 38],
+        38: [29]
+    };
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const redRoot = game.addNode(null, 0, 0, 46, 'red');
+    const redA = game.addNode(redRoot.id, 0, 0, 47, 'red');
+    const redB = game.addNode(redA.id, 0, 0, 16, 'red');
+    const redC = game.addNode(redB.id, 0, 0, 11, 'red');
+    const redD = game.addNode(redC.id, 0, 0, 33, 'red');
+    const redAttacker = game.addNode(redD.id, 0, 0, 29, 'red');
+
+    game.currentTurn = 'blue';
+    const blueRoot = game.addNode(null, 0, 0, 19, 'blue');
+    const blueTrunk = game.addNode(blueRoot.id, 0, 0, 10, 'blue');
+    game.addNode(blueTrunk.id, 0, 0, 25, 'blue');
+    const exposed = game.addNode(blueTrunk.id, 0, 0, 38, 'blue');
+    const exposedChild = game.addNode(exposed.id, 0, 0, 7, 'blue');
+    game.addNode(exposed.id, 0, 0, 34, 'blue');
+    game.addNode(exposedChild.id, 0, 0, 21, 'blue');
+    game.addNode(blueTrunk.id, 0, 0, 36, 'blue');
+    exposed.isFrozen = true;
+
+    const bases = { red: 1, blue: 50 };
+    const ai = new AIController(
+        'expert',
+        adjacency,
+        Array.from({ length: 50 }, (_, index) => [index * 10, 0])
+    );
+    const gameSnapshot = snapshot(game, bases.red, bases.blue);
+    const legalMoves = ai._generateMoves(game, 'blue', bases);
+    const counterattack = legalMoves.find(move =>
+        move.parentNodeId === blueTrunk.childrenIds[0] && move.targetAreaId === 29
+    );
+    const exposedGrowth = legalMoves.find(move =>
+        move.parentNodeId === blueTrunk.id && move.targetAreaId === 30
+    );
+    assert.ok(counterattack, 'blue must be able to remove the red attacker in area 29');
+    assert.ok(exposedGrowth, 'the previously selected expansion into area 30 remains legal');
+
+    const selected = ai.getBestMove(gameSnapshot, 'blue');
+    assert.deepEqual(
+        { parentNodeId: selected.parentNodeId, targetAreaId: selected.targetAreaId },
+        { parentNodeId: counterattack.parentNodeId, targetAreaId: counterattack.targetAreaId }
+    );
+});
