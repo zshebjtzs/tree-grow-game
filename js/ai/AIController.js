@@ -28,7 +28,8 @@ export class AIController {
             typeof this.adapter.positionEvaluator?.scoreMove !== 'function' ||
             typeof this.adapter.positionEvaluator?.evaluateState !== 'function' ||
             typeof this.adapter.tacticalAnalyzer?.findImmediateWinningMove !== 'function' ||
-            typeof this.adapter.tacticalAnalyzer?.rankDefenses !== 'function') {
+            typeof this.adapter.tacticalAnalyzer?.rankDefenses !== 'function' ||
+            typeof this.adapter.tacticalAnalyzer?.findForcedWinInTwoMoves !== 'function') {
             throw new TypeError('AI 适配器接口无效');
         }
 
@@ -38,6 +39,7 @@ export class AIController {
         this.positionEvaluator = this.adapter.positionEvaluator;
         this.searchEngine = new SearchEngine();
         this.lastSearchStats = null;
+        this.lastTacticalSequenceStats = null;
     }
 
     getBestMove(gameStateData, playerSide) {
@@ -45,6 +47,7 @@ export class AIController {
             throw new TypeError('AI 玩家阵营无效');
         }
         this.lastSearchStats = null;
+        this.lastTacticalSequenceStats = { nodes: 0, complete: true, forcedWin: false };
         this.lastDecisionExplanation = null;
         // One deadline covers state preparation, tactical filtering, and search.
         // Preparation remains non-interruptible to preserve mandatory tactical checks;
@@ -104,8 +107,36 @@ export class AIController {
             const tacticallyRanked = ranked.filter(move => defenseSet.has(move));
             if (tacticallyRanked.length < ranked.length) selectionReason = 'defense-priority';
 
-            selectedMove = this._search(game, tacticallyRanked, playerSide, bases, decisionDeadline, decisionStartedAt);
-            if (selectionReason !== 'defense-priority') selectionReason = 'search-selection';
+            const sequenceResult = this.tacticalAnalyzer.findForcedWinInTwoMoves(
+                game,
+                tacticallyRanked,
+                playerSide,
+                bases,
+                (state, move, side, matchBases) => this._simulateMove(
+                    state, move, side, matchBases, { alreadyValidated: true }
+                ),
+                (state, side, matchBases) => this._generateMoves(state, side, matchBases),
+                (state, side) => this._simulatePass(state, side),
+                {
+                    maxNodes: Math.min(1200, this.profile.maxNodes),
+                    shouldStop: () => this.searchEngine.now() >= decisionDeadline
+                }
+            );
+            this.lastTacticalSequenceStats = {
+                nodes: sequenceResult.nodes,
+                complete: sequenceResult.complete,
+                forcedWin: sequenceResult.moves.length > 0
+            };
+
+            if (sequenceResult.moves.length) {
+                selectedMove = sequenceResult.moves[0];
+                selectionReason = 'forced-sequence-win';
+            } else {
+                selectedMove = this._search(
+                    game, tacticallyRanked, playerSide, bases, decisionDeadline, decisionStartedAt
+                );
+                if (selectionReason !== 'defense-priority') selectionReason = 'search-selection';
+            }
         }
 
         this.lastDecisionExplanation = this._createDecisionExplanation(
@@ -131,7 +162,10 @@ export class AIController {
             preparationMs: existing.preparationMs ?? Math.max(0, completedAt - decisionStartedAt),
             totalMs: Math.max(0, completedAt - decisionStartedAt),
             deadlineMs: this.profile.searchBudgetMs,
-            deadlineExceeded: completedAt > deadline
+            deadlineExceeded: completedAt > deadline,
+            tacticalSequenceNodes: this.lastTacticalSequenceStats?.nodes ?? 0,
+            tacticalSequenceComplete: this.lastTacticalSequenceStats?.complete ?? true,
+            forcedWinInTwoMoves: this.lastTacticalSequenceStats?.forcedWin ?? false
         };
     }
 
