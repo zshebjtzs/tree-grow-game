@@ -569,3 +569,20 @@ test('search honors an absolute deadline shared with decision preparation', () =
     assert.equal(result.nodes, 0,
         'the search phase must not restart a fresh budget after preparation used the shared deadline');
 });
+
+
+test('empty root candidate sets return the complete zero-work result shape', () => {
+    const result = new SearchEngine({ now: () => 0 }).search({
+        rootState: { currentTurn: 'red', score: 7 },
+        rootMoves: [],
+        evaluate: state => state.score,
+        maxDepth: 3,
+        maxNodes: 100
+    });
+    assert.equal(result.move, null);
+    assert.equal(result.value, 7);
+    assert.equal(result.nodes, 0);
+    assert.equal(result.workUnits, 0);
+    assert.equal(result.rootEvaluations, 0);
+    assert.equal(result.rootEvaluationComplete, true);
+});
