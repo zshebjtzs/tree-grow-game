@@ -481,7 +481,7 @@ export class TacticalAnalyzer {
                         opponentAttackReplies: attackReplyCount,
                         selfLoss: selfLossMax
                     };
-                    if (!bestSetup || better(bestSetup, proof)) bestSetup = proof;
+                    if (!bestSetup || better(proof, bestSetup)) bestSetup = proof;
                 }
                 if (!result.complete) return null;
             }
