@@ -308,12 +308,18 @@ export class AIController {
         // Tactical proofs influence ordering only. Every legal candidate remains
         // in the root search and must compete under the same position evaluator.
         const moveKey = move => this.adapter.getMoveKey(move);
-        const preferredMoveKeys = new Set(tacticalHints.map(moveKey));
-        const rootMoves = preferredMoveKeys.size
-            ? [...rankedMoves].sort((left, right) =>
-                Number(preferredMoveKeys.has(moveKey(right))) -
-                Number(preferredMoveKeys.has(moveKey(left)))
-            )
+        const preferredMoveOrder = new Map(
+            tacticalHints.map((move, index) => [moveKey(move), index])
+        );
+        const rootMoves = preferredMoveOrder.size
+            ? [...rankedMoves].sort((left, right) => {
+                const leftRank = preferredMoveOrder.get(moveKey(left));
+                const rightRank = preferredMoveOrder.get(moveKey(right));
+                if (leftRank !== undefined && rightRank !== undefined) return leftRank - rightRank;
+                if (leftRank !== undefined) return -1;
+                if (rightRank !== undefined) return 1;
+                return 0;
+            })
             : rankedMoves;
         const preparedChildren = new WeakMap();
         const preparedMoveOrder = new WeakMap();
@@ -399,7 +405,7 @@ export class AIController {
         this.lastSearchStats = {
             difficulty: this.difficulty,
             ...result,
-            tacticalHintCount: preferredMoveKeys.size,
+            tacticalHintCount: preferredMoveOrder.size,
             preparationWorkUnits: this.lastPreparationWorkUnits ?? 0,
             totalWorkUnits: (this.lastPreparationWorkUnits ?? 0) + (result.workUnits ?? 0) +
                 (this.lastTacticalSequenceStats?.totalWorkUnits ?? 0),
