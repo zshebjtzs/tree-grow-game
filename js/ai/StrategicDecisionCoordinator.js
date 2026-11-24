@@ -43,7 +43,11 @@ export class StrategicDecisionCoordinator {
         const defenseWorkUnits = defense.workUnits ?? defense.nodes ?? 0;
         const defenseNodes = defense.nodes ?? 0;
         usedWorkUnits += defenseWorkUnits;
-        const candidates = defense.complete === false
+        const preservesAllCandidates = Array.isArray(defense.moves) &&
+            defense.moves.length === rankedMoves.length &&
+            rankedMoves.every(move => defense.moves.includes(move));
+        const candidates = defense.complete === false ||
+            (!defense.hasImmediateThreat && !preservesAllCandidates)
             ? rankedMoves
             : defense.moves;
         const defensePriority = defense.complete !== false &&
