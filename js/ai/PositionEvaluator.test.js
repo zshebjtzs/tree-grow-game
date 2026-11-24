@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { GameState } from '../game/GameState.js';
 import { TreeGrowAIAdapter } from './TreeGrowAIAdapter.js';
 import { PositionEvaluator } from './PositionEvaluator.js';
+import { DisadvantageRiskAnalyzer } from './DisadvantageRiskAnalyzer.js';
 import { getDifficultyProfile } from './DifficultyProfiles.js';
 
 function createAdapter(adjacency, areaCount) {
@@ -288,6 +289,7 @@ test('first-root growth candidate generation is limited to reachable unoccupied 
 
 test('exchange scoring subtracts own destroyed nodes instead of rewarding gross enemy losses', () => {
     const evaluator = Object.create(PositionEvaluator.prototype);
+    evaluator.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
     evaluator.profile = { advantageConversionWeight: 0.3 };
     evaluator.distanceToBase = (_state, side) => side === 'red' ? 2 : Infinity;
     evaluator.getStrategicAnalysis = () => ({
@@ -325,6 +327,7 @@ test('exchange scoring subtracts own destroyed nodes instead of rewarding gross 
 
 test('advantage conversion is gated by a positive position advantage', () => {
     const evaluator = Object.create(PositionEvaluator.prototype);
+    evaluator.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
     evaluator.profile = {
         advantageConversionThreshold: 250,
         advantageConversionScale: 1500
@@ -342,6 +345,7 @@ test('advantage conversion is gated by a positive position advantage', () => {
 test('advantage conversion increases ordering value only when the position is favorable', () => {
     const createEvaluator = factor => {
         const evaluator = Object.create(PositionEvaluator.prototype);
+    evaluator.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
         evaluator.profile = { advantageConversionWeight: 0.3 };
         evaluator.distanceToBase = (state, side) => state.isBefore
             ? (side === 'red' ? 4 : Infinity)
@@ -381,6 +385,7 @@ test('advantage conversion increases ordering value only when the position is fa
 test('disadvantage risk adds bounded initiative value to concrete forward progress', () => {
     const createEvaluator = riskFactor => {
         const evaluator = Object.create(PositionEvaluator.prototype);
+    evaluator.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
         evaluator.profile = { advantageConversionWeight: 0.3, disadvantageProgressWeight: 80 };
         evaluator.distanceToBase = (state, side) => state.before
             ? (side === 'red' ? 4 : Infinity)
