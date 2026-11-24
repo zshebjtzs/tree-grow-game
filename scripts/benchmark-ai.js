@@ -197,8 +197,11 @@ for (const fixture of fixtures) {
         for (let index = 0; index < ITERATIONS; index++) {
             const start = performance.now();
             ai.getBestMove(fixture.snapshot, 'blue');
-            if (fixture.name === 'quiet' && ai.lastSearchStats?.forcedWinInTwoMoves) {
-                throw new Error('Quiet fixture unexpectedly produced a proven forcing win');
+            if (fixture.name === 'quiet' && (
+                ai.lastSearchStats?.forcedWinInTwoMoves ||
+                ai.lastSearchStats?.forcedMaterialGainInTwoMoves
+            )) {
+                throw new Error('Quiet fixture unexpectedly produced a forced tactical sequence');
             }
             const totalElapsedMs = performance.now() - start;
             samples.push(totalElapsedMs);
