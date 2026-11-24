@@ -142,7 +142,7 @@ export class TreeGrowAIAdapter {
             summary = '识别到能够以局部损失换取更大整体收益的强制战术组合。';
         }
         if (selectionReason === 'validated-tactical-inducement') {
-            details.unshift(`先手行动制造了立即胜利威胁，对手的 ${searchStats?.inducedDefensiveReplies || 0} 个防守回应消除了该威胁，但仍无法阻止后续战术收益。`);
+            details.unshift(`先手行动制造了立即胜利威胁，对手的 ${searchStats?.inducedDefenseBranches || 0} 条诱导防守分支消除了该威胁，但仍无法阻止后续战术收益。`);
             summary = '识别到通过威胁诱导对手防守、再兑现后续收益的战术组合。';
         }
         if (selectionReason === 'forced-three-move-sequence') {
