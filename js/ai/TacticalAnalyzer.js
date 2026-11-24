@@ -77,6 +77,111 @@ export class TacticalAnalyzer {
         return risk;
     }
 
+    /**
+     * Proves a bounded two-turn forcing win:
+     * after a candidate move, every legal opponent reply must still leave at
+     * least one immediate winning move for the attacker. This is an AND/OR
+     * check, not a count of merely available threats.
+     *
+     * The result is conservative: an exhausted budget never turns an
+     * unexamined branch into a proven win.
+     */
+    findForcedWinInTwoMoves(
+        moves, attackerSide, bases, simulateMove, generateMoves, simulatePass,
+        { maxNodes = 1200, shouldStop = () => false } = {}
+    ) {
+        const defenderSide = attackerSide === 'red' ? 'blue' : 'red';
+        const result = { moves: [], nodes: 0, complete: true };
+
+        const visit = () => {
+            if (result.nodes >= maxNodes || shouldStop()) {
+                result.complete = false;
+                return false;
+            }
+            result.nodes++;
+            return true;
+        };
+
+        const isWinningState = state => Boolean(
+            state?.isGameOver &&
+            state.getPlayerRootNodes(defenderSide).length === 0 &&
+            state.getPlayerRootNodes(attackerSide).length > 0
+        );
+
+        const hasImmediateWin = state => {
+            if (!visit()) return null;
+            const winningMoves = generateMoves(state, attackerSide, bases);
+            for (const move of winningMoves) {
+                if (move.targetAreaId === bases[defenderSide]) return true;
+                if (!visit()) return null;
+                const next = move._nextState || simulateMove(state, move, attackerSide, bases);
+                if (isWinningState(next)) return true;
+            }
+            return false;
+        };
+
+        for (const candidate of moves) {
+            if (!visit()) break;
+            const afterCandidate = candidate._nextState ||
+                simulateMove(null, candidate, attackerSide, bases);
+            if (!afterCandidate) continue;
+
+            // An attack that already destroys the final enemy root is a
+            // proven win even when it is not a direct base-entry move.
+            if (isWinningState(afterCandidate)) {
+                result.moves.push(candidate);
+                break;
+            }
+            if (afterCandidate.isGameOver) continue;
+
+            if (!visit()) break;
+            const opponentMoves = generateMoves(afterCandidate, defenderSide, bases);
+            const responses = opponentMoves.length ? opponentMoves : [null];
+            let forcesWin = true;
+
+            for (const response of responses) {
+                if (!visit()) {
+                    forcesWin = false;
+                    break;
+                }
+
+                let afterResponse;
+                if (response) {
+                    if (response.targetAreaId === bases[attackerSide]) {
+                        forcesWin = false;
+                        break;
+                    }
+                    afterResponse = response._nextState ||
+                        simulateMove(afterCandidate, response, defenderSide, bases);
+                } else {
+                    afterResponse = simulatePass(afterCandidate, defenderSide);
+                }
+
+                if (!afterResponse || afterResponse.isGameOver) {
+                    if (!isWinningState(afterResponse)) forcesWin = false;
+                } else {
+                    const winningReply = hasImmediateWin(afterResponse);
+                    if (winningReply !== true) forcesWin = false;
+                }
+
+                if (!forcesWin || !result.complete) break;
+            }
+
+            if (forcesWin && result.complete) {
+                result.moves.push(candidate);
+                // Candidates arrive in static-score order. One fully proven
+                // win is sufficient; do not spend the remaining turn budget.
+                if (result.moves.length) {
+                    result.complete = result.complete && responses.length >= 0;
+                    break;
+                }
+            }
+            if (!result.complete) break;
+        }
+
+        return result;
+    }
+
     rankDefenses(game, moves, side, bases, simulateMove, generateMoves) {
         const opponent = side === 'red' ? 'blue' : 'red';
         const originalTurn = game.currentTurn;
