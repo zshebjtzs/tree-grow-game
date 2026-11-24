@@ -579,3 +579,36 @@ test('AIController prioritizes an attack that destroys the opponent final root i
     assert.match(ai.lastDecisionExplanation.summary, /立即获胜/);
     assert.ok(ai.lastDecisionExplanation.details.some(detail => detail.includes('1 个根节点')));
 });
+
+
+test('AIController selects a verified forced material gain before general search', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 6, 'red');
+    game.addNode(null, 0, 0, 1, 'blue');
+    const ai = new AIController('medium', line, centers);
+    ai.tacticalAnalyzer.findForcedWinInTwoMoves = () => ({
+        moves: [], nodes: 9, complete: true
+    });
+    ai.tacticalAnalyzer.findForcedMaterialGainInTwoMoves = (_root, moves) => ({
+        moves: [moves[0]],
+        nodes: 13,
+        complete: true,
+        guaranteedRootLoss: 1,
+        guaranteedCascadeLoss: 2,
+        guaranteedNodeLoss: 4
+    });
+    ai._search = () => {
+        throw new Error('general search must not override a proven material-gain sequence');
+    };
+
+    const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+
+    assert.ok(move);
+    assert.equal(ai.lastSearchStats.tacticalSequenceNodes, 22);
+    assert.equal(ai.lastSearchStats.tacticalSequenceComplete, true);
+    assert.equal(ai.lastSearchStats.forcedMaterialGainInTwoMoves, true);
+    assert.equal(ai.lastSearchStats.guaranteedTacticalRootLoss, 1);
+    assert.equal(ai.lastSearchStats.guaranteedTacticalCascadeLoss, 2);
+    assert.match(ai.lastDecisionExplanation.summary, /连续战术收益/);
+});
