@@ -216,8 +216,14 @@ test('material proof does not call a net-negative root trade a guaranteed gain',
     const root = createState('root', ['r0', 'r1', 'r2', 'r3'], ['b0', 'b1', 'b2']);
     const afterCandidate = createState('candidate', ['r0', 'r1', 'r2', 'r3'], ['b0', 'b1', 'b2']);
     const afterReply = createState('reply', ['r0', 'r1', 'r2', 'r3'], ['b0', 'b1', 'b2']);
+    root.getPlayerRootNodes = side => side === 'blue'
+        ? root.getAliveNodesByOwner('blue').filter(node => node.id === 'b0' || node.id === 'b1')
+        : root.getAliveNodesByOwner(side).filter(node => node.isRoot);
     // The attack removes one enemy root but costs the attacker three ordinary nodes.
     const afterAttack = createState('attack', ['r0'], ['b1', 'b2']);
+    afterAttack.getPlayerRootNodes = side => side === 'blue'
+        ? afterAttack.getAliveNodesByOwner('blue').filter(node => node.id === 'b1')
+        : afterAttack.getAliveNodesByOwner(side).filter(node => node.isRoot);
     const candidate = { nextState: afterCandidate };
     const reply = { nextState: afterReply };
     const attack = { attacks: true, targetAreaId: 11, nextState: afterAttack };
