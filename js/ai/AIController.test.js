@@ -423,7 +423,10 @@ test('AI decision explanation reports measurable route and search evidence', () 
     assert.ok(ai.lastSearchStats.totalWorkUnits <= ai.profile.maxNodes,
         'preparation, tactical analysis, and general search must share one decision work budget');
     assert.equal(ai.lastSearchStats.deadlineMs, ai.profile.searchBudgetMs);
-    assert.equal(ai.lastSearchStats.deadlineExceeded, false);
+    assert.equal(ai.lastSearchStats.targetLatencyExceeded,
+        ai.lastSearchStats.totalMs > ai.profile.searchBudgetMs);
+    assert.equal(ai.lastSearchStats.deadlineExceeded,
+        ai.lastSearchStats.targetLatencyExceeded);
     assert.ok(ai.lastSearchStats.completedDepth >= 1);
     assert.ok(progress.some(item => item.phase === 'evaluating'));
     assert.ok(progress.some(item => item.phase === 'search'));
