@@ -406,6 +406,17 @@ export class TacticalAnalyzer {
             (left.nodeLoss-right.nodeLoss);
         const better = (left,right) => !right || compareGain(left,right)>0;
         const worse = (left,right) => !right || compareGain(left,right)<0;
+        const hasImmediateWinningAction = (state, actions, side) => {
+            const opponent = side === 'red' ? 'blue' : 'red';
+            for (const move of actions) {
+                if (move.targetAreaId === bases[opponent]) return true;
+                if (!visit()) return null;
+                const next = move._nextState || simulateMove(state, move, side, bases);
+                if (next?.isGameOver && rootCount(next, opponent) === 0 &&
+                    rootCount(next, side) > 0) return true;
+            }
+            return false;
+        };
 
         const proveAfterFirstReply = (
             state, initialThreat, firstSelfLoss, firstEnemyLoss, firstDirectLoss
@@ -414,9 +425,9 @@ export class TacticalAnalyzer {
             if (state.isGameOver || rootCount(state, attackerSide) === 0) return null;
             const setups = generateMoves(state, attackerSide, bases);
             if (!visit(setups.length)) return null;
-            const inducedDefense = initialThreat && !this.findImmediateWinningMove(
-                setups, attackerSide, bases
-            );
+            const remainingThreat = hasImmediateWinningAction(state, setups, attackerSide);
+            if (remainingThreat === null) return null;
+            const inducedDefense = initialThreat && !remainingThreat;
             let bestSetup = null;
 
             for (const setup of setups) {
@@ -526,9 +537,11 @@ export class TacticalAnalyzer {
                 afterCandidate.currentTurn = originalTurn;
             }
             if (!visit(initialAttackerMoves.length)) break;
-            const initialThreat = Boolean(this.findImmediateWinningMove(
-                initialAttackerMoves, attackerSide, bases
-            ));
+            const initialThreatResult = hasImmediateWinningAction(
+                afterCandidate, initialAttackerMoves, attackerSide
+            );
+            if (initialThreatResult === null) break;
+            const initialThreat = initialThreatResult;
             const firstReplies = generateMoves(afterCandidate, defenderSide, bases);
             if (!visit(firstReplies.length)) break;
             const responses = firstReplies.length ? firstReplies : [null];
