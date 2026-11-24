@@ -19,7 +19,7 @@ export class StrategicDecisionCoordinator {
             nodes: 0, totalNodes: 0, mandatoryDefenseNodes: 0, complete: true, forcedWin: false,
             forcedMaterialGain: false, forcedTacticalSequence: false,
             counterattackSequence: false, inducementValidated: false,
-            inducedDefensiveReplies: 0, sacrificeValidated: false,
+            inducedDefenseBranches: 0, sacrificeValidated: false,
             opponentAttackReplies: 0, guaranteedSelfLoss: 0,
             guaranteedRootLoss: 0, guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0, guaranteedNetNodeGain: 0
         };
