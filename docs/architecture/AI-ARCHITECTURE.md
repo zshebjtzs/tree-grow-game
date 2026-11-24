@@ -21,7 +21,7 @@ A mode adapter supplied to `AIController` must provide:
 - Match metadata: `getBases`.
 - Search identity: `getPositionKey`, `getMoveKey`.
 - Rules and transitions: `generateMoves`, `simulateMove`, `simulatePass`.
-- Evaluation and tactics: `positionEvaluator.scoreMove`, `positionEvaluator.evaluateState`, `tacticalAnalyzer.findImmediateWinningMove`, `tacticalAnalyzer.rankDefenses`, `tacticalAnalyzer.findForcedWinInTwoMoves`, `tacticalAnalyzer.findForcedMaterialGainInTwoMoves`.
+- Evaluation and tactics: `positionEvaluator.scoreMove`, `positionEvaluator.evaluateState`, `tacticalAnalyzer.findImmediateWinningMove`, `tacticalAnalyzer.rankDefenses`, `tacticalAnalyzer.findMandatoryDefenses`, `tacticalAnalyzer.findForcedWinInTwoMoves`, `tacticalAnalyzer.findForcedMaterialGainInTwoMoves`, `tacticalAnalyzer.findForcedTacticalSequenceInThreeMoves`.
 - Presentation boundary: `toPublicMove`, `createDecisionExplanation`, `createNoMoveExplanation`.
 - Topology/evaluation support: `distanceToBase`.
 
