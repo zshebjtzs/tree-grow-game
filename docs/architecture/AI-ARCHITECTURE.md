@@ -151,3 +151,38 @@ Telemetry includes `offensiveCandidateCount`, `offensiveAttackCandidateCount`, `
 `PositionEvaluator` derives a bounded conversion factor from the current side-to-move perspective's cached position evaluation. Only positive conversion evidence—net-positive exchanges, enemy-root damage, and progress toward the enemy base—receives the additional shared conversion multiplier. A negative exchange does not become attractive merely because the AI is ahead.
 
 The conversion threshold, scale, and multiplier are shared by all six difficulty profiles; difficulty continues to differ through computation budgets. Conversion telemetry is exposed alongside gross and net exchange metrics so real-game decisions can be inspected. This is a bounded move-ordering preference, not a tactical proof or a replacement for minimax evaluation.
+
+
+## Disadvantage risk strategy (Phase D)
+
+`DisadvantageRiskAnalyzer` derives a bounded risk factor from the current side's cached position evaluation. It is inactive in even or favorable positions and increases smoothly only when the evaluated position is materially unfavorable.
+
+The risk preference is outcome-dependent, not a generic bonus for aggressive moves:
+- Forward progress, enemy-root damage, cascade damage, and positive net exchange can justify measured volatility.
+- Own node losses are charged against the candidate.
+- Own-root loss carries a dominant penalty and cannot be made attractive by ordinary material or progress bonuses.
+- The existing terminal checks and proven tactical results remain higher priority than strategic risk preference.
+- When behind, the ordinary proximity-to-base safety penalty is softened only within a fixed bound; it is not removed.
+
+The shared profile defines the disadvantage threshold, scale, leverage weights, self-loss costs, and bonus/penalty caps. All six difficulties use identical strategic parameters and continue to differ only by computation budgets. The decision telemetry exposes `disadvantageRiskFactor` so actual comeback behavior can be inspected.
+
+This is a controlled change in move ordering and positional risk tolerance, not a rule to sacrifice material or a guarantee that a speculative attack succeeds.
+
+## Strategic decision coordination (Phase E)
+
+`StrategicDecisionCoordinator` owns the shared priority order and invokes expensive analyzers lazily. A higher-priority result prevents lower-priority stages from replacing it or consuming unnecessary tactical budget.
+
+The order is:
+
+1. Immediate verified win.
+2. Mandatory defense against an opponent's immediate winning threat.
+3. Bounded proof of a forced win.
+4. Bounded proof of a forced material gain.
+5. Bounded counterattack, inducement, or sacrifice sequence.
+6. General search over the remaining tactically admissible candidates.
+
+Mandatory defense narrows the candidate set only when an immediate opponent win is actually present. Without that condition, all legal root candidates remain available to tactical analysis and general search. If no defense fully removes an immediate threat, the tactical analyzer's best available defensive set is retained.
+
+The tactical analyzers share the existing per-decision node ceiling and absolute deadline. The forced-win stage retains its 600-node stage cap; later stages receive only the remaining shared allowance. Budget exhaustion is never treated as a proof. The coordinator returns the selected action, its reason, and a consolidated tactical summary for telemetry.
+
+This layer coordinates priorities; it does not duplicate game rules, alter tactical proof semantics, or let strategic risk preference override an immediate win, mandatory defense, or verified forcing line.
