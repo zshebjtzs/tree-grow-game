@@ -605,7 +605,7 @@ test('AIController prioritizes an attack that destroys the opponent final root i
 });
 
 
-test('AIController selects a verified forced material gain before general search', () => {
+test('AIController sends verified forced material gains into general search', () => {
     const game = new GameState();
     game.currentTurn = 'blue';
     game.addNode(null, 0, 0, 6, 'red');
@@ -622,23 +622,30 @@ test('AIController selects a verified forced material gain before general search
         guaranteedCascadeLoss: 2,
         guaranteedNodeLoss: 4
     });
-    ai._search = () => {
-        throw new Error('general search must not override a proven material-gain sequence');
+    let searchedMoves;
+    let searchedHints;
+    ai._search = (_game, moves, _side, _bases, _deadline, _startedAt, _budget, hints) => {
+        searchedMoves = moves;
+        searchedHints = hints;
+        return moves[0];
     };
 
     const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
 
     assert.ok(move);
+    assert.ok(searchedMoves.length > 0);
+    assert.equal(searchedHints.length, 1);
+    assert.equal(searchedHints[0], searchedMoves[0]);
     assert.equal(ai.lastSearchStats.tacticalSequenceNodes, 22);
     assert.equal(ai.lastSearchStats.tacticalSequenceComplete, true);
     assert.equal(ai.lastSearchStats.forcedMaterialGainInTwoMoves, true);
     assert.equal(ai.lastSearchStats.guaranteedTacticalRootLoss, 1);
     assert.equal(ai.lastSearchStats.guaranteedTacticalCascadeLoss, 2);
-    assert.match(ai.lastDecisionExplanation.summary, /连续战术收益/);
+    assert.equal(ai.lastDecisionReason, 'search-with-tactical-hints');
 });
 
 
-test('AIController selects a verified three-action counterattack sacrifice before general search', () => {
+test('AIController sends verified tactical sacrifices into general search', () => {
     const game = new GameState();
     game.currentTurn = 'blue';
     game.addNode(null, 0, 0, 6, 'red');
@@ -651,26 +658,33 @@ test('AIController selects a verified three-action counterattack sacrifice befor
         moves: [], nodes: 9, complete: true,
         guaranteedRootLoss: 0, guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0
     });
-    ai.tacticalAnalyzer.findForcedTacticalSequenceInThreeMoves = () => ({
-        moves: [{}], nodes: 17, complete: true,
+    ai.tacticalAnalyzer.findForcedTacticalSequenceInThreeMoves = (_root, moves) => ({
+        moves: [moves[0]], nodes: 17, complete: true,
         guaranteedRootLoss: 0, guaranteedCascadeLoss: 3,
         guaranteedNodeGain: 2, guaranteedSelfLoss: 2,
         opponentAttackReplies: 2, sacrificeValidated: true
     });
-    ai._search = () => {
-        throw new Error('general search must not override a proven tactical sacrifice');
+    let searchedMoves;
+    let searchedHints;
+    ai._search = (_game, moves, _side, _bases, _deadline, _startedAt, _budget, hints) => {
+        searchedMoves = moves;
+        searchedHints = hints;
+        return moves[0];
     };
 
     const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
 
     assert.ok(move);
+    assert.ok(searchedMoves.length > 0);
+    assert.equal(searchedHints.length, 1);
+    assert.equal(searchedHints[0], searchedMoves[0]);
     assert.equal(ai.lastSearchStats.tacticalSequenceNodes, 34);
     assert.equal(ai.lastSearchStats.tacticalSequenceComplete, true);
     assert.equal(ai.lastSearchStats.forcedTacticalSequenceInThreeMoves, true);
     assert.equal(ai.lastSearchStats.counterattackSequence, true);
     assert.equal(ai.lastSearchStats.sacrificeValidated, true);
     assert.equal(ai.lastSearchStats.guaranteedTacticalSelfLoss, 2);
-    assert.match(ai.lastDecisionExplanation.summary, /局部损失换取更大整体收益/);
+    assert.equal(ai.lastDecisionReason, 'search-with-tactical-hints');
 });
 
 
