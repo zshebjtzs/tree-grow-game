@@ -151,6 +151,9 @@ export class TreeGrowAIAdapter {
         if (selectionReason === 'defense-priority') {
             details.unshift('战术筛选优先保留能最大限度减少对手立即获胜机会的行动。');
         }
+        if ((searchStats?.disadvantageRiskFactor ?? 0) >= 0.35) {
+            details.unshift('当前局面处于劣势；行动排序适度提高了突破、根节点打击和有实际收益的反击价值，同时仍计入己方损失。');
+        }
         if ((searchStats?.advantageConversionFactor ?? 0) >= 0.35) {
             details.unshift(
                 `当前局面具有可转化优势；排序额外考虑了正向交换、敌方根节点损失和向敌方基地推进。`
