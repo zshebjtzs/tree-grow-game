@@ -642,11 +642,13 @@ test('three-action tactical proof validates counterattack after two attacking re
     const setup = { targetAreaId: 31, nextState: afterSetup };
     const secondReply = { attacks: true, targetAreaId: 22, nextState: afterSecondAttack };
     const finalAttack = { attacks: true, targetAreaId: 2, nextState: afterCounterattack };
+    const immediateThreat = { targetAreaId: 1 };
 
     const result = analyzer.findForcedTacticalSequenceInThreeMoves(
         root, [candidate], 'red', { red: 20, blue: 1 },
         (_state, move) => move.nextState,
-        state => {
+        (state, side) => {
+            if (state === afterCandidate && side === 'red') return [immediateThreat];
             if (state === afterCandidate) return [firstReply];
             if (state === afterFirstAttack) return [setup];
             if (state === afterSetup) return [secondReply];
@@ -664,6 +666,8 @@ test('three-action tactical proof validates counterattack after two attacking re
     assert.equal(result.guaranteedNodeGain, 2);
     assert.equal(result.guaranteedSelfLoss, 2);
     assert.equal(result.opponentAttackReplies, 2);
+    assert.equal(result.inducedDefensiveReplies, 1);
+    assert.equal(result.inducementValidated, true);
     assert.equal(result.sacrificeValidated, true);
 });
 
