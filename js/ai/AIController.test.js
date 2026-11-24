@@ -420,6 +420,8 @@ test('AI decision explanation reports measurable route and search evidence', () 
     assert.equal(ai.lastDecisionExplanation.search.decisionReason, 'search-selection');
     assert.ok(ai.lastSearchStats.preparationMs >= 0);
     assert.ok(ai.lastSearchStats.totalMs >= ai.lastSearchStats.preparationMs);
+    assert.ok(ai.lastSearchStats.totalWorkUnits <= ai.profile.maxNodes,
+        'preparation, tactical analysis, and general search must share one decision work budget');
     assert.equal(ai.lastSearchStats.deadlineMs, ai.profile.searchBudgetMs);
     assert.equal(ai.lastSearchStats.deadlineExceeded, false);
     assert.ok(ai.lastSearchStats.completedDepth >= 1);
