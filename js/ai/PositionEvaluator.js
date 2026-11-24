@@ -1,8 +1,9 @@
 // js/ai/PositionEvaluator.js
-const WIN_SCORE = 100000;
 import { PositionAnalyzer } from './PositionAnalyzer.js';
 import { StrategicPhaseDetector } from './StrategicPhaseDetector.js';
 import { StrategicAnalyzer } from './StrategicAnalyzer.js';
+
+const WIN_SCORE = 100000;
 
 /**
  * Scores positions from one player's perspective.
@@ -46,7 +47,6 @@ export class PositionEvaluator {
             ? beforeDistance - afterDistance
             : (Number.isFinite(afterDistance) ? 1 : 0);
 
-        const profile = this.profile;
         const strategic = this.getStrategicAnalysis(game, side, bases);
         const weights = strategic.weights;
         let score = progress * 95 * weights.progressWeight;
@@ -73,8 +73,8 @@ export class PositionEvaluator {
         );
         if (newNode) {
             const parent = next.getNode(newNode.parentId);
-            if (parent && parent.childrenIds.length >= 2) score += 10 * profile.branchingWeight;
-            if (parent && parent.isRoot) score += 6 * profile.structureWeight;
+            if (parent && parent.childrenIds.length >= 2) score += 10 * weights.branchingWeight;
+            if (parent && parent.isRoot) score += 6 * weights.structureWeight;
         }
         const nextStrategic = this.getStrategicAnalysis(next, side, bases);
         score += (nextStrategic.spatialScore - strategic.spatialScore) * 0.18;
@@ -166,6 +166,8 @@ export class PositionEvaluator {
         const enemyNodes = game.getAliveNodesByOwner(opponent).length;
         const ownMetrics = this.getStructuralMetrics(game, perspective, bases);
         const enemyMetrics = this.getStructuralMetrics(game, opponent, bases);
+        const ownStrategic = this.getStrategicAnalysis(game, perspective, bases);
+        const enemyStrategic = this.getStrategicAnalysis(game, opponent, bases);
 
         const distanceValue = distance =>
             Number.isFinite(distance) ? Math.max(-500, 180 - distance * 42) : -260;
@@ -174,16 +176,14 @@ export class PositionEvaluator {
         const ownDistanceScore = Number.isFinite(ownDistance)
             ? distanceValue(ownDistance)
             : -260 + (softDistanceValue(ownMetrics.softDistanceToBase) + 260) *
-                this.profile.softDistanceWeight;
+                ownStrategic.weights.softDistanceWeight;
         const enemyDistanceScore = Number.isFinite(enemyDistance)
             ? distanceValue(enemyDistance)
             : -260 + (softDistanceValue(enemyMetrics.softDistanceToBase) + 260) *
-                this.profile.softDistanceWeight;
+                enemyStrategic.weights.softDistanceWeight;
 
         const ownStructure = this._structureValue(game, perspective);
         const enemyStructure = this._structureValue(game, opponent);
-        const ownStrategic = this.getStrategicAnalysis(game, perspective, bases);
-        const enemyStrategic = this.getStrategicAnalysis(game, opponent, bases);
         const ownWeights = ownStrategic.weights;
         const enemyWeights = enemyStrategic.weights;
         const structuralScore =
@@ -197,7 +197,7 @@ export class PositionEvaluator {
         return (ownDistanceScore - enemyDistanceScore) +
             (ownNodes - enemyNodes) * 7 +
             (ownRoots - enemyRoots) * 220 +
-            (ownStructure - enemyStructure) * this.profile.structureWeight +
+            (ownStructure - enemyStructure) * ((ownStrategic.weights.structureWeight + enemyStrategic.weights.structureWeight) / 2) +
             structuralScore +
             (ownStrategic.spatialScore - enemyStrategic.spatialScore);
     }
