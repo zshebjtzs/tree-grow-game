@@ -35,7 +35,7 @@ Before general search, the controller runs a bounded AND/OR proof for a two-turn
 2. Enumerate every legal opponent reply (or the authoritative pass transition when no reply exists).
 3. After each reply, check whether the AI still has an immediate winning action, including direct base entry or a simulated attack that destroys the opponent's final root.
 
-A candidate is accepted only when every opponent reply preserves an immediate win. This distinguishes a genuine forcing combination from simply counting multiple apparent threats. A dedicated node cap bounds the analysis; budget exhaustion is reported and never treated as proof. The analysis may discover cooperation between different roots because the continuation is generated from the complete side-to-move position rather than being restricted to the original parent node.
+A candidate is accepted only when every opponent reply preserves an immediate win. Generated legal replies are charged to the proof work budget, and an incomplete branch cannot be promoted to a proof. This distinguishes a genuine forcing combination from simply counting multiple apparent threats. A dedicated node cap bounds the analysis; budget exhaustion is reported and never treated as proof. The analysis may discover cooperation between different roots because the continuation is generated from the complete side-to-move position rather than being restricted to the original parent node.
 
 The result is exposed through `lastSearchStats.tacticalSequenceNodes`, `tacticalSequenceComplete`, and `forcedWinInTwoMoves`. It is a bounded tactical capability, not a general multi-move mate solver.
 
@@ -63,7 +63,7 @@ If the two-action forced-win and material-gain proofs do not find a result, the 
 - Defender nodes are universal: every legal response must preserve the proof; an unavailable move uses the authoritative pass transition.
 - The final attack is simulated through the adapter's authoritative rules and combat resolver.
 - Opponent attack replies are explicitly counted. Any losses to the AI during those replies are charged against the final material gain.
-- A sacrifice is accepted only if the same worst-case branch proves a positive tactical result; a material exchange must retain at least a two-node net gain unless it removes an enemy root. The AI's own last root may never be sacrificed.
+- A sacrifice is accepted only if the same worst-case branch proves a positive tactical result. Even when an enemy root is removed, the branch must still retain the configured positive net-node gain; root damage no longer bypasses material cost. The AI's own last root may never be sacrificed.
 - Inducement is reported only when the candidate creates an immediate winning threat, an opponent reply removes that immediate threat, and the deeper combination remains proven after that defense.
 - A deeper line is not promoted as a forcing tactic merely because it is a quiet multi-step plan: it must contain an actual opponent attack reply, a neutralized immediate threat, or a net-positive sacrifice exposed to opponent attacks.
 - Counterattack and inducement telemetry are descriptive; they do not replace the all-replies proof.
