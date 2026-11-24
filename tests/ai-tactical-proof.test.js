@@ -89,7 +89,7 @@ test('two-ply material proof charges losses from the candidate and opponent repl
     );
 
     // Three enemy nodes are lost, but three own nodes are lost along the line:
-    // net gain is only one, so this is not a forced material gain.
+    // net gain is zero, so this is not a forced material gain.
     assert.equal(result.complete, true);
     assert.deepEqual(result.moves, []);
 });
