@@ -289,7 +289,7 @@ test('first-root growth candidate generation is limited to reachable unoccupied 
 test('exchange scoring subtracts own destroyed nodes instead of rewarding gross enemy losses', () => {
     const evaluator = Object.create(PositionEvaluator.prototype);
     evaluator.profile = { advantageConversionWeight: 0.3 };
-    evaluator.distanceToBase = () => 2;
+    evaluator.distanceToBase = (_state, side) => side === 'red' ? 2 : Infinity;
     evaluator.getStrategicAnalysis = () => ({
         weights: {
             progressWeight: 1, attackWeight: 1, rootAttackWeight: 1,
