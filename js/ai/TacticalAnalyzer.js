@@ -87,7 +87,7 @@ export class TacticalAnalyzer {
      * unexamined branch into a proven win.
      */
     findForcedWinInTwoMoves(
-        moves, attackerSide, bases, simulateMove, generateMoves, simulatePass,
+        rootState, moves, attackerSide, bases, simulateMove, generateMoves, simulatePass,
         { maxNodes = 1200, shouldStop = () => false } = {}
     ) {
         const defenderSide = attackerSide === 'red' ? 'blue' : 'red';
@@ -123,7 +123,7 @@ export class TacticalAnalyzer {
         for (const candidate of moves) {
             if (!visit()) break;
             const afterCandidate = candidate._nextState ||
-                simulateMove(null, candidate, attackerSide, bases);
+                simulateMove(rootState, candidate, attackerSide, bases);
             if (!afterCandidate) continue;
 
             // An attack that already destroys the final enemy root is a
@@ -172,7 +172,6 @@ export class TacticalAnalyzer {
                 // Candidates arrive in static-score order. One fully proven
                 // win is sufficient; do not spend the remaining turn budget.
                 if (result.moves.length) {
-                    result.complete = result.complete && responses.length >= 0;
                     break;
                 }
             }
