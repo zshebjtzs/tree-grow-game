@@ -617,18 +617,18 @@ export class TacticalAnalyzer {
             );
             if (!immediateWinningMoves) {
                 return { moves, hasImmediateThreat: false, immediateWinningMoves: 0,
-                    nodes, complete: true };
+                    nodes, workUnits: nodes, complete: true };
             }
             const ranked = this.rankDefenses(
                 game, moves, side, bases, boundedSimulate, boundedGenerate, immediateWinningMoves
             );
             return { moves: ranked, hasImmediateThreat: true, immediateWinningMoves,
-                nodes, complete: true };
+                nodes, workUnits: nodes, complete: true };
         } catch (error) {
             if (error !== TacticalAnalyzer.BUDGET_EXHAUSTED) throw error;
             // An incomplete threat scan must never narrow the legal candidate set.
             return { moves, hasImmediateThreat: false, immediateWinningMoves: 0,
-                nodes, complete: false };
+                nodes, workUnits: nodes, complete: false };
         }
     }
 
