@@ -208,7 +208,8 @@ export class TacticalAnalyzer {
         const visit = (units = 1) => {
             const cost = Math.max(1, units);
             if (result.workUnits + cost > maxNodes || shouldStop()) { result.complete = false; return false; }
-            result.nodes += cost;
+            result.nodes++;
+            result.workUnits += cost;
             return true;
         };
         const lostNodes = (before, after, side) => {
@@ -336,7 +337,8 @@ export class TacticalAnalyzer {
                 result.complete = false;
                 return false;
             }
-            result.nodes += cost;
+            result.nodes++;
+            result.workUnits += cost;
             return true;
         };
         const alive = (state, side) => state.getAliveNodesByOwner(side);
@@ -626,7 +628,7 @@ export class TacticalAnalyzer {
                 game, moves, side, bases, boundedSimulate, boundedGenerate, immediateWinningMoves
             );
             return { moves: ranked, hasImmediateThreat: true, immediateWinningMoves,
-                nodes, workUnits: nodes, complete: true };
+                nodes, workUnits, complete: true };
         } catch (error) {
             if (error !== TacticalAnalyzer.BUDGET_EXHAUSTED) throw error;
             // An incomplete threat scan must never narrow the legal candidate set.
