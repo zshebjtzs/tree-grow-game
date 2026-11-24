@@ -956,3 +956,66 @@ test('mandatory defense filtering preserves every candidate when no immediate wi
     assert.equal(result.immediateWinningMoves, 0);
     assert.deepEqual(result.moves, [safe, risky]);
 });
+
+
+test('quiet defense ordering compares one coherent worst reply, not mixed attack maxima', () => {
+    const analyzer = new TacticalAnalyzer();
+    const makeState = (id, blueIds, redIds = [90]) => {
+        const blueNodes = blueIds.map((nodeId, index) => ({
+            id: nodeId, areaId: nodeId, isRoot: index === 0
+        }));
+        const redNodes = redIds.map((nodeId, index) => ({
+            id: nodeId, areaId: nodeId, isRoot: index === 0
+        }));
+        return {
+            id,
+            isGameOver: false,
+            currentTurn: 'blue',
+            getAliveNodesByOwner: side => side === 'blue' ? blueNodes : redNodes,
+            getPlayerRootNodes: side => (side === 'blue' ? blueNodes : redNodes)
+                .filter(node => node.isRoot)
+        };
+    };
+    const original = makeState('root', [1, 2, 3, 4, 5, 6]);
+    const mixedRisk = makeState('mixed', [1, 2, 3, 4, 5, 6]);
+    const coherentRisk = makeState('coherent', [1, 2, 3, 4, 5, 6]);
+    const mixedRootLoss = makeState('mixed-root-loss', [2, 3, 4, 5, 6]);
+    const mixedCascadeLoss = makeState('mixed-cascade-loss', [1]);
+    const coherentRootAndCascadeLoss = makeState('coherent-loss', [2, 3, 4]);
+
+    const safeAgainstMixed = { id: 'mixed', _nextState: mixedRisk };
+    const riskierSingleReply = { id: 'coherent', _nextState: coherentRisk };
+    const replies = new Map([
+        [mixedRisk, [
+            { id: 'root-only', attacks: true, targetAreaId: 1 },
+            { id: 'cascade-only', attacks: true, targetAreaId: 2 }
+        ]],
+        [coherentRisk, [
+            { id: 'root-and-cascade', attacks: true, targetAreaId: 1 }
+        ]]
+    ]);
+    const outcomes = new Map([
+        ['root-only', mixedRootLoss],
+        ['cascade-only', mixedCascadeLoss],
+        ['root-and-cascade', coherentRootAndCascadeLoss]
+    ]);
+
+    const ordered = analyzer.orderByStructuralRisk(
+        original,
+        [riskierSingleReply, safeAgainstMixed],
+        'blue',
+        { red: 90, blue: 1 },
+        (_state, move) => outcomes.get(move.id),
+        state => replies.get(state) || []
+    );
+
+    assert.deepEqual(ordered, [safeAgainstMixed, riskierSingleReply]);
+    const mixedMetrics = analyzer.measureAttackRisk(
+        mixedRisk, 'blue', 'red', { red: 90, blue: 1 },
+        state => replies.get(state) || [],
+        (_state, move) => outcomes.get(move.id)
+    );
+    assert.deepEqual(mixedMetrics.worstReply, {
+        rootLoss: 1, cascadeLoss: 0, nodeLoss: 1
+    });
+});
