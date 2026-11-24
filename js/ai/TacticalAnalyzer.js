@@ -240,8 +240,8 @@ export class TacticalAnalyzer {
             };
         };
         const qualifies = gain => Boolean(gain && gain.ownRootLoss === 0 && (
-            gain.rootLoss > 0 ||
-            (gain.cascadeLoss >= minCascadeLoss && gain.netNodeGain >= minNetNodeGain)
+            gain.netNodeGain >= minNetNodeGain &&
+            (gain.rootLoss > 0 || gain.cascadeLoss >= minCascadeLoss)
         ));
         const compare = (x,y) => (x.rootLoss-y.rootLoss) ||
             (x.netNodeGain-y.netNodeGain) || (x.cascadeLoss-y.cascadeLoss) ||
@@ -579,20 +579,44 @@ export class TacticalAnalyzer {
         }
     }
 
-    findMandatoryDefenses(game, moves, side, bases, simulateMove, generateMoves) {
-        const immediateWinningMoves = this.countImmediateWinningReplies(
-            game, side, bases, generateMoves, simulateMove
-        );
-        if (!immediateWinningMoves) {
-            return { moves, hasImmediateThreat: false, immediateWinningMoves: 0 };
-        }
-        return {
-            moves: this.rankDefenses(
-                game, moves, side, bases, simulateMove, generateMoves, immediateWinningMoves
-            ),
-            hasImmediateThreat: true,
-            immediateWinningMoves
+    findMandatoryDefenses(
+        game, moves, side, bases, simulateMove, generateMoves,
+        { maxNodes = 4000, shouldStop = () => false } = {}
+    ) {
+        let nodes = 0;
+        const consume = (units = 1) => {
+            nodes += Math.max(1, units);
+            if (nodes > maxNodes || shouldStop()) throw TacticalAnalyzer.BUDGET_EXHAUSTED;
         };
+        const boundedGenerate = (...args) => {
+            consume();
+            const generated = generateMoves(...args);
+            consume(generated.length);
+            return generated;
+        };
+        const boundedSimulate = (...args) => {
+            consume();
+            return simulateMove(...args);
+        };
+        try {
+            const immediateWinningMoves = this.countImmediateWinningReplies(
+                game, side, bases, boundedGenerate, boundedSimulate
+            );
+            if (!immediateWinningMoves) {
+                return { moves, hasImmediateThreat: false, immediateWinningMoves: 0,
+                    nodes, complete: true };
+            }
+            const ranked = this.rankDefenses(
+                game, moves, side, bases, boundedSimulate, boundedGenerate, immediateWinningMoves
+            );
+            return { moves: ranked, hasImmediateThreat: true, immediateWinningMoves,
+                nodes, complete: true };
+        } catch (error) {
+            if (error !== TacticalAnalyzer.BUDGET_EXHAUSTED) throw error;
+            // An incomplete threat scan must never narrow the legal candidate set.
+            return { moves, hasImmediateThreat: false, immediateWinningMoves: 0,
+                nodes, complete: false };
+        }
     }
 
     rankDefenses(game, moves, side, bases, simulateMove, generateMoves, knownCurrentThreats = undefined) {
@@ -659,3 +683,5 @@ export class TacticalAnalyzer {
             .map(item => item.move);
     }
 }
+
+TacticalAnalyzer.BUDGET_EXHAUSTED = Symbol('tactical-budget-exhausted');
