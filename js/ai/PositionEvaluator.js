@@ -245,12 +245,27 @@ export class PositionEvaluator {
             ownMetrics.siegePreFortressCount * ownWeights.siegePreparationWeight - enemyMetrics.siegePreFortressCount * enemyWeights.siegePreparationWeight +
             ownMetrics.siegeFortressCount * ownWeights.siegeFortressWeight - enemyMetrics.siegeFortressCount * enemyWeights.siegeFortressWeight;
 
-        return finish((ownDistanceScore - enemyDistanceScore) +
+        const baseScore = (ownDistanceScore - enemyDistanceScore) +
             (ownNodes - enemyNodes) * 7 +
             (ownRoots - enemyRoots) * 220 +
             (ownStructure - enemyStructure) * ((ownStrategic.weights.structureWeight + enemyStrategic.weights.structureWeight) / 2) +
             structuralScore +
-            (ownStrategic.spatialScore - enemyStrategic.spatialScore));
+            (ownStrategic.spatialScore - enemyStrategic.spatialScore);
+
+        // Give a losing side credit for concrete latent initiative in the
+        // position evaluation itself, so minimax can prefer viable comeback
+        // structures even after completing a search iteration.
+        const comebackRiskFactor = this.disadvantageRiskAnalyzer.getRiskFactor(
+            baseScore, this.profile
+        );
+        const comebackPotential =
+            ownStrategic.position.tacticalPressure *
+                (this.profile.disadvantageTacticalPotentialWeight ?? 320) +
+            ownStrategic.position.siegePressure *
+                (this.profile.disadvantageSiegePotentialWeight ?? 180) +
+            ownStrategic.position.frontierControl *
+                (this.profile.disadvantageFrontierPotentialWeight ?? 90);
+        return finish(baseScore + comebackPotential * comebackRiskFactor);
     }
 
     _structureValue(game, side) {
