@@ -236,7 +236,12 @@ test('all difficulty profiles share evaluation weights and vary only by search b
         'expansionWeight', 'safetyWeight', 'structureWeight', 'branchingWeight',
         'rootSafetyWeight', 'rootChainRiskWeight', 'softDistanceWeight',
         'growthHeadroomWeight', 'baseThreatWeight', 'siegePreparationWeight',
-        'siegeFortressWeight'
+        'siegeFortressWeight',
+        'advantageConversionThreshold', 'advantageConversionScale', 'advantageConversionWeight',
+        'disadvantageRiskThreshold', 'disadvantageRiskScale', 'disadvantageProgressWeight',
+        'disadvantageRootAttackWeight', 'disadvantageCascadeWeight', 'disadvantageNetGainWeight',
+        'disadvantageSelfLossPenalty', 'disadvantageOwnRootLossPenalty',
+        'disadvantageRiskBonusCap', 'disadvantageRiskPenaltyCap'
     ];
     const baselineWeights = Object.fromEntries(weightKeys.map(key => [key, profiles[0][key]]));
     for (const profile of profiles) {
