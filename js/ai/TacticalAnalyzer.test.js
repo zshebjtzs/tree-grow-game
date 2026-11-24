@@ -415,9 +415,10 @@ test('immediate-win scan recognizes an attack that destroys the opponent final r
 });
 
 
-function materialState({ turn = 'red', blueNodes = [], redNodes = [], isGameOver = false } = {}) {
+function materialState({ turn = 'red', tag = '', blueNodes = [], redNodes = [], isGameOver = false } = {}) {
     return {
         currentTurn: turn,
+        tag,
         isGameOver,
         getAliveNodesByOwner(side) {
             return side === 'blue' ? blueNodes : redNodes;
@@ -532,4 +533,56 @@ test('forced material-gain analysis never promotes an unexamined reply after bud
     assert.deepEqual(result.moves, []);
     assert.equal(result.complete, false);
     assert.equal(result.nodes, 1);
+});
+
+
+test('forced material-gain ranking reports the weakest actual opponent reply, not independent metric minima', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = materialState({ turn: 'red' });
+    const afterCandidate = materialState({ turn: 'blue' });
+    const afterRootReply = materialState({
+        turn: 'red', tag: 'root-reply',
+        blueNodes: [{ id: 1, areaId: 1, isRoot: true }]
+    });
+    const afterCascadeReply = materialState({
+        turn: 'red', tag: 'cascade-reply',
+        blueNodes: [
+            { id: 11, areaId: 1, isRoot: true },
+            { id: 12, areaId: 2, isRoot: false },
+            { id: 13, areaId: 3, isRoot: false },
+            { id: 14, areaId: 4, isRoot: false }
+        ]
+    });
+    const rootDestroyed = materialState({
+        turn: 'blue',
+        blueNodes: [],
+        redNodes: [{ id: 20, areaId: 6, isRoot: true }]
+    });
+    const cascadeDestroyed = materialState({
+        turn: 'blue',
+        blueNodes: [{ id: 11, areaId: 1, isRoot: true }],
+        redNodes: [{ id: 20, areaId: 6, isRoot: true }]
+    });
+    const candidate = { targetAreaId: 5, _nextState: afterCandidate };
+
+    const result = analyzer.findForcedMaterialGainInTwoMoves(
+        root, [candidate], 'red', { red: 6, blue: 1 },
+        (_state, move) => move.nextState,
+        (state, side) => side === 'blue'
+            ? [
+                { targetAreaId: 7, nextState: afterRootReply },
+                { targetAreaId: 8, nextState: afterCascadeReply }
+            ]
+            : [{
+                attacks: true,
+                targetAreaId: state.tag === 'root-reply' ? 1 : 2,
+                nextState: state.tag === 'root-reply' ? rootDestroyed : cascadeDestroyed
+            }],
+        state => state
+    );
+
+    assert.deepEqual(result.moves, [candidate]);
+    assert.equal(result.guaranteedRootLoss, 0);
+    assert.equal(result.guaranteedCascadeLoss, 2);
+    assert.equal(result.guaranteedNodeLoss, 3);
 });
