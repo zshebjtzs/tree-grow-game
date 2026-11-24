@@ -765,7 +765,7 @@ test('three-action tactical proof validates counterattack after two attacking re
     assert.equal(result.guaranteedNodeGain, 2);
     assert.equal(result.guaranteedSelfLoss, 2);
     assert.equal(result.opponentAttackReplies, 2);
-    assert.equal(result.inducedDefensiveReplies, 1);
+    assert.equal(result.inducedDefenseBranches, 1);
     assert.equal(result.inducementValidated, true);
     assert.equal(result.sacrificeValidated, true);
 });
