@@ -739,3 +739,92 @@ test('three-action tactical proof rejects a sacrifice whose worst-case net gain 
     assert.deepEqual(result.moves, []);
     assert.equal(result.complete, true);
 });
+
+
+test('three-action tactical proof rejects a single defensive reply that breaks the final attack', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = materialState({
+        turn: 'red',
+        redNodes: [{ id: 20, areaId: 20, isRoot: true }],
+        blueNodes: [{ id: 1, areaId: 1, isRoot: true }]
+    });
+    const afterCandidate = materialState({
+        turn: 'blue',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const afterFirstReply = materialState({
+        turn: 'red',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const afterSetup = materialState({
+        turn: 'blue',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const safeReply = materialState({
+        turn: 'red',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const refutingReply = materialState({
+        turn: 'red',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const afterWinningAttack = materialState({
+        turn: 'blue',
+        redNodes: [{ id: 20, areaId: 20, isRoot: true }],
+        blueNodes: []
+    });
+    const candidate = { targetAreaId: 30, nextState: afterCandidate };
+    const setup = { targetAreaId: 31, nextState: afterSetup };
+    const finalAttack = { attacks: true, targetAreaId: 1, nextState: afterWinningAttack };
+
+    const result = analyzer.findForcedTacticalSequenceInThreeMoves(
+        root, [candidate], 'red', { red: 20, blue: 1 },
+        (_state, move) => move.nextState,
+        (state, side) => {
+            if (state === afterCandidate && side === 'blue') return [{ targetAreaId: 32, nextState: afterFirstReply }];
+            if (state === afterFirstReply) return [setup];
+            if (state === afterSetup) return [
+                { targetAreaId: 33, nextState: safeReply },
+                { targetAreaId: 34, nextState: refutingReply }
+            ];
+            if (state === safeReply) return [finalAttack];
+            return [];
+        },
+        state => state
+    );
+
+    assert.deepEqual(result.moves, []);
+    assert.equal(result.complete, true);
+});
+
+test('three-action tactical proof never accepts an incomplete node-budget search', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = materialState({
+        turn: 'red',
+        redNodes: [{ id: 20, areaId: 20, isRoot: true }]
+    });
+    const candidate = {
+        targetAreaId: 30,
+        _nextState: materialState({
+            turn: 'blue',
+            redNodes: [{ id: 20, areaId: 20, isRoot: true }]
+        })
+    };
+
+    const result = analyzer.findForcedTacticalSequenceInThreeMoves(
+        root, [candidate], 'red', { red: 20, blue: 1 },
+        () => null,
+        () => [],
+        state => state,
+        { maxNodes: 1 }
+    );
+
+    assert.deepEqual(result.moves, []);
+    assert.equal(result.complete, false);
+    assert.equal(result.nodes, 1);
+});
