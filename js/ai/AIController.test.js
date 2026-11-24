@@ -236,14 +236,7 @@ test('all difficulty profiles share evaluation weights and vary only by search b
         'expansionWeight', 'safetyWeight', 'structureWeight', 'branchingWeight',
         'rootSafetyWeight', 'rootChainRiskWeight', 'softDistanceWeight',
         'growthHeadroomWeight', 'baseThreatWeight', 'siegePreparationWeight',
-        'siegeFortressWeight',
-        'advantageConversionThreshold', 'advantageConversionScale', 'advantageConversionWeight',
-        'disadvantageRiskThreshold', 'disadvantageRiskScale', 'disadvantageProgressWeight',
-        'disadvantageRootAttackWeight', 'disadvantageCascadeWeight', 'disadvantageNetGainWeight',
-        'disadvantageSelfLossPenalty', 'disadvantageOwnRootLossPenalty',
-        'disadvantageRiskBonusCap', 'disadvantageRiskPenaltyCap',
-        'disadvantageTacticalPotentialWeight', 'disadvantageSiegePotentialWeight',
-        'disadvantageFrontierPotentialWeight'
+        'siegeFortressWeight'
     ];
     const baselineWeights = Object.fromEntries(weightKeys.map(key => [key, profiles[0][key]]));
     for (const profile of profiles) {
@@ -691,7 +684,7 @@ test('AIController sends verified tactical sacrifices into general search', () =
 });
 
 
-test('AI keeps offensive candidates available to search when no immediate defense is mandatory', () => {
+test('AI keeps all legal candidates available to search when no immediate defense is mandatory', () => {
     const game = new GameState();
     game.currentTurn = 'red';
     game.addNode(null, 0, 0, 6, 'red');
@@ -721,8 +714,7 @@ test('AI keeps offensive candidates available to search when no immediate defens
 
     assert.ok(move);
     assert.equal(searchedCandidateCount, 2);
-    assert.equal(searchedCandidateCount, ai.lastOffensiveAnalysis.candidateCount);
-    assert.equal(ai.lastSearchStats.offensiveCandidateCount, searchedCandidateCount);
+    assert.equal(ai.lastDecisionReason, 'search-selection');
 });
 
 

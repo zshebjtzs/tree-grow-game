@@ -25,7 +25,6 @@ export class TreeGrowAIAdapter {
             distanceToBase: (...args) => this.distanceToBase(...args),
             softDistanceToBase: (...args) => this.softDistanceToBase(...args),
             getGrowthMetrics: (...args) => this.getGrowthMetrics(...args),
-            generateMoves: (...args) => this.generateMoves(...args),
             simulateMove: (...args) => this.simulateMove(...args),
             profile
         });
@@ -126,44 +125,16 @@ export class TreeGrowAIAdapter {
             details.unshift('有限深度战术验证确认：无论对手选择哪一种合法回应，下一回合仍存在立即获胜行动。');
             summary = '识别到经过对手回应验证的连续攻击组合，优先执行该行动。';
         }
-        if (selectionReason === 'forced-material-gain') {
-            const guaranteedMaterial = searchStats?.guaranteedTacticalRootLoss > 0
-                ? `${searchStats.guaranteedTacticalRootLoss} 个敌方根节点`
-                : `${searchStats?.guaranteedTacticalCascadeLoss || 0} 个级联节点`;
-            details.unshift(`有限深度推演验证：对手无论如何回应，下一回合都能至少摧毁 ${guaranteedMaterial}。`);
-            summary = '识别到无法通过单次防守化解的连续战术收益，优先执行该行动。';
-        }
-        if (selectionReason === 'forced-counterattack-sequence') {
-            details.unshift(`有限深度推演验证：承受对手攻击回应后，仍能完成连续反击；已覆盖 ${searchStats?.tacticalOpponentAttackReplies || 0} 个攻击型回应分支。`);
-            summary = '识别到经过对手反制验证的连续反击组合，优先执行该行动。';
-        }
-        if (selectionReason === 'validated-tactical-sacrifice') {
-            details.unshift(`战术牺牲经过净收益验证：最差分支仍保留 ${searchStats?.guaranteedTacticalNetNodeGain || 0} 个节点的净收益，承担的己方节点损失为 ${searchStats?.guaranteedTacticalSelfLoss || 0}。`);
-            summary = '识别到能够以局部损失换取更大整体收益的强制战术组合。';
-        }
-        if (selectionReason === 'validated-tactical-inducement') {
-            details.unshift(`先手行动制造了立即胜利威胁，对手的 ${searchStats?.inducedDefenseBranches || 0} 条诱导防守分支消除了该威胁，但仍无法阻止后续战术收益。`);
-            summary = '识别到通过威胁诱导对手防守、再兑现后续收益的战术组合。';
-        }
-        if (selectionReason === 'forced-three-move-sequence') {
-            details.unshift('有限深度推演验证：经过两轮对手回应后，仍存在可兑现的连续攻击收益。');
-            summary = '识别到需要更长准备过程的连续战术组合，优先执行该行动。';
+        if (selectionReason === 'search-with-tactical-hints') {
+            const hintCount = searchStats?.tacticalHintCount ?? 0;
+            details.unshift(`战术分析提供了 ${hintCount} 个候选线索；最终行动仍由统一搜索对全部合法候选进行比较。`);
+            summary = '结合已验证的战术线索与全局搜索，选择该行动。';
         }
         if (selectionReason === 'defense-priority') {
             details.unshift('战术筛选优先保留能最大限度减少对手立即获胜机会的行动。');
         }
-        if ((searchStats?.disadvantageRiskFactor ?? 0) >= 0.35) {
-            details.unshift('当前局面处于劣势；行动排序适度提高了突破、根节点打击和有实际收益的反击价值，同时仍计入己方损失。');
-        }
-        if ((searchStats?.advantageConversionFactor ?? 0) >= 0.35) {
-            details.unshift(
-                `当前局面具有可转化优势；排序额外考虑了正向交换、敌方根节点损失和向敌方基地推进。`
-            );
-        }
-        if ((searchStats?.offensiveNegativeExchangeCount ?? 0) > 0) {
-            details.push(
-                `已识别 ${searchStats.offensiveNegativeExchangeCount} 个净收益为负的攻击候选，未将敌方表面损失直接视为有利交换。`
-            );
+        if (selectionReason === 'defense-risk-order') {
+            details.unshift('搜索优先检查可降低结构风险的行动，但仍保留全部合法候选。');
         }
         if (!details.length) details.push('该行动在当前难度配置的候选评分中排名靠前。');
         if (selectionReason === 'immediate-win') summary = '识别到立即获胜机会，优先执行胜利行动。';
@@ -192,6 +163,9 @@ export class TreeGrowAIAdapter {
             transpositionHits: searchStats.transpositionHits,
             tacticalSequenceNodes: searchStats.tacticalSequenceNodes ?? 0,
             tacticalSequenceComplete: searchStats.tacticalSequenceComplete ?? true,
+            tacticalHintCount: searchStats.tacticalHintCount ?? 0,
+            deadlineExceeded: searchStats.deadlineExceeded ?? false,
+            targetLatencyExceeded: searchStats.targetLatencyExceeded ?? false,
             forcedWinInTwoMoves: searchStats.forcedWinInTwoMoves ?? false,
             forcedMaterialGainInTwoMoves: searchStats.forcedMaterialGainInTwoMoves ?? false,
             guaranteedTacticalRootLoss: searchStats.guaranteedTacticalRootLoss ?? 0,
@@ -205,21 +179,6 @@ export class TreeGrowAIAdapter {
             sacrificeValidated: searchStats.sacrificeValidated ?? false,
             tacticalOpponentAttackReplies: searchStats.tacticalOpponentAttackReplies ?? 0,
             guaranteedTacticalSelfLoss: searchStats.guaranteedTacticalSelfLoss ?? 0,
-            offensiveCandidateCount: searchStats.offensiveCandidateCount ?? 0,
-            offensiveAttackCandidateCount: searchStats.offensiveAttackCandidateCount ?? 0,
-            offensiveHighValueAttackCount: searchStats.offensiveHighValueAttackCount ?? 0,
-            offensiveRootAttackCount: searchStats.offensiveRootAttackCount ?? 0,
-            offensiveCascadeAttackCount: searchStats.offensiveCascadeAttackCount ?? 0,
-            offensiveImmediateWinCount: searchStats.offensiveImmediateWinCount ?? 0,
-            offensiveMaxEnemyNodeLoss: searchStats.offensiveMaxEnemyNodeLoss ?? 0,
-            offensiveMaxOwnNodeLoss: searchStats.offensiveMaxOwnNodeLoss ?? 0,
-            offensiveMaxEnemyRootLoss: searchStats.offensiveMaxEnemyRootLoss ?? 0,
-            offensiveMaxOwnRootLoss: searchStats.offensiveMaxOwnRootLoss ?? 0,
-            offensiveBestNetNodeGain: searchStats.offensiveBestNetNodeGain ?? 0,
-            offensiveBestNetRootGain: searchStats.offensiveBestNetRootGain ?? 0,
-            offensiveNegativeExchangeCount: searchStats.offensiveNegativeExchangeCount ?? 0,
-            advantageConversionFactor: searchStats.advantageConversionFactor ?? 0,
-            disadvantageRiskFactor: searchStats.disadvantageRiskFactor ?? 0
         } : null;
         return { title: 'AI 行动分析', summary, details: details.slice(0, 4), search };
     }

@@ -1,6 +1,5 @@
 // js/ai/AIController.js
 import { SearchEngine } from './SearchEngine.js';
-import { OffensiveStrategyAnalyzer } from './OffensiveStrategyAnalyzer.js';
 import { StrategicDecisionCoordinator } from './StrategicDecisionCoordinator.js';
 import { getDifficultyProfile, DIFFICULTY_LEVELS } from './DifficultyProfiles.js';
 import { TreeGrowAIAdapter } from './TreeGrowAIAdapter.js';
@@ -43,9 +42,7 @@ export class AIController {
         this.tacticalAnalyzer = this.adapter.tacticalAnalyzer;
         this.positionEvaluator = this.adapter.positionEvaluator;
         this.searchEngine = new SearchEngine();
-        this.offensiveStrategyAnalyzer = new OffensiveStrategyAnalyzer();
         this.decisionCoordinator = new StrategicDecisionCoordinator();
-        this.lastOffensiveAnalysis = null;
         this.lastSearchStats = null;
         this.lastTacticalSequenceStats = null;
         this.lastPreparationWorkUnits = 0;
@@ -56,7 +53,6 @@ export class AIController {
             throw new TypeError('AI 玩家阵营无效');
         }
         this.lastSearchStats = null;
-        this.lastOffensiveAnalysis = null;
         this.lastTacticalSequenceStats = {
             nodes: 0, workUnits: 0, totalNodes: 0, totalWorkUnits: 0,
             mandatoryDefenseNodes: 0, mandatoryDefenseWorkUnits: 0,
@@ -69,10 +65,10 @@ export class AIController {
         };
         this.lastDecisionExplanation = null;
         this.lastDecisionReason = null;
-        // Quality is bounded by completed depth and modeled work units, not elapsed time.
-        // Search runs in a Worker, so deeper analysis does not block rendering.
+        // One absolute deadline is shared by preparation, tactical analysis and search.
+        // Candidate generation remains synchronous; later stages use only the time left.
         const decisionStartedAt = this.searchEngine.now();
-        const decisionDeadline = Infinity;
+        const decisionDeadline = decisionStartedAt + this.profile.searchBudgetMs;
         const game = this.adapter.createState(gameStateData);
         this.adapter.setSideToMove(game, playerSide);
         const bases = this.adapter.getBases(gameStateData);
@@ -108,16 +104,6 @@ export class AIController {
         }
         ranked.sort((a, b) => b.score - a.score);
         preparationWorkUnits += Math.max(1, moves.length * Math.ceil(Math.log2(Math.max(2, moves.length))));
-        const advantageFactor = this.positionEvaluator.getAdvantageConversionFactor(
-            game, playerSide, bases
-        );
-        const disadvantageRiskFactor = this.positionEvaluator.getDisadvantageRiskFactor(
-            game, playerSide, bases
-        );
-        this.lastOffensiveAnalysis = this.offensiveStrategyAnalyzer.analyze(
-            game, playerSide, ranked, { advantageFactor, riskFactor: disadvantageRiskFactor }
-        );
-        preparationWorkUnits += moves.length + 2;
         this.lastPreparationWorkUnits = preparationWorkUnits;
 
         const decision = this.decisionCoordinator.resolve({
@@ -217,7 +203,7 @@ export class AIController {
             targetLatencyExceeded,
             // Backward-compatible alias used by existing benchmark reports.
             // This reports target overruns; it does not mean the search was aborted.
-            deadlineExceeded: targetLatencyExceeded,
+            deadlineExceeded: completedAt > deadline,
             decisionReason: this.lastDecisionReason ?? null,
             immediateWinningMove: this.lastDecisionReason === 'immediate-win',
             tacticalSequenceNodes: this.lastTacticalSequenceStats?.nodes ?? 0,
@@ -243,21 +229,6 @@ export class AIController {
             inducedDefenseBranches: this.lastTacticalSequenceStats?.inducedDefenseBranches ?? 0,
             sacrificeValidated: this.lastTacticalSequenceStats?.sacrificeValidated ?? false,
             tacticalOpponentAttackReplies: this.lastTacticalSequenceStats?.opponentAttackReplies ?? 0,
-            offensiveCandidateCount: this.lastOffensiveAnalysis?.candidateCount ?? 0,
-            offensiveAttackCandidateCount: this.lastOffensiveAnalysis?.attackCandidateCount ?? 0,
-            offensiveHighValueAttackCount: this.lastOffensiveAnalysis?.highValueAttackCount ?? 0,
-            offensiveRootAttackCount: this.lastOffensiveAnalysis?.rootAttackCount ?? 0,
-            offensiveCascadeAttackCount: this.lastOffensiveAnalysis?.cascadeAttackCount ?? 0,
-            offensiveImmediateWinCount: this.lastOffensiveAnalysis?.immediateWinningAttackCount ?? 0,
-            offensiveMaxEnemyNodeLoss: this.lastOffensiveAnalysis?.maxEnemyNodeLoss ?? 0,
-            offensiveMaxOwnNodeLoss: this.lastOffensiveAnalysis?.maxOwnNodeLoss ?? 0,
-            offensiveMaxEnemyRootLoss: this.lastOffensiveAnalysis?.maxEnemyRootLoss ?? 0,
-            offensiveMaxOwnRootLoss: this.lastOffensiveAnalysis?.maxOwnRootLoss ?? 0,
-            offensiveBestNetNodeGain: this.lastOffensiveAnalysis?.bestNetNodeGain ?? 0,
-            offensiveBestNetRootGain: this.lastOffensiveAnalysis?.bestNetRootGain ?? 0,
-            offensiveNegativeExchangeCount: this.lastOffensiveAnalysis?.negativeExchangeCount ?? 0,
-            advantageConversionFactor: this.lastOffensiveAnalysis?.advantageFactor ?? 0,
-            disadvantageRiskFactor: this.lastOffensiveAnalysis?.disadvantageRiskFactor ?? 0
         };
     }
 

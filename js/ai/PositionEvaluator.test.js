@@ -2,8 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameState } from '../game/GameState.js';
 import { TreeGrowAIAdapter } from './TreeGrowAIAdapter.js';
-import { PositionEvaluator } from './PositionEvaluator.js';
-import { DisadvantageRiskAnalyzer } from './DisadvantageRiskAnalyzer.js';
 import { getDifficultyProfile } from './DifficultyProfiles.js';
 
 function createAdapter(adjacency, areaCount) {
@@ -18,7 +16,7 @@ function addRoot(game, areaId, side) {
     return game.addNode(null, areaId * 10, 0, areaId, side);
 }
 
-test('unsafe root and single-chain metrics follow the authoritative combat ancestor rule', () => {
+test('unsafe root and full descendant metrics follow the authoritative combat ancestor rule', () => {
     const adjacency = {
         1: [2], 2: [1, 3], 3: [2, 4], 4: [3, 5], 5: [4],
         6: [7], 7: [6, 8, 9, 10], 8: [7], 9: [7], 10: [7]
@@ -59,9 +57,8 @@ test('unsafe root and single-chain metrics follow the authoritative combat ances
     forkedGame.currentTurn = 'red';
     const forkedRoot = addRoot(forkedGame, 6, 'red');
     const twoWayFork = forkedGame.addNode(forkedRoot.id, 70, 0, 7, 'red');
-    const leftBranch = forkedGame.addNode(twoWayFork.id, 80, 0, 8, 'red');
+    forkedGame.addNode(twoWayFork.id, 80, 0, 8, 'red');
     forkedGame.addNode(twoWayFork.id, 90, 0, 9, 'red');
-    forkedGame.addNode(leftBranch.id, 100, 0, 10, 'red');
     forkedGame.currentTurn = 'blue';
     addRoot(forkedGame, 5, 'blue');
     const forkedMetrics = adapter.positionEvaluator.getStructuralMetrics(
@@ -69,8 +66,8 @@ test('unsafe root and single-chain metrics follow the authoritative combat ances
     );
     assert.equal(forkedMetrics.unsafeRoots, 1,
         'a degree-3 first child is still attackable and does not protect its root');
-    assert.equal(forkedMetrics.rootChainRisk, 4,
-        'risk must include every descendant across all branches of the exposed subtree');
+    assert.equal(forkedMetrics.rootChainRisk, 3,
+        'all descendants below a vulnerable fork are exposed, not only one chain');
 });
 
 test('terminal base invasion is scored as a win for the side that moved', () => {
@@ -289,315 +286,30 @@ test('first-root growth candidate generation is limited to reachable unoccupied 
 });
 
 
-test('exchange scoring subtracts own destroyed nodes instead of rewarding gross enemy losses', () => {
-    const evaluator = Object.create(PositionEvaluator.prototype);
-    evaluator.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
-    evaluator.profile = { advantageConversionWeight: 0.3 };
-    evaluator.distanceToBase = (_state, side) => side === 'red' ? 2 : Infinity;
-    evaluator.getStrategicAnalysis = () => ({
-        weights: {
-            progressWeight: 1, attackWeight: 1, rootAttackWeight: 1,
-            expansionWeight: 1, safetyWeight: 1, branchingWeight: 1,
-            structureWeight: 1
-        },
-        spatialScore: 0
-    });
-    evaluator.getAdvantageConversionFactor = () => 0;
-    evaluator.getDisadvantageRiskFactor = () => 0;
-    const before = {
-        getAliveNodesByOwner: side => side === 'red'
-            ? [{ id: 1 }, { id: 5 }]
-            : [{ id: 2 }, { id: 3 }],
-        getPlayerRootNodes: side => side === 'red' ? [{ id: 1 }] : [{ id: 2 }]
-    };
-    const after = {
-        getAliveNodesByOwner: side => side === 'red'
-            ? [{ id: 1 }, { id: 4 }]
-            : [{ id: 2 }],
-        getPlayerRootNodes: side => side === 'red' ? [{ id: 1 }] : [{ id: 2 }],
-        getAliveNodes: () => [],
-        getNode: () => null
-    };
-    const score = evaluator.scoreMove(
-        before, { attacks: true, targetAreaId: 3 }, 'red',
-        { red: 1, blue: 6 }, after
-    );
-
-    assert.equal(score, 0,
-        'one enemy node lost and one own node lost must produce zero net exchange reward');
-});
-
-test('advantage conversion is gated by a positive position advantage', () => {
-    const evaluator = Object.create(PositionEvaluator.prototype);
-    evaluator.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
-    evaluator.profile = {
-        advantageConversionThreshold: 250,
-        advantageConversionScale: 1500
-    };
-    evaluator.evaluateState = () => 250;
-    assert.equal(evaluator.getAdvantageConversionFactor({}, 'red', { red: 1, blue: 6 }), 0);
-
-    evaluator.evaluateState = () => 1000;
-    assert.equal(evaluator.getAdvantageConversionFactor({}, 'red', { red: 1, blue: 6 }), 0.5);
-
-    evaluator.evaluateState = () => 5000;
-    assert.equal(evaluator.getAdvantageConversionFactor({}, 'red', { red: 1, blue: 6 }), 1);
-});
-
-test('advantage conversion increases ordering value only when the position is favorable', () => {
-    const createEvaluator = factor => {
-        const evaluator = Object.create(PositionEvaluator.prototype);
-    evaluator.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
-        evaluator.profile = { advantageConversionWeight: 0.3 };
-        evaluator.distanceToBase = (state, side) => state.isBefore
-            ? (side === 'red' ? 4 : Infinity)
-            : (side === 'red' ? 3 : Infinity);
-        evaluator.getStrategicAnalysis = () => ({
-            weights: {
-                progressWeight: 1, attackWeight: 1, rootAttackWeight: 1,
-                expansionWeight: 1, safetyWeight: 1, branchingWeight: 1,
-                structureWeight: 1
-            },
-            spatialScore: 0
-        });
-        evaluator.getAdvantageConversionFactor = () => factor;
-        evaluator.getDisadvantageRiskFactor = () => 0;
-        return evaluator;
-    };
-    const before = {
-        isBefore: true,
-        getAliveNodesByOwner: side => side === 'red' ? [{ id: 1 }] : [{ id: 2 }]
-    };
-    const after = {
-        isBefore: false,
-        getAliveNodesByOwner: side => side === 'red' ? [{ id: 1 }, { id: 3 }] : [{ id: 2 }],
-        getAliveNodes: () => [],
-        getNode: () => null
-    };
-    const move = { attacks: false, targetAreaId: 3 };
-    const bases = { red: 1, blue: 6 };
-    const neutralScore = createEvaluator(0).scoreMove(before, move, 'red', bases, after);
-    const favorableScore = createEvaluator(1).scoreMove(before, move, 'red', bases, after);
-
-    assert.ok(favorableScore > neutralScore,
-        'a favorable position should value concrete progress toward converting the advantage');
-});
-
-
-test('disadvantage risk adds bounded initiative value to concrete forward progress', () => {
-    const createEvaluator = riskFactor => {
-        const evaluator = Object.create(PositionEvaluator.prototype);
-    evaluator.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
-        evaluator.profile = { advantageConversionWeight: 0.3, disadvantageProgressWeight: 80 };
-        evaluator.distanceToBase = (state, side) => state.before
-            ? (side === 'red' ? 4 : Infinity)
-            : (side === 'red' ? 3 : Infinity);
-        evaluator.getStrategicAnalysis = () => ({
-            weights: {
-                progressWeight: 1, attackWeight: 1, rootAttackWeight: 1,
-                expansionWeight: 1, safetyWeight: 1, branchingWeight: 1,
-                structureWeight: 1
-            },
-            spatialScore: 0
-        });
-        evaluator.getAdvantageConversionFactor = () => 0;
-        evaluator.getDisadvantageRiskFactor = () => riskFactor;
-        return evaluator;
-    };
-    const before = {
-        before: true,
-        getAliveNodesByOwner: side => side === 'red' ? [{ id: 1 }] : [{ id: 2 }]
-    };
-    const after = {
-        before: false,
-        getAliveNodesByOwner: side => side === 'red' ? [{ id: 1 }, { id: 3 }] : [{ id: 2 }],
-        getAliveNodes: () => []
-    };
-    const move = { attacks: false, targetAreaId: 3 };
-    const bases = { red: 1, blue: 6 };
-    const neutral = createEvaluator(0).scoreMove(before, move, 'red', bases, after);
-    const comeback = createEvaluator(1).scoreMove(before, move, 'red', bases, after);
-
-    assert.equal(comeback - neutral, 80,
-        'risk preference should add only its configured bounded value to concrete progress');
-});
-
-
-test('minimax evaluation recognizes comeback initiative only when the side is behind', () => {
-    const createEvaluator = (tacticalPressure, redDistance = Infinity, blueDistance = 1) => {
-        const evaluator = Object.create(PositionEvaluator.prototype);
-        evaluator.profile = {
-            disadvantageRiskThreshold: 250,
-            disadvantageRiskScale: 1500,
-            disadvantageTacticalPotentialWeight: 320,
-            disadvantageSiegePotentialWeight: 180,
-            disadvantageFrontierPotentialWeight: 90
-        };
-        evaluator.evaluationCache = new WeakMap();
-        evaluator.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
-        evaluator.distanceToBase = (_game, side) => side === 'red' ? redDistance : blueDistance;
-        evaluator.getStructuralMetrics = () => ({
-            unsafeRoots: 0,
-            rootChainRisk: 0,
-            growthHeadroom: 0,
-            baseThreatCount: 0,
-            siegePreFortressCount: 0,
-            siegeFortressCount: 0,
-            softDistanceToBase: Infinity
-        });
-        const weights = {
-            softDistanceWeight: 0,
-            rootSafetyWeight: 0,
-            rootChainRiskWeight: 0,
-            growthHeadroomWeight: 0,
-            baseThreatWeight: 0,
-            siegePreparationWeight: 0,
-            siegeFortressWeight: 0,
-            structureWeight: 0
-        };
-        evaluator.getStrategicAnalysis = (_game, side) => ({
-            weights,
-            spatialScore: 0,
-            position: {
-                tacticalPressure: side === 'red' ? tacticalPressure : 0,
-                siegePressure: 0,
-                frontierControl: 0
-            }
-        });
-        evaluator._structureValue = () => 0;
-        return evaluator;
-    };
-    const game = {
-        currentTurn: 'red',
-        isGameOver: false,
-        getPlayerRootNodes: side => [{ id: side }],
-        getAliveNodesByOwner: side => [{ id: side }]
-    };
-    const bases = { red: 1, blue: 2 };
-    const quietBehind = createEvaluator(0).evaluateState(game, 'red', bases);
-    const initiativeBehind = createEvaluator(1).evaluateState(game, 'red', bases);
-    assert.ok(initiativeBehind > quietBehind,
-        'tactical initiative must affect the minimax state value, not just move ordering');
-
-    const quietAhead = createEvaluator(0, 1, Infinity).evaluateState(game, 'red', bases);
-    const initiativeAhead = createEvaluator(1, 1, Infinity).evaluateState(game, 'red', bases);
-    assert.equal(initiativeAhead, quietAhead,
-        'the comeback bonus must remain inactive when the evaluated side is ahead');
-});
-
-
-test('root safety and root-chain penalties use each side own strategic weights', () => {
-    const evaluator = Object.create(PositionEvaluator.prototype);
-    evaluator.evaluationCache = new WeakMap();
-    evaluator.profile = {
-        disadvantageRiskThreshold: 250,
-        disadvantageRiskScale: 1500,
-        disadvantageTacticalPotentialWeight: 0,
-        disadvantageSiegePotentialWeight: 0
-    };
-    evaluator.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
-    evaluator.distanceToBase = () => Infinity;
-    evaluator.getStructuralMetrics = (_game, side) => side === 'red'
-        ? {
-            unsafeRoots: 1, rootChainRisk: 3, growthHeadroom: 0,
-            baseThreatCount: 0, siegePreFortressCount: 0,
-            siegeFortressCount: 0, softDistanceToBase: Infinity
-        }
-        : {
-            unsafeRoots: 1, rootChainRisk: 2, growthHeadroom: 0,
-            baseThreatCount: 0, siegePreFortressCount: 0,
-            siegeFortressCount: 0, softDistanceToBase: Infinity
-        };
-    evaluator.getStrategicAnalysis = (_game, side) => ({
-        weights: {
-            softDistanceWeight: 0,
-            rootSafetyWeight: side === 'red' ? 10 : 100,
-            rootChainRiskWeight: side === 'red' ? 5 : 50,
-            growthHeadroomWeight: 0,
-            baseThreatWeight: 0,
-            siegePreparationWeight: 0,
-            siegeFortressWeight: 0,
-            structureWeight: 0
-        },
-        position: { tacticalPressure: 0, siegePressure: 0 },
-        spatialScore: 0
-    });
-    evaluator._structureValue = () => 0;
-
-    const game = {
-        isGameOver: false,
-        getPlayerRootNodes: () => [{ id: 1 }],
-        getAliveNodesByOwner: () => [{ id: 1 }]
-    };
-
-    // Enemy exposure is positive at enemy-side weights (100 + 2*50);
-    // own exposure is negative at own-side weights (10 + 3*5).
-    assert.equal(
-        evaluator.evaluateState(game, 'red', { red: 1, blue: 50 }),
-        175
-    );
-});
-
-
-test('move scoring detects an enemy attack on an ancestor that cascades through the new branch', () => {
-    const adjacency = {
-        1: [2],
-        2: [1, 3, 4],
-        3: [2],
-        4: [2, 5],
-        5: [4]
-    };
-    const adapter = createAdapter(adjacency, 5);
+test('position evaluation is cached per immutable state and remains zero-sum', () => {
+    const adjacency = { 1: [2], 2: [1, 3], 3: [2] };
+    const adapter = createAdapter(adjacency, 3);
     const game = new GameState();
     game.currentTurn = 'red';
-    const redRoot = addRoot(game, 1, 'red');
-    const redParent = game.addNode(redRoot.id, 20, 0, 2, 'red');
+    addRoot(game, 1, 'red');
     game.currentTurn = 'blue';
-    addRoot(game, 4, 'blue');
-    game.currentTurn = 'red';
+    addRoot(game, 3, 'blue');
+    const bases = { red: 1, blue: 3 };
 
-    const bases = { red: 1, blue: 5 };
-    const move = {
-        parentNodeId: redParent.id,
-        targetAreaId: 3,
-        x: 30,
-        y: 0
-    };
-    const next = adapter.simulateMove(game, move, 'red', bases);
-    assert.ok(next);
-    const newNode = next.getAliveNodesByOwner('red')
-        .find(node => node.areaId === move.targetAreaId);
-    assert.ok(newNode);
-
-    const enemyMoves = adapter.generateMoves(next, 'blue', bases);
-    const ancestorAttack = enemyMoves.find(reply =>
-        reply.attacks && reply.targetAreaId === redParent.areaId
-    );
-    assert.ok(ancestorAttack,
-        'the enemy must have a legal attack against the new node parent');
-    const afterAncestorAttack = adapter.simulateMove(next, ancestorAttack, 'blue', bases);
-    assert.ok(afterAncestorAttack);
-    assert.ok(!afterAncestorAttack.getAliveNodesByOwner('red')
-        .some(node => node.id === newNode.id),
-    'attacking the ancestor must remove the newly grown descendant');
-
-    const simulatedEnemyTargets = [];
-    const originalGenerateMoves = adapter.generateMoves.bind(adapter);
-    const originalSimulateMove = adapter.simulateMove.bind(adapter);
-    adapter.generateMoves = (state, side, matchBases) => {
-        const generated = originalGenerateMoves(state, side, matchBases);
-        if (side === 'blue') {
-            for (const reply of generated) {
-                if (reply.attacks) simulatedEnemyTargets.push(reply.targetAreaId);
-            }
-        }
-        return generated;
-    };
-    adapter.simulateMove = (state, reply, side, matchBases, options) => {
-        return originalSimulateMove(state, reply, side, matchBases, options);
+    const originalDistance = adapter.distanceToBase.bind(adapter);
+    let distanceCalls = 0;
+    adapter.distanceToBase = (...args) => {
+        distanceCalls++;
+        return originalDistance(...args);
     };
 
-    adapter.positionEvaluator.scoreMove(game, move, 'red', bases, next);
-    assert.ok(simulatedEnemyTargets.includes(redParent.areaId),
-        'candidate scoring must inspect the ancestor attack, not only direct recapture of the new node');
+    const redScore = adapter.positionEvaluator.evaluateState(game, 'red', bases);
+    const callsAfterFirstEvaluation = distanceCalls;
+    assert.equal(adapter.positionEvaluator.evaluateState(game, 'red', bases), redScore);
+    assert.equal(distanceCalls, callsAfterFirstEvaluation,
+        're-evaluating the same immutable state and perspective must use the cache');
+
+    const blueScore = adapter.positionEvaluator.evaluateState(game, 'blue', bases);
+    assert.equal(redScore, -blueScore,
+        'the shared fixed-weight evaluator must be symmetric between both sides');
 });
