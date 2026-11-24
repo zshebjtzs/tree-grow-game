@@ -334,6 +334,245 @@ export class TacticalAnalyzer {
         return result;
     }
 
+    /**
+     * Proves a three-action tactical combination:
+     * candidate -> defender reply -> attacker setup -> defender reply -> attack.
+     *
+     * Every defender reply is an AND branch; the attacker may choose a setup
+     * and a final attack (OR branches). Opponent attacks are allowed, but their
+     * actual losses are charged against the final material gain. This models
+     * counterattacks and sound tactical sacrifices without rewarding a
+     * materially losing line.
+     */
+    findForcedTacticalSequenceInThreeMoves(
+        rootState, moves, attackerSide, bases, simulateMove, generateMoves, simulatePass,
+        { maxNodes = 600, shouldStop = () => false, minNetNodeGain = 2, minCascadeLoss = 2 } = {}
+    ) {
+        const defenderSide = attackerSide === 'red' ? 'blue' : 'red';
+        const result = {
+            moves: [], nodes: 0, complete: true, sequence: [],
+            guaranteedRootLoss: 0, guaranteedCascadeLoss: 0,
+            guaranteedNodeGain: 0, guaranteedSelfLoss: 0,
+            opponentAttackReplies: 0, inducedAttackReplies: 0,
+            sacrificeValidated: false
+        };
+
+        const visit = () => {
+            if (result.nodes >= maxNodes || shouldStop()) {
+                result.complete = false;
+                return false;
+            }
+            result.nodes++;
+            return true;
+        };
+        const alive = (state, side) => state.getAliveNodesByOwner(side);
+        const lostNodes = (before, after, side) => {
+            const afterIds = new Set(alive(after, side).map(node => node.id));
+            return alive(before, side).filter(node => !afterIds.has(node.id)).length;
+        };
+        const rootCount = (state, side) => state.getPlayerRootNodes(side).length;
+        const measureAttack = (before, after, move, accumulatedSelfLoss) => {
+            if (!after) return null;
+            const beforeNodes = alive(before, defenderSide);
+            const afterIds = new Set(alive(after, defenderSide).map(node => node.id));
+            const removed = beforeNodes.filter(node => !afterIds.has(node.id));
+            const beforeRootIds = new Set(
+                before.getPlayerRootNodes(defenderSide).map(node => node.id)
+            );
+            const afterRootIds = new Set(
+                after.getPlayerRootNodes(defenderSide).map(node => node.id)
+            );
+            const rootLoss = [...beforeRootIds].filter(id => !afterRootIds.has(id)).length;
+            const directTarget = beforeNodes.find(node => node.areaId === move.targetAreaId);
+            const cascadeLoss = removed.filter(node =>
+                node.id !== directTarget?.id && !beforeRootIds.has(node.id)
+            ).length;
+            const nodeLoss = removed.length;
+            return {
+                rootLoss, cascadeLoss, nodeLoss,
+                selfLoss: accumulatedSelfLoss,
+                netNodeGain: nodeLoss - accumulatedSelfLoss
+            };
+        };
+        const qualifies = gain => gain && (
+            gain.rootLoss > 0 ||
+            (gain.cascadeLoss >= minCascadeLoss && gain.netNodeGain >= minNetNodeGain)
+        );
+        const better = (left, right) => !right ||
+            left.rootLoss > right.rootLoss ||
+            (left.rootLoss === right.rootLoss && left.netNodeGain > right.netNodeGain) ||
+            (left.rootLoss === right.rootLoss && left.netNodeGain === right.netNodeGain &&
+                left.cascadeLoss > right.cascadeLoss);
+
+        const proveAfterFirstReply = (state, firstSelfLoss, firstWasAttack) => {
+            if (!visit()) return null;
+            if (state.isGameOver || rootCount(state, attackerSide) === 0) return null;
+            const setups = generateMoves(state, attackerSide, bases);
+            let bestSetup = null;
+
+            for (const setup of setups) {
+                if (!visit()) return null;
+                const afterSetup = setup._nextState ||
+                    simulateMove(state, setup, attackerSide, bases);
+                if (!afterSetup || afterSetup.isGameOver ||
+                    rootCount(afterSetup, attackerSide) === 0) continue;
+
+                if (!visit()) return null;
+                const replies = generateMoves(afterSetup, defenderSide, bases);
+                const responses = replies.length ? replies : [null];
+                let survives = true;
+                let worstGain = null;
+                let attackReplyCount = firstWasAttack ? 1 : 0;
+                let selfLossMax = firstSelfLoss;
+
+                for (const response of responses) {
+                    if (!visit()) return null;
+                    if (response?.targetAreaId === bases[attackerSide]) {
+                        survives = false;
+                        break;
+                    }
+                    const afterResponse = response
+                        ? response._nextState || simulateMove(
+                            afterSetup, response, defenderSide, bases
+                        )
+                        : simulatePass(afterSetup, defenderSide);
+                    if (!afterResponse || afterResponse.isGameOver ||
+                        rootCount(afterResponse, attackerSide) === 0) {
+                        survives = false;
+                        break;
+                    }
+
+                    const branchSelfLoss = firstSelfLoss +
+                        lostNodes(afterSetup, afterResponse, attackerSide);
+                    selfLossMax = Math.max(selfLossMax, branchSelfLoss);
+                    if (response?.attacks) attackReplyCount++;
+
+                    if (!visit()) return null;
+                    const finalAttacks = generateMoves(afterResponse, attackerSide, bases)
+                        .filter(move => move.attacks);
+                    let bestAttack = null;
+                    for (const attack of finalAttacks) {
+                        if (!visit()) return null;
+                        const afterAttack = attack._nextState ||
+                            simulateMove(afterResponse, attack, attackerSide, bases);
+                        if (!afterAttack || rootCount(afterAttack, attackerSide) === 0) continue;
+                        const gain = measureAttack(
+                            afterResponse, afterAttack, attack, branchSelfLoss
+                        );
+                        if (qualifies(gain) && better(gain, bestAttack)) {
+                            bestAttack = { ...gain, attack };
+                        }
+                    }
+
+                    if (!bestAttack) {
+                        survives = false;
+                        break;
+                    }
+                    if (!worstGain || better(worstGain, bestAttack)) {
+                        worstGain = bestAttack;
+                    }
+                    if (!result.complete) return null;
+                }
+
+                if (survives && result.complete && worstGain) {
+                    const proof = {
+                        setup, attack: worstGain.attack,
+                        ...worstGain,
+                        opponentAttackReplies: attackReplyCount,
+                        selfLoss: selfLossMax
+                    };
+                    if (!bestSetup || better(bestSetup, proof)) bestSetup = proof;
+                }
+                if (!result.complete) return null;
+            }
+            return bestSetup;
+        };
+
+        let bestCandidate = null;
+        for (const candidate of moves) {
+            if (!visit()) break;
+            const afterCandidate = candidate._nextState ||
+                simulateMove(rootState, candidate, attackerSide, bases);
+            if (!afterCandidate || afterCandidate.isGameOver ||
+                rootCount(afterCandidate, attackerSide) === 0) continue;
+
+            if (!visit()) break;
+            const firstReplies = generateMoves(afterCandidate, defenderSide, bases);
+            const responses = firstReplies.length ? firstReplies : [null];
+            let survives = true;
+            let worstProof = null;
+            let attackReplyCount = 0;
+            let selfLossMax = 0;
+
+            for (const response of responses) {
+                if (!visit()) {
+                    survives = false;
+                    break;
+                }
+                if (response?.targetAreaId === bases[attackerSide]) {
+                    survives = false;
+                    break;
+                }
+                const afterResponse = response
+                    ? response._nextState || simulateMove(
+                        afterCandidate, response, defenderSide, bases
+                    )
+                    : simulatePass(afterCandidate, defenderSide);
+                if (!afterResponse || afterResponse.isGameOver ||
+                    rootCount(afterResponse, attackerSide) === 0) {
+                    survives = false;
+                    break;
+                }
+                const selfLoss = lostNodes(afterCandidate, afterResponse, attackerSide);
+                if (response?.attacks) attackReplyCount++;
+                const proof = proveAfterFirstReply(
+                    afterResponse, selfLoss, Boolean(response?.attacks)
+                );
+                if (!proof) {
+                    survives = false;
+                    break;
+                }
+                attackReplyCount += proof.opponentAttackReplies;
+                selfLossMax = Math.max(selfLossMax, proof.selfLoss);
+                if (!worstProof || better(worstProof, proof)) worstProof = proof;
+                if (!result.complete) {
+                    survives = false;
+                    break;
+                }
+            }
+
+            if (survives && result.complete && worstProof) {
+                const candidateProof = {
+                    move: candidate, setup: worstProof.setup, attack: worstProof.attack,
+                    rootLoss: worstProof.rootLoss,
+                    cascadeLoss: worstProof.cascadeLoss,
+                    nodeLoss: worstProof.nodeLoss,
+                    netNodeGain: worstProof.netNodeGain,
+                    selfLoss: selfLossMax,
+                    opponentAttackReplies: attackReplyCount
+                };
+                if (!bestCandidate || better(candidateProof, bestCandidate)) {
+                    bestCandidate = candidateProof;
+                }
+            }
+            if (!result.complete) break;
+        }
+
+        if (bestCandidate && result.complete) {
+            result.moves = [bestCandidate.move];
+            result.sequence = [bestCandidate.move, bestCandidate.setup, bestCandidate.attack];
+            result.guaranteedRootLoss = bestCandidate.rootLoss;
+            result.guaranteedCascadeLoss = bestCandidate.cascadeLoss;
+            result.guaranteedNodeGain = bestCandidate.netNodeGain;
+            result.guaranteedSelfLoss = bestCandidate.selfLoss;
+            result.opponentAttackReplies = bestCandidate.opponentAttackReplies;
+            result.inducedAttackReplies = bestCandidate.opponentAttackReplies;
+            result.sacrificeValidated = bestCandidate.selfLoss > 0 &&
+                bestCandidate.netNodeGain >= minNetNodeGain;
+        }
+        return result;
+    }
+
     rankDefenses(game, moves, side, bases, simulateMove, generateMoves) {
         const opponent = side === 'red' ? 'blue' : 'red';
         const originalTurn = game.currentTurn;
