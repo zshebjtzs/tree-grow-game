@@ -399,3 +399,17 @@ test('forcing-sequence analysis recognizes a terminal root-destruction win immed
 
     assert.deepEqual(result.moves, [candidate]);
 });
+
+
+test('immediate-win scan recognizes an attack that destroys the opponent final root', () => {
+    const analyzer = new TacticalAnalyzer();
+    const terminalWin = tacticalState({
+        turn: 'blue', redRoots: 0, blueRoots: 1, isGameOver: true
+    });
+    const move = { parentNodeId: 7, targetAreaId: 5, _nextState: terminalWin };
+
+    assert.equal(
+        analyzer.findImmediateWinningMove([move], 'blue', { red: 1, blue: 6 }),
+        move
+    );
+});
