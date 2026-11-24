@@ -1064,3 +1064,18 @@ test('extended tactic checks the initial threat using the hypothetical attacker 
     assert.equal(afterCandidate.currentTurn, 'blue',
         'hypothetical turn switching must be restored before defender reply enumeration');
 });
+
+
+test('quiet defense ordering keeps a stable result when a legal transition unexpectedly fails', () => {
+    const analyzer = new TacticalAnalyzer();
+    const game = position();
+    const first = { id: 'first', targetAreaId: 3 };
+    const second = { id: 'second', targetAreaId: 4 };
+    assert.deepEqual(
+        analyzer.orderByStructuralRisk(
+            game, [first, second], 'blue', { red: 9, blue: 1 },
+            () => null, () => []
+        ),
+        [first, second]
+    );
+});
