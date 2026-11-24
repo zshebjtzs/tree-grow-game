@@ -47,7 +47,11 @@ export class AIController {
             throw new TypeError('AI 玩家阵营无效');
         }
         this.lastSearchStats = null;
-        this.lastTacticalSequenceStats = { nodes: 0, complete: true, forcedWin: false };
+        this.lastTacticalSequenceStats = {
+            nodes: 0, complete: true, forcedWin: false,
+            forcedMaterialGain: false, guaranteedRootLoss: 0,
+            guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0
+        };
         this.lastDecisionExplanation = null;
         // One deadline covers state preparation, tactical filtering, and search.
         // Preparation remains non-interruptible to preserve mandatory tactical checks;
@@ -118,7 +122,7 @@ export class AIController {
                 (state, side, matchBases) => this._generateMoves(state, side, matchBases),
                 (state, side) => this._simulatePass(state, side),
                 {
-                    maxNodes: Math.min(1200, this.profile.maxNodes),
+                    maxNodes: Math.min(600, this.profile.maxNodes),
                     shouldStop: () => this.searchEngine.now() >= decisionDeadline
                 }
             );
@@ -131,11 +135,47 @@ export class AIController {
             if (sequenceResult.moves.length) {
                 selectedMove = sequenceResult.moves[0];
                 selectionReason = 'forced-sequence-win';
+                this.lastTacticalSequenceStats = {
+                    ...this.lastTacticalSequenceStats,
+                    nodes: sequenceResult.nodes,
+                    complete: sequenceResult.complete,
+                    forcedWin: true
+                };
             } else {
-                selectedMove = this._search(
-                    game, tacticallyRanked, playerSide, bases, decisionDeadline, decisionStartedAt
+                const materialResult = this.tacticalAnalyzer.findForcedMaterialGainInTwoMoves(
+                    game,
+                    tacticallyRanked,
+                    playerSide,
+                    bases,
+                    (state, move, side, matchBases) => this._simulateMove(
+                        state, move, side, matchBases, { alreadyValidated: true }
+                    ),
+                    (state, side, matchBases) => this._generateMoves(state, side, matchBases),
+                    (state, side) => this._simulatePass(state, side),
+                    {
+                        maxNodes: Math.max(0, Math.min(1200, this.profile.maxNodes) - sequenceResult.nodes),
+                        shouldStop: () => this.searchEngine.now() >= decisionDeadline
+                    }
                 );
-                if (selectionReason !== 'defense-priority') selectionReason = 'search-selection';
+                this.lastTacticalSequenceStats = {
+                    nodes: sequenceResult.nodes + materialResult.nodes,
+                    complete: sequenceResult.complete && materialResult.complete,
+                    forcedWin: false,
+                    forcedMaterialGain: materialResult.moves.length > 0,
+                    guaranteedRootLoss: materialResult.guaranteedRootLoss,
+                    guaranteedCascadeLoss: materialResult.guaranteedCascadeLoss,
+                    guaranteedNodeLoss: materialResult.guaranteedNodeLoss
+                };
+
+                if (materialResult.moves.length) {
+                    selectedMove = materialResult.moves[0];
+                    selectionReason = 'forced-material-gain';
+                } else {
+                    selectedMove = this._search(
+                        game, tacticallyRanked, playerSide, bases, decisionDeadline, decisionStartedAt
+                    );
+                    if (selectionReason !== 'defense-priority') selectionReason = 'search-selection';
+                }
             }
         }
 
@@ -165,7 +205,11 @@ export class AIController {
             deadlineExceeded: completedAt > deadline,
             tacticalSequenceNodes: this.lastTacticalSequenceStats?.nodes ?? 0,
             tacticalSequenceComplete: this.lastTacticalSequenceStats?.complete ?? true,
-            forcedWinInTwoMoves: this.lastTacticalSequenceStats?.forcedWin ?? false
+            forcedWinInTwoMoves: this.lastTacticalSequenceStats?.forcedWin ?? false,
+            forcedMaterialGainInTwoMoves: this.lastTacticalSequenceStats?.forcedMaterialGain ?? false,
+            guaranteedTacticalRootLoss: this.lastTacticalSequenceStats?.guaranteedRootLoss ?? 0,
+            guaranteedTacticalCascadeLoss: this.lastTacticalSequenceStats?.guaranteedCascadeLoss ?? 0,
+            guaranteedTacticalNodeLoss: this.lastTacticalSequenceStats?.guaranteedNodeLoss ?? 0
         };
     }
 
