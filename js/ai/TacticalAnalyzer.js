@@ -587,9 +587,37 @@ export class TacticalAnalyzer {
         return result;
     }
 
-    rankDefenses(game, moves, side, bases, simulateMove, generateMoves) {
+    countImmediateWinningReplies(game, side, bases, generateMoves, simulateMove) {
         const opponent = side === 'red' ? 'blue' : 'red';
         const originalTurn = game.currentTurn;
+        game.currentTurn = opponent;
+        try {
+            return this.analyzeOpponentReplies(
+                game, side, opponent, bases, generateMoves, simulateMove
+            ).immediateWinningMoves;
+        } finally {
+            game.currentTurn = originalTurn;
+        }
+    }
+
+    findMandatoryDefenses(game, moves, side, bases, simulateMove, generateMoves) {
+        const immediateWinningMoves = this.countImmediateWinningReplies(
+            game, side, bases, generateMoves, simulateMove
+        );
+        if (!immediateWinningMoves) {
+            return { moves, hasImmediateThreat: false, immediateWinningMoves: 0 };
+        }
+        return {
+            moves: this.rankDefenses(
+                game, moves, side, bases, simulateMove, generateMoves, immediateWinningMoves
+            ),
+            hasImmediateThreat: true,
+            immediateWinningMoves
+        };
+    }
+
+    rankDefenses(game, moves, side, bases, simulateMove, generateMoves, knownCurrentThreats = undefined) {
+        const opponent = side === 'red' ? 'blue' : 'red';
         const analysisCache = new WeakMap();
         const analyze = state => {
             let result = analysisCache.get(state);
@@ -602,15 +630,8 @@ export class TacticalAnalyzer {
             return result;
         };
 
-        game.currentTurn = opponent;
-        let currentThreats;
-        try {
-            currentThreats = this.analyzeOpponentReplies(
-                game, side, opponent, bases, generateMoves, simulateMove
-            ).immediateWinningMoves;
-        } finally {
-            game.currentTurn = originalTurn;
-        }
+        const currentThreats = knownCurrentThreats ??
+            this.countImmediateWinningReplies(game, side, bases, generateMoves, simulateMove);
 
         // Immediate wins remain the highest-priority tactical threat.
         if (currentThreats) {
