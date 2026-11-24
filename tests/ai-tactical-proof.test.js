@@ -181,7 +181,7 @@ test('search completes beyond the old wall-clock budget when node budget allows'
     assert.equal(result.move, moveB);
 });
 
-test('search fallback evaluates all root children even if no deeper node is allowed', () => {
+test('search budget also accounts for mandatory root evaluation work', () => {
     const engine = new SearchEngine({ now: () => 0 });
     const root = { key: 'root', side: 'red' };
     const weak = { key: 'weak', side: 'blue', score: 1 };
@@ -205,6 +205,46 @@ test('search fallback evaluates all root children even if no deeper node is allo
         maxNodes: 0
     });
     assert.equal(result.completedDepth, 0);
-    assert.equal(result.move, moveB);
-    assert.equal(result.rootEvaluations, 2);
+    assert.equal(result.move, moveA);
+    assert.equal(result.rootEvaluations, 0);
+    assert.ok(result.workUnits > 0);
+});
+
+
+test('material proof does not call a net-negative root trade a guaranteed gain', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = createState('root', ['r0', 'r1', 'r2', 'r3'], ['b0', 'b1', 'b2']);
+    const afterCandidate = createState('candidate', ['r0', 'r1', 'r2', 'r3'], ['b0', 'b1', 'b2']);
+    const afterReply = createState('reply', ['r0', 'r1', 'r2', 'r3'], ['b0', 'b1', 'b2']);
+    // The attack removes one enemy root but costs the attacker three ordinary nodes.
+    const afterAttack = createState('attack', ['r0'], ['b1', 'b2']);
+    const candidate = { nextState: afterCandidate };
+    const reply = { nextState: afterReply };
+    const attack = { attacks: true, targetAreaId: 11, nextState: afterAttack };
+    const moveMap = new Map([
+        [afterCandidate, [reply]],
+        [afterReply, [attack]]
+    ]);
+    const result = analyzer.findForcedMaterialGainInTwoMoves(
+        root, [candidate], 'red', bases, simulate,
+        state => moveMap.get(state) || [], pass,
+        { maxNodes: 100 }
+    );
+    assert.equal(result.complete, true);
+    assert.deepEqual(result.moves, []);
+});
+
+test('mandatory-defense budget exhaustion preserves every legal candidate', () => {
+    const analyzer = new TacticalAnalyzer();
+    const game = createState('root', ['r0'], ['b0']);
+    const moves = [{ id: 'a' }, { id: 'b' }];
+    const result = analyzer.findMandatoryDefenses(
+        game, moves, 'red', bases, simulate,
+        () => [{ targetAreaId: 50, attacks: false }],
+        { maxNodes: 0 }
+    );
+    assert.equal(result.complete, false);
+    assert.equal(result.hasImmediateThreat, false);
+    assert.deepEqual(result.moves, moves);
+    assert.ok(result.nodes > 0);
 });
