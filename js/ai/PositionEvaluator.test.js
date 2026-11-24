@@ -422,7 +422,7 @@ test('disadvantage risk adds bounded initiative value to concrete forward progre
 
 
 test('minimax evaluation recognizes comeback initiative only when the side is behind', () => {
-    const createEvaluator = tacticalPressure => {
+    const createEvaluator = (tacticalPressure, redDistance = Infinity, blueDistance = 1) => {
         const evaluator = Object.create(PositionEvaluator.prototype);
         evaluator.profile = {
             disadvantageRiskThreshold: 250,
@@ -433,7 +433,7 @@ test('minimax evaluation recognizes comeback initiative only when the side is be
         };
         evaluator.evaluationCache = new WeakMap();
         evaluator.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
-        evaluator.distanceToBase = (_game, side) => side === 'red' ? Infinity : 1;
+        evaluator.distanceToBase = (_game, side) => side === 'red' ? redDistance : blueDistance;
         evaluator.getStructuralMetrics = () => ({
             unsafeRoots: 0,
             rootChainRisk: 0,
@@ -477,15 +477,8 @@ test('minimax evaluation recognizes comeback initiative only when the side is be
     assert.ok(initiativeBehind > quietBehind,
         'tactical initiative must affect the minimax state value, not just move ordering');
 
-    const aheadGame = {
-        ...game,
-        getPlayerRootNodes: side => [{ id: side }],
-        getAliveNodesByOwner: side => [{ id: side }]
-    };
-    const aheadEvaluator = createEvaluator(1);
-    aheadEvaluator.distanceToBase = (_state, side) => side === 'red' ? 1 : Infinity;
-    const quietAhead = createEvaluator(0).evaluateState(aheadGame, 'red', bases);
-    const initiativeAhead = aheadEvaluator.evaluateState(aheadGame, 'red', bases);
+    const quietAhead = createEvaluator(0, 1, Infinity).evaluateState(game, 'red', bases);
+    const initiativeAhead = createEvaluator(1, 1, Infinity).evaluateState(game, 'red', bases);
     assert.equal(initiativeAhead, quietAhead,
         'the comeback bonus must remain inactive when the evaluated side is ahead');
 });
