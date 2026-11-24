@@ -17,7 +17,12 @@ const SHARED_EVALUATION = {
     growthHeadroomWeight: 12,
     baseThreatWeight: 700,
     siegePreparationWeight: 350,
-    siegeFortressWeight: 1500
+    siegeFortressWeight: 1500,
+    expansionPotentialWeight: 35,
+    frontierControlWeight: 24,
+    multiRootCoordinationWeight: 110,
+    rootSafetyPotentialWeight: 55,
+    defensivePressureWeight: 45
 };
 
 const SEARCH_BUDGETS = {

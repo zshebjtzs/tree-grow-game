@@ -1,4 +1,8 @@
 // js/ai/PositionEvaluator.js
+import { PositionAnalyzer } from './PositionAnalyzer.js';
+import { StrategicPhaseDetector } from './StrategicPhaseDetector.js';
+import { StrategicAnalyzer } from './StrategicAnalyzer.js';
+
 const WIN_SCORE = 100000;
 
 /**
@@ -15,6 +19,16 @@ export class PositionEvaluator {
         this.metricsCache = new WeakMap();
         this.simulateMove = simulateMove;
         this.profile = profile;
+        this.positionAnalyzer = new PositionAnalyzer({ adjacency: this.adjacency, distanceToBase: (...args) => this.distanceToBase(...args), getStructuralMetrics: (...args) => this.getStructuralMetrics(...args) });
+        this.phaseDetector = new StrategicPhaseDetector();
+        this.strategicAnalyzer = new StrategicAnalyzer();
+    }
+
+    getStrategicAnalysis(game, side, bases) {
+        const position = this.positionAnalyzer.analyze(game, side, bases);
+        const phase = this.phaseDetector.detect(position);
+        const weights = this.strategicAnalyzer.getDynamicWeights(this.profile, phase);
+        return Object.freeze({ position, phase, weights, spatialScore: this.strategicAnalyzer.evaluateSpatial(position, this.profile) });
     }
 
     scoreMove(game, move, side, bases, simulatedNext = null) {
@@ -33,23 +47,24 @@ export class PositionEvaluator {
             ? beforeDistance - afterDistance
             : (Number.isFinite(afterDistance) ? 1 : 0);
 
-        const profile = this.profile;
-        let score = progress * 95 * profile.progressWeight;
+        const strategic = this.getStrategicAnalysis(game, side, bases);
+        const weights = strategic.weights;
+        let score = progress * 95 * weights.progressWeight;
         if (move.attacks) {
             const beforeEnemyNodes = game.getAliveNodesByOwner(enemy).length;
             const afterEnemyNodes = next.getAliveNodesByOwner(enemy).length;
-            score += (beforeEnemyNodes - afterEnemyNodes) * 85 * profile.attackWeight;
+            score += (beforeEnemyNodes - afterEnemyNodes) * 85 * weights.attackWeight;
             const beforeRoots = game.getPlayerRootNodes(enemy).length;
             const afterRoots = next.getPlayerRootNodes(enemy).length;
-            score += (beforeRoots - afterRoots) * 900 * profile.rootAttackWeight;
+            score += (beforeRoots - afterRoots) * 900 * weights.rootAttackWeight;
         }
 
         const ownAreaGain = next.getAliveNodesByOwner(side).length -
             game.getAliveNodesByOwner(side).length;
-        score += ownAreaGain * 8 * profile.expansionWeight;
+        score += ownAreaGain * 8 * weights.expansionWeight;
 
         const ownThreat = this.distanceToBase(next, enemy, bases[side]);
-        if (Number.isFinite(ownThreat)) score -= Math.max(0, 5 - ownThreat) * 24 * profile.safetyWeight;
+        if (Number.isFinite(ownThreat)) score -= Math.max(0, 5 - ownThreat) * 24 * weights.safetyWeight;
 
         // Structural value: preserve branching flexibility and avoid leaving
         // the newly created frontier as an isolated, immediately vulnerable leaf.
@@ -58,9 +73,11 @@ export class PositionEvaluator {
         );
         if (newNode) {
             const parent = next.getNode(newNode.parentId);
-            if (parent && parent.childrenIds.length >= 2) score += 10 * profile.branchingWeight;
-            if (parent && parent.isRoot) score += 6 * profile.structureWeight;
+            if (parent && parent.childrenIds.length >= 2) score += 10 * weights.branchingWeight;
+            if (parent && parent.isRoot) score += 6 * weights.structureWeight;
         }
+        const nextStrategic = this.getStrategicAnalysis(next, side, bases);
+        score += (nextStrategic.spatialScore - strategic.spatialScore) * 0.18;
         return score;
     }
 
@@ -149,6 +166,8 @@ export class PositionEvaluator {
         const enemyNodes = game.getAliveNodesByOwner(opponent).length;
         const ownMetrics = this.getStructuralMetrics(game, perspective, bases);
         const enemyMetrics = this.getStructuralMetrics(game, opponent, bases);
+        const ownStrategic = this.getStrategicAnalysis(game, perspective, bases);
+        const enemyStrategic = this.getStrategicAnalysis(game, opponent, bases);
 
         const distanceValue = distance =>
             Number.isFinite(distance) ? Math.max(-500, 180 - distance * 42) : -260;
@@ -157,27 +176,30 @@ export class PositionEvaluator {
         const ownDistanceScore = Number.isFinite(ownDistance)
             ? distanceValue(ownDistance)
             : -260 + (softDistanceValue(ownMetrics.softDistanceToBase) + 260) *
-                this.profile.softDistanceWeight;
+                ownStrategic.weights.softDistanceWeight;
         const enemyDistanceScore = Number.isFinite(enemyDistance)
             ? distanceValue(enemyDistance)
             : -260 + (softDistanceValue(enemyMetrics.softDistanceToBase) + 260) *
-                this.profile.softDistanceWeight;
+                enemyStrategic.weights.softDistanceWeight;
 
         const ownStructure = this._structureValue(game, perspective);
         const enemyStructure = this._structureValue(game, opponent);
+        const ownWeights = ownStrategic.weights;
+        const enemyWeights = enemyStrategic.weights;
         const structuralScore =
-            (enemyMetrics.unsafeRoots - ownMetrics.unsafeRoots) * this.profile.rootSafetyWeight +
-            (enemyMetrics.rootChainRisk - ownMetrics.rootChainRisk) * this.profile.rootChainRiskWeight +
-            (ownMetrics.growthHeadroom - enemyMetrics.growthHeadroom) * this.profile.growthHeadroomWeight +
-            (ownMetrics.baseThreatCount - enemyMetrics.baseThreatCount) * this.profile.baseThreatWeight +
-            (ownMetrics.siegePreFortressCount - enemyMetrics.siegePreFortressCount) * this.profile.siegePreparationWeight +
-            (ownMetrics.siegeFortressCount - enemyMetrics.siegeFortressCount) * this.profile.siegeFortressWeight;
+            enemyMetrics.unsafeRoots * ownWeights.rootSafetyWeight - ownMetrics.unsafeRoots * enemyWeights.rootSafetyWeight +
+            enemyMetrics.rootChainRisk * ownWeights.rootChainRiskWeight - ownMetrics.rootChainRisk * enemyWeights.rootChainRiskWeight +
+            ownMetrics.growthHeadroom * ownWeights.growthHeadroomWeight - enemyMetrics.growthHeadroom * enemyWeights.growthHeadroomWeight +
+            ownMetrics.baseThreatCount * ownWeights.baseThreatWeight - enemyMetrics.baseThreatCount * enemyWeights.baseThreatWeight +
+            ownMetrics.siegePreFortressCount * ownWeights.siegePreparationWeight - enemyMetrics.siegePreFortressCount * enemyWeights.siegePreparationWeight +
+            ownMetrics.siegeFortressCount * ownWeights.siegeFortressWeight - enemyMetrics.siegeFortressCount * enemyWeights.siegeFortressWeight;
 
         return (ownDistanceScore - enemyDistanceScore) +
             (ownNodes - enemyNodes) * 7 +
             (ownRoots - enemyRoots) * 220 +
-            (ownStructure - enemyStructure) * this.profile.structureWeight +
-            structuralScore;
+            (ownStructure - enemyStructure) * ((ownStrategic.weights.structureWeight + enemyStrategic.weights.structureWeight) / 2) +
+            structuralScore +
+            (ownStrategic.spatialScore - enemyStrategic.spatialScore);
     }
 
     _structureValue(game, side) {
