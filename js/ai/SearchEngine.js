@@ -68,17 +68,23 @@ export class SearchEngine {
         let bestValue = -Infinity;
         // Establish a full one-ply root evaluation before iterative deepening.
         // An interrupted deeper iteration never falls back to static ordering.
-        for (const move of rootMoves) {
-            consumeWork();
-            const next = applyMove(rootState, move, getSideToMove(rootState));
-            if (!next) continue;
-            consumeWork();
-            const value = evaluate(next);
-            stats.rootEvaluations++;
-            if (value > bestValue) {
-                bestValue = value;
-                bestMove = move;
+        let rootEvaluationComplete = true;
+        try {
+            for (const move of rootMoves) {
+                consumeWork();
+                const next = applyMove(rootState, move, getSideToMove(rootState));
+                if (!next) continue;
+                consumeWork();
+                const value = evaluate(next);
+                stats.rootEvaluations++;
+                if (value > bestValue) {
+                    bestValue = value;
+                    bestMove = move;
+                }
             }
+        } catch (error) {
+            if (error !== SearchEngine.BUDGET_EXHAUSTED) throw error;
+            rootEvaluationComplete = false;
         }
         let previousScoreDelta = 0;
         let completedDepth = 0;
@@ -194,7 +200,7 @@ export class SearchEngine {
             return { move: iterationMove, value: iterationValue };
         };
 
-        for (let depth = 1; depth <= maxDepth; depth++) {
+        for (let depth = 1; rootEvaluationComplete && depth <= maxDepth; depth++) {
             try {
                 const window = Math.max(1, aspirationWindow + previousScoreDelta * 2);
                 const alpha = aspirationWindows && depth > 1 && Number.isFinite(bestValue)
