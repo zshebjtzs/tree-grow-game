@@ -127,8 +127,8 @@ function createFixtures(GameState) {
         5: [3, 12],
         6: [3, 13],
         7: [2, 16],
-        8: [2, 9],
-        9: [8],
+        8: [2, 20],
+        9: [18],
         10: [4, 14],
         11: [4, 15],
         12: [5],
@@ -136,9 +136,8 @@ function createFixtures(GameState) {
         14: [10],
         15: [11],
         16: [7],
-        20: [21],
-        21: [20, 22],
-        22: [21]
+        18: [9],
+        20: [8]
     };
     const rootDefenseCenters = Array.from({ length: 22 }, (_, index) => [index * 10, 0]);
     const rootDefenseGame = new GameState();
@@ -152,11 +151,10 @@ function createFixtures(GameState) {
     rootDefenseGame.addNode(rightBranch.id, 60, 0, 10, 'red');
     rootDefenseGame.addNode(rightBranch.id, 70, 0, 11, 'red');
     rootDefenseGame.currentTurn = 'blue';
-    const attackingRoot = rootDefenseGame.addNode(null, 80, 0, 9, 'blue');
+    const blueBaseRoot = rootDefenseGame.addNode(null, 80, 0, 9, 'blue');
+    rootDefenseGame.addNode(blueBaseRoot.id, 180, 0, 18, 'blue');
+    const attackingRoot = rootDefenseGame.addNode(null, 200, 0, 20, 'blue');
     rootDefenseGame.addNode(attackingRoot.id, 90, 0, 8, 'blue');
-    const reserveRoot = rootDefenseGame.addNode(null, 200, 0, 20, 'blue');
-    const reserveBranch = rootDefenseGame.addNode(reserveRoot.id, 210, 0, 21, 'blue');
-    rootDefenseGame.addNode(reserveBranch.id, 220, 0, 22, 'blue');
     rootDefenseGame.currentTurn = 'red';
     fixtures.push({
         name: 'root-chain-defense',
