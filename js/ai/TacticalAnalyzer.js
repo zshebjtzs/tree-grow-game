@@ -547,7 +547,13 @@ export class TacticalAnalyzer {
                 }
             }
 
-            if (survives && result.complete && worstProof) {
+            // Do not elevate an otherwise quiet positional plan into a
+            // forcing tactic. The extended layer is reserved for genuine
+            // counterplay, a neutralized immediate threat, or a net-positive
+            // sacrifice that was exposed to opponent attacks.
+            const hasTacticalForcingFeature = attackReplyCount > 0 ||
+                inducedDefenseCount > 0 || worstProof?.selfLoss > 0;
+            if (survives && result.complete && worstProof && hasTacticalForcingFeature) {
                 const candidateProof = {
                     move: candidate, setup: worstProof.setup, attack: worstProof.attack,
                     rootLoss: worstProof.rootLoss,
