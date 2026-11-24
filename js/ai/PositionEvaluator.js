@@ -112,12 +112,23 @@ export class PositionEvaluator {
             if (parent && parent.childrenIds.length >= 2) score += 10 * weights.branchingWeight;
             if (parent && parent.isRoot) score += 6 * weights.structureWeight;
 
-            // Inspect only legal enemy attacks that can recapture this exact
-            // new node. This catches exposed leaves without scanning every
-            // opponent move for every candidate.
+            // An opponent can remove this node either directly or by
+            // attacking any vulnerable ancestor: combat deletes the attacked
+            // subtree up to the nearest protected branching ancestor.
+            const vulnerableAncestorAreas = new Set();
+            let ancestor = newNode;
+            while (ancestor) {
+                if (ancestor.owner === side && ancestor.getDegree() <= 3) {
+                    vulnerableAncestorAreas.add(ancestor.areaId);
+                }
+                ancestor = ancestor.parentId === null
+                    ? null
+                    : next.getNode(ancestor.parentId);
+            }
             const enemyAreas = new Set(next.getAliveNodesByOwner(enemy).map(node => node.areaId));
-            const enemyAdjacent = (this.adjacency[newNode.areaId] || [])
-                .some(areaId => enemyAreas.has(areaId));
+            const enemyAdjacent = [...vulnerableAncestorAreas].some(areaId =>
+                (this.adjacency[areaId] || []).some(adjacentArea => enemyAreas.has(adjacentArea))
+            );
             if (enemyAdjacent && this.generateMoves) {
                 let bySide = this.recaptureRiskCache.get(next);
                 if (!bySide) {
@@ -129,7 +140,7 @@ export class PositionEvaluator {
                 if (!risk) {
                     risk = { ownNodeLoss: 0, ownRootLoss: 0, cascadeLoss: 0, penalty: 0 };
                     const replies = this.generateMoves(next, enemy, bases).filter(reply =>
-                        reply.attacks && reply.targetAreaId === newNode.areaId
+                        reply.attacks && vulnerableAncestorAreas.has(reply.targetAreaId)
                     );
                     const beforeIds = new Set(next.getAliveNodesByOwner(side).map(node => node.id));
                     const beforeRootIds = new Set(next.getPlayerRootNodes(side).map(node => node.id));
@@ -143,12 +154,21 @@ export class PositionEvaluator {
                         if (afterIds.has(newNode.id)) continue;
                         const removed = [...beforeIds].filter(id => !afterIds.has(id));
                         const afterRootIds = new Set(afterReply.getPlayerRootNodes(side).map(node => node.id));
+                        const ownRootLoss = [...beforeRootIds].filter(id => !afterRootIds.has(id)).length;
+                        const directTarget = next.getAliveNodesByOwner(side)
+                            .find(node => node.areaId === reply.targetAreaId);
+                        const directLoss = directTarget && !directTarget.isRoot &&
+                            !afterIds.has(directTarget.id) ? 1 : 0;
+                        const cascadeLoss = Math.max(0, removed.length - ownRootLoss - directLoss);
                         const branchRisk = {
                             ownNodeLoss: removed.length,
-                            ownRootLoss: [...beforeRootIds].filter(id => !afterRootIds.has(id)).length,
-                            cascadeLoss: removed.filter(id => id !== newNode.id && !beforeRootIds.has(id)).length
+                            ownRootLoss,
+                            cascadeLoss
                         };
-                        branchRisk.penalty = branchRisk.ownNodeLoss * nodePenalty +
+                        // Partition losses into direct targets, cascade nodes,
+                        // and roots so the same deleted node is not charged
+                        // multiple times. Root loss retains its strategic premium.
+                        branchRisk.penalty = directLoss * nodePenalty +
                             branchRisk.ownRootLoss * rootPenalty +
                             branchRisk.cascadeLoss * cascadePenalty;
                         if (branchRisk.penalty > risk.penalty) risk = branchRisk;
