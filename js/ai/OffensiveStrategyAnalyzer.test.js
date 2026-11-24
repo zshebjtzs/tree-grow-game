@@ -100,8 +100,8 @@ test('offensive loss accounting uses node identity rather than net population ch
 test('exchange analysis separates own losses, enemy losses, and root losses by identity', () => {
     const before = {
         getAliveNodesByOwner: side => side === 'red'
-            ? [{ id: 1 }, { id: 5 }]
-            : [{ id: 2 }, { id: 3 }],
+            ? [{ id: 1, areaId: 1 }, { id: 5, areaId: 5 }]
+            : [{ id: 2, areaId: 2 }, { id: 3, areaId: 3 }],
         getPlayerRootNodes: side => side === 'red' ? [{ id: 1 }] : [{ id: 2 }]
     };
     const after = {
