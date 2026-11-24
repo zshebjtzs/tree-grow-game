@@ -419,3 +419,73 @@ test('disadvantage risk adds bounded initiative value to concrete forward progre
     assert.equal(comeback - neutral, 80,
         'risk preference should add only its configured bounded value to concrete progress');
 });
+
+
+test('minimax evaluation recognizes comeback initiative only when the side is behind', () => {
+    const createEvaluator = tacticalPressure => {
+        const evaluator = Object.create(PositionEvaluator.prototype);
+        evaluator.profile = {
+            disadvantageRiskThreshold: 250,
+            disadvantageRiskScale: 1500,
+            disadvantageTacticalPotentialWeight: 320,
+            disadvantageSiegePotentialWeight: 180,
+            disadvantageFrontierPotentialWeight: 90
+        };
+        evaluator.evaluationCache = new WeakMap();
+        evaluator.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
+        evaluator.distanceToBase = (_game, side) => side === 'red' ? Infinity : 1;
+        evaluator.getStructuralMetrics = () => ({
+            unsafeRoots: 0,
+            rootChainRisk: 0,
+            growthHeadroom: 0,
+            baseThreatCount: 0,
+            siegePreFortressCount: 0,
+            siegeFortressCount: 0,
+            softDistanceToBase: Infinity
+        });
+        const weights = {
+            softDistanceWeight: 0,
+            rootSafetyWeight: 0,
+            rootChainRiskWeight: 0,
+            growthHeadroomWeight: 0,
+            baseThreatWeight: 0,
+            siegePreparationWeight: 0,
+            siegeFortressWeight: 0,
+            structureWeight: 0
+        };
+        evaluator.getStrategicAnalysis = (_game, side) => ({
+            weights,
+            spatialScore: 0,
+            position: {
+                tacticalPressure: side === 'red' ? tacticalPressure : 0,
+                siegePressure: 0,
+                frontierControl: 0
+            }
+        });
+        evaluator._structureValue = () => 0;
+        return evaluator;
+    };
+    const game = {
+        currentTurn: 'red',
+        isGameOver: false,
+        getPlayerRootNodes: side => [{ id: side }],
+        getAliveNodesByOwner: side => [{ id: side }]
+    };
+    const bases = { red: 1, blue: 2 };
+    const quietBehind = createEvaluator(0).evaluateState(game, 'red', bases);
+    const initiativeBehind = createEvaluator(1).evaluateState(game, 'red', bases);
+    assert.ok(initiativeBehind > quietBehind,
+        'tactical initiative must affect the minimax state value, not just move ordering');
+
+    const aheadGame = {
+        ...game,
+        getPlayerRootNodes: side => [{ id: side }],
+        getAliveNodesByOwner: side => [{ id: side }]
+    };
+    const aheadEvaluator = createEvaluator(1);
+    aheadEvaluator.distanceToBase = (_state, side) => side === 'red' ? 1 : Infinity;
+    const quietAhead = createEvaluator(0).evaluateState(aheadGame, 'red', bases);
+    const initiativeAhead = aheadEvaluator.evaluateState(aheadGame, 'red', bases);
+    assert.equal(initiativeAhead, quietAhead,
+        'the comeback bonus must remain inactive when the evaluated side is ahead');
+});
