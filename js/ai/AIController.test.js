@@ -530,3 +530,30 @@ test('AIController rejects adapters that do not satisfy the game-mode contract',
         /AI 适配器接口无效/
     );
 });
+
+
+test('AIController prioritizes a proven forcing sequence and exposes its tactical telemetry', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 6, 'red');
+    game.addNode(null, 0, 0, 1, 'blue');
+    const ai = new AIController('medium', line, centers);
+    let analyzedRoot = null;
+    ai.tacticalAnalyzer.findForcedWinInTwoMoves = (root, moves) => {
+        analyzedRoot = root;
+        return { moves: [moves[0]], nodes: 17, complete: true };
+    };
+    ai._search = () => {
+        throw new Error('general search must not override a proven forcing win');
+    };
+
+    const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+
+    assert.ok(move);
+    assert.equal(analyzedRoot.currentTurn, 'blue');
+    assert.equal(ai.lastSearchStats.tacticalSequenceNodes, 17);
+    assert.equal(ai.lastSearchStats.tacticalSequenceComplete, true);
+    assert.equal(ai.lastSearchStats.forcedWinInTwoMoves, true);
+    assert.match(ai.lastDecisionExplanation.summary, /连续攻击组合/);
+    assert.ok(ai.lastDecisionExplanation.details.some(detail => detail.includes('对手选择哪一种合法回应')));
+});
