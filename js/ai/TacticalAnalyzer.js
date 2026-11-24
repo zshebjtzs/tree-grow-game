@@ -99,12 +99,13 @@ export class TacticalAnalyzer {
         const defenderSide = attackerSide === 'red' ? 'blue' : 'red';
         const result = { moves: [], nodes: 0, complete: true };
 
-        const visit = () => {
-            if (result.nodes >= maxNodes || shouldStop()) {
+        const visit = (units = 1) => {
+            const cost = Math.max(1, units);
+            if (result.nodes + cost > maxNodes || shouldStop()) {
                 result.complete = false;
                 return false;
             }
-            result.nodes++;
+            result.nodes += cost;
             return true;
         };
 
@@ -117,6 +118,7 @@ export class TacticalAnalyzer {
         const hasImmediateWin = state => {
             if (!visit()) return null;
             const winningMoves = generateMoves(state, attackerSide, bases);
+            if (!visit(winningMoves.length)) return null;
             for (const move of winningMoves) {
                 if (move.targetAreaId === bases[defenderSide]) return true;
                 if (!visit()) return null;
@@ -142,6 +144,7 @@ export class TacticalAnalyzer {
 
             if (!visit()) break;
             const opponentMoves = generateMoves(afterCandidate, defenderSide, bases);
+            if (!visit(opponentMoves.length)) break;
             const responses = opponentMoves.length ? opponentMoves : [null];
             let forcesWin = true;
 
@@ -201,9 +204,11 @@ export class TacticalAnalyzer {
         const result = { moves: [], nodes: 0, complete: true, guaranteedRootLoss: 0,
             guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0, guaranteedSelfLoss: 0,
             guaranteedNetNodeGain: 0 };
-        const visit = () => {
-            if (result.nodes >= maxNodes || shouldStop()) { result.complete = false; return false; }
-            result.nodes++; return true;
+        const visit = (units = 1) => {
+            const cost = Math.max(1, units);
+            if (result.nodes + cost > maxNodes || shouldStop()) { result.complete = false; return false; }
+            result.nodes += cost;
+            return true;
         };
         const lostNodes = (before, after, side) => {
             const afterIds = new Set(after.getAliveNodesByOwner(side).map(node => node.id));
@@ -256,6 +261,7 @@ export class TacticalAnalyzer {
                 !afterCandidate.getPlayerRootNodes(attackerSide).length) continue;
             if (!visit()) break;
             const replies = generateMoves(afterCandidate,defenderSide,bases);
+            if (!visit(replies.length)) break;
             const responses = replies.length ? replies : [null];
             let survives = true, worstCaseGain = null;
             for (const response of responses) {
@@ -267,6 +273,7 @@ export class TacticalAnalyzer {
                 if (!afterResponse || afterResponse.isGameOver ||
                     !afterResponse.getPlayerRootNodes(attackerSide).length) { survives=false; break; }
                 const continuations = generateMoves(afterResponse,attackerSide,bases);
+                if (!visit(continuations.length)) { survives = false; break; }
                 let bestContinuation = null;
                 for (const continuation of continuations) {
                     if (!continuation.attacks) continue;
@@ -374,6 +381,7 @@ export class TacticalAnalyzer {
             if (!visit()) return null;
             if (state.isGameOver || rootCount(state, attackerSide) === 0) return null;
             const setups = generateMoves(state, attackerSide, bases);
+            if (!visit(setups.length)) return null;
             const inducedDefense = initialThreat && !this.findImmediateWinningMove(
                 setups, attackerSide, bases
             );
@@ -394,6 +402,7 @@ export class TacticalAnalyzer {
 
                 if (!visit()) return null;
                 const replies = generateMoves(afterSetup, defenderSide, bases);
+                if (!visit(replies.length)) return null;
                 const responses = replies.length ? replies : [null];
                 let survives = true;
                 let worstGain = null;
@@ -419,8 +428,9 @@ export class TacticalAnalyzer {
                     if (response?.attacks) attackReplyCount++;
 
                     if (!visit()) return null;
-                    const finalAttacks = generateMoves(afterResponse, attackerSide, bases)
-                        .filter(move => move.attacks);
+                    const generatedFinalAttacks = generateMoves(afterResponse, attackerSide, bases);
+                    if (!visit(generatedFinalAttacks.length)) return null;
+                    const finalAttacks = generatedFinalAttacks.filter(move => move.attacks);
                     let bestAttack = null;
                     for (const attack of finalAttacks) {
                         if (!visit()) return null;
@@ -473,10 +483,12 @@ export class TacticalAnalyzer {
 
             if (!visit()) break;
             const initialAttackerMoves = generateMoves(afterCandidate, attackerSide, bases);
+            if (!visit(initialAttackerMoves.length)) break;
             const initialThreat = Boolean(this.findImmediateWinningMove(
                 initialAttackerMoves, attackerSide, bases
             ));
             const firstReplies = generateMoves(afterCandidate, defenderSide, bases);
+            if (!visit(firstReplies.length)) break;
             const responses = firstReplies.length ? firstReplies : [null];
             let survives = true;
             let worstProof = null;
