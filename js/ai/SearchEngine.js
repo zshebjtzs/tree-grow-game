@@ -31,7 +31,11 @@ export class SearchEngine {
         onProgress = () => {}
     }) {
         if (!Array.isArray(rootMoves) || !rootMoves.length) {
-            return { move: null, value: evaluate(rootState), completedDepth: 0, nodes: 0, cutoffs: 0 };
+            return {
+                move: null, value: evaluate(rootState), completedDepth: 0,
+                nodes: 0, workUnits: 0, rootEvaluations: 0,
+                rootEvaluationComplete: true, cutoffs: 0
+            };
         }
         const startedAt = this.now();
         const deadline = sharedDeadline === Infinity
