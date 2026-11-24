@@ -463,7 +463,7 @@ export class TacticalAnalyzer {
                         setup, attack: worstGain.attack,
                         ...worstGain,
                         opponentAttackReplies: attackReplyCount,
-                        inducedDefensiveReplies: inducedDefense ? 1 : 0,
+                        inducedDefenseBranches: inducedDefense ? 1 : 0,
                         selfLoss: worstGain.selfLoss
                     };
                     if (!bestSetup || better(proof, bestSetup)) bestSetup = proof;
@@ -530,7 +530,7 @@ export class TacticalAnalyzer {
                     break;
                 }
                 attackReplyCount += proof.opponentAttackReplies;
-                inducedDefenseCount += proof.inducedDefensiveReplies;
+                inducedDefenseCount += proof.inducedDefenseBranches;
                 if (worse(proof, worstProof)) worstProof = proof;
                 if (!result.complete) {
                     survives = false;
@@ -553,7 +553,7 @@ export class TacticalAnalyzer {
                     netNodeGain: worstProof.netNodeGain,
                     selfLoss: worstProof.selfLoss,
                     opponentAttackReplies: attackReplyCount,
-                    inducedDefensiveReplies: inducedDefenseCount
+                    inducedDefenseBranches: inducedDefenseCount
                 };
                 if (!bestCandidate || better(candidateProof, bestCandidate)) {
                     bestCandidate = candidateProof;
@@ -570,8 +570,8 @@ export class TacticalAnalyzer {
             result.guaranteedNodeGain = bestCandidate.netNodeGain;
             result.guaranteedSelfLoss = bestCandidate.selfLoss;
             result.opponentAttackReplies = bestCandidate.opponentAttackReplies;
-            result.inducedDefensiveReplies = bestCandidate.inducedDefensiveReplies;
-            result.inducementValidated = bestCandidate.inducedDefensiveReplies > 0;
+            result.inducedDefenseBranches = bestCandidate.inducedDefenseBranches;
+            result.inducementValidated = bestCandidate.inducedDefenseBranches > 0;
             result.sacrificeValidated = bestCandidate.selfLoss > 0 &&
                 bestCandidate.netNodeGain >= minNetNodeGain;
         }
