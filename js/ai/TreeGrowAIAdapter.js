@@ -181,7 +181,13 @@ export class TreeGrowAIAdapter {
             offensiveCascadeAttackCount: searchStats.offensiveCascadeAttackCount ?? 0,
             offensiveImmediateWinCount: searchStats.offensiveImmediateWinCount ?? 0,
             offensiveMaxEnemyNodeLoss: searchStats.offensiveMaxEnemyNodeLoss ?? 0,
-            offensiveMaxEnemyRootLoss: searchStats.offensiveMaxEnemyRootLoss ?? 0
+            offensiveMaxOwnNodeLoss: searchStats.offensiveMaxOwnNodeLoss ?? 0,
+            offensiveMaxEnemyRootLoss: searchStats.offensiveMaxEnemyRootLoss ?? 0,
+            offensiveMaxOwnRootLoss: searchStats.offensiveMaxOwnRootLoss ?? 0,
+            offensiveBestNetNodeGain: searchStats.offensiveBestNetNodeGain ?? 0,
+            offensiveBestNetRootGain: searchStats.offensiveBestNetRootGain ?? 0,
+            offensiveNegativeExchangeCount: searchStats.offensiveNegativeExchangeCount ?? 0,
+            advantageConversionFactor: searchStats.advantageConversionFactor ?? 0
         } : null;
         return { title: 'AI 行动分析', summary, details: details.slice(0, 4), search };
     }
