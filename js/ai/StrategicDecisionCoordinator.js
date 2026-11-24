@@ -21,7 +21,7 @@ export class StrategicDecisionCoordinator {
             counterattackSequence: false, inducementValidated: false,
             inducedDefensiveReplies: 0, sacrificeValidated: false,
             opponentAttackReplies: 0, guaranteedSelfLoss: 0,
-            guaranteedRootLoss: 0, guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0
+            guaranteedRootLoss: 0, guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0, guaranteedNetNodeGain: 0
         };
 
         const immediateWin = findImmediateWin(rankedMoves);
@@ -74,9 +74,11 @@ export class StrategicDecisionCoordinator {
                     ...emptyStats,
                     nodes: usedNodes,
                     complete: allComplete,
+                    defenseComplete: defense.complete !== false,
                     guaranteedRootLoss: material.guaranteedRootLoss ?? 0,
                     guaranteedCascadeLoss: material.guaranteedCascadeLoss ?? 0,
                     guaranteedNodeLoss: material.guaranteedNodeLoss ?? 0,
+                    guaranteedNetNodeGain: material.guaranteedNetNodeGain ?? 0,
                     guaranteedSelfLoss: material.guaranteedSelfLoss ?? 0,
                     forcedMaterialGain: true
                 }
@@ -111,7 +113,8 @@ export class StrategicDecisionCoordinator {
                     guaranteedSelfLoss: extended.guaranteedSelfLoss ?? 0,
                     guaranteedRootLoss: extended.guaranteedRootLoss ?? 0,
                     guaranteedCascadeLoss: extended.guaranteedCascadeLoss ?? 0,
-                    guaranteedNodeLoss: extended.guaranteedNodeGain ?? 0
+                    guaranteedNodeLoss: 0,
+                    guaranteedNetNodeGain: extended.guaranteedNodeGain ?? 0
                 }
             };
         }
