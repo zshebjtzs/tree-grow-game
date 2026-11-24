@@ -87,7 +87,7 @@ test('dynamic weights respond to position signals without changing the profile',
 
 test('multi-root coordination rewards independent active root frontiers', () => {
     const adapter = createAdapter({
-        1: [2, 3], 2: [1, 4], 3: [1, 5], 4: [2], 5: [3],
+        1: [2, 3], 2: [1, 4], 3: [1, 5], 4: [2], 5: [3, 6], 6: [5],
         10: [11], 11: [10, 12], 12: [11]
     });
     const game = new GameState();
