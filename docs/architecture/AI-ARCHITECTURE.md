@@ -113,3 +113,15 @@ When a mode adds a rule-relevant persistent field, its adapter's position-key im
 ## Adding a future mode
 
 A future mode should add a new adapter and its own domain evaluator/tactical analyzer, then register its factory in `AIAdapterRegistry`. The worker accepts an optional `mode` field and defaults to `tree-grow` for backward compatibility. The shared controller and search engine should not gain mode-name conditionals or duplicate rule branches. Only `tree-grow` is registered currently; Quick/Campaign gameplay and their adapters are not implemented.
+
+## Strategic evaluation (Phase C)
+
+Strategic evaluation is a deterministic, position-derived layer above the existing legal-rule and tactical pipeline:
+
+- `PositionAnalyzer` extracts expansion frontiers, contested space, root safety, incoming pressure, siege pressure, and independent root-frontier coverage. It consumes the adapter topology and existing RuleEngine-derived structural metrics; it does not generate actions or duplicate rules.
+- `StrategicPhaseDetector` emits overlapping normalized signals for expansion, defense, siege, multi-root coordination, tactical pressure, and frontier control. These are simultaneous intensities, not mutually exclusive game phases.
+- `StrategicAnalyzer` converts those signals into bounded dynamic multipliers over the shared difficulty profile and a spatial evaluation term. The shared profile is never mutated.
+- `PositionEvaluator` applies the resulting weights consistently to move ordering and state evaluation. Terminal wins/losses and the existing tactical proofs remain higher priority and are not softened by strategic weights.
+- Analysis is deterministic and cached per immutable game state and side. No historical state, player identity, or adaptive difficulty is used.
+
+The strategic layer does not claim a move is forced. Tactical proofs remain authoritative for forced wins and material gains; strategic evaluation only ranks non-terminal alternatives.
