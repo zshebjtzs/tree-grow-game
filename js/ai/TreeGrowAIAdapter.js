@@ -25,6 +25,7 @@ export class TreeGrowAIAdapter {
             distanceToBase: (...args) => this.distanceToBase(...args),
             softDistanceToBase: (...args) => this.softDistanceToBase(...args),
             getGrowthMetrics: (...args) => this.getGrowthMetrics(...args),
+            generateMoves: (...args) => this.generateMoves(...args),
             simulateMove: (...args) => this.simulateMove(...args),
             profile
         });

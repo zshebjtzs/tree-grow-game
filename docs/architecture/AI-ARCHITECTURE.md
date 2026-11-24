@@ -35,7 +35,7 @@ Before general search, the controller runs a bounded AND/OR proof for a two-turn
 2. Enumerate every legal opponent reply (or the authoritative pass transition when no reply exists).
 3. After each reply, check whether the AI still has an immediate winning action, including direct base entry or a simulated attack that destroys the opponent's final root.
 
-A candidate is accepted only when every opponent reply preserves an immediate win. This distinguishes a genuine forcing combination from simply counting multiple apparent threats. A node cap and the shared decision deadline bound the analysis; budget exhaustion is reported and never treated as proof. The analysis may discover cooperation between different roots because the continuation is generated from the complete side-to-move position rather than being restricted to the original parent node.
+A candidate is accepted only when every opponent reply preserves an immediate win. This distinguishes a genuine forcing combination from simply counting multiple apparent threats. A dedicated node cap bounds the analysis; budget exhaustion is reported and never treated as proof. The analysis may discover cooperation between different roots because the continuation is generated from the complete side-to-move position rather than being restricted to the original parent node.
 
 The result is exposed through `lastSearchStats.tacticalSequenceNodes`, `tacticalSequenceComplete`, and `forcedWinInTwoMoves`. It is a bounded tactical capability, not a general multi-move mate solver.
 
@@ -49,7 +49,7 @@ If no forced win is proven, the controller performs a second bounded AND/OR pass
 4. Require every opponent reply to leave at least one continuation that destroys an enemy root or at least two non-root descendants. A single isolated leaf loss is deliberately insufficient.
 5. Rank qualifying candidates by their worst-case guaranteed root loss, then cascade loss, then total node loss.
 
-An opponent reply that wins immediately, a missing continuation, an invalid transition, or an exhausted node/deadline budget prevents the candidate from being reported as a proven gain. The forced-win and material-gain checks share a maximum tactical node allowance of 1,200 per decision; each is bounded and the second receives only the remainder.
+An opponent reply that wins immediately, a missing continuation, an invalid transition, or an exhausted node/deadline budget prevents the candidate from being reported as a proven gain. The tactical stages share a maximum node allowance of 12,000 per decision; each is bounded and later stages receive only the remainder.
 
 Telemetry is exposed as `forcedMaterialGainInTwoMoves`, `guaranteedTacticalRootLoss`, `guaranteedTacticalCascadeLoss`, and `guaranteedTacticalNodeLoss`. This remains a deliberately narrow two-turn tactical proof, not a general-purpose combination solver.
 
@@ -68,7 +68,7 @@ If the two-action forced-win and material-gain proofs do not find a result, the 
 - A deeper line is not promoted as a forcing tactic merely because it is a quiet multi-step plan: it must contain an actual opponent attack reply, a neutralized immediate threat, or a net-positive sacrifice exposed to opponent attacks.
 - Counterattack and inducement telemetry are descriptive; they do not replace the all-replies proof.
 
-The proof shares the same per-decision 1,200-node tactical ceiling and absolute deadline with the shorter tactical analyzers. It returns no result if any branch is unexamined, any opponent reply can win immediately, or a transition is invalid. Its three attacker actions are a bounded tactical horizon, not an unrestricted multi-move solver.
+The proof shares the same per-decision 12,000-node tactical ceiling with the shorter tactical analyzers. It returns no result if any branch is unexamined, any opponent reply can win immediately, or a transition is invalid. Its three attacker actions are a bounded tactical horizon, not an unrestricted multi-move solver.
 
 Telemetry includes `forcedTacticalSequenceInThreeMoves`, `counterattackSequence`, `inducementValidated`, `sacrificeValidated`, `tacticalOpponentAttackReplies`, `inducedDefensiveReplies`, and the guaranteed net gain/self-loss fields.
 
@@ -89,7 +89,7 @@ The defaults preserve compatibility with the current TreeGrow state shape, while
 
 ## Difficulty model
 
-All existing difficulty levels use the same rules, tactical filters, evaluation weights and search algorithm. Strength is controlled by maximum depth, time budget and node budget. Difficulty-specific random move selection and evaluation-weight changes are intentionally excluded from this model.
+All existing difficulty levels use the same rules, tactical filters, evaluation weights and search algorithm. Strength is controlled by maximum depth and node budget. Configured millisecond values are telemetry targets only; they do not terminate search. The AI runs in a Web Worker, so deeper analysis does not block rendering. Difficulty-specific random move selection and evaluation-weight changes are intentionally excluded from this model.
 
 The current six levels are:
 
@@ -99,8 +99,8 @@ The current six levels are:
 | easy | 2 | 50 ms | 1,500 |
 | medium | 4 | 150 ms | 6,000 |
 | advanced | 5 | 300 ms | 12,000 |
-| hard | 7 | 700 ms | 30,000 |
-| expert | 8 | 1,200 ms | 60,000 |
+| hard | 9 | 1,800 ms (target only) | 120,000 |
+| expert | 10 | 3,000 ms (target only) | 250,000 |
 
 These are initial tuning values, not proven strength ratings. All six levels share the same evaluation weights and search implementation. Fixed-position tactical regressions, target-device measurements, and observed human-player experience must guide later calibration. AI-vs-AI tournaments are not part of the validation plan unless the project owner explicitly authorizes them.
 

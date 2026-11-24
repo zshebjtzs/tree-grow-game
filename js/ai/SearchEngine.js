@@ -34,9 +34,11 @@ export class SearchEngine {
             return { move: null, value: evaluate(rootState), completedDepth: 0, nodes: 0, cutoffs: 0 };
         }
         const startedAt = this.now();
-        const deadline = Number.isFinite(sharedDeadline)
-            ? sharedDeadline
-            : startedAt + Math.max(1, timeBudgetMs);
+        const deadline = sharedDeadline === Infinity
+            ? Infinity
+            : Number.isFinite(sharedDeadline)
+                ? sharedDeadline
+                : startedAt + Math.max(1, timeBudgetMs);
         const stats = {
             nodes: 0,
             cutoffs: 0,
@@ -44,7 +46,8 @@ export class SearchEngine {
             aspirationResearches: 0,
             aspirationOneSidedResearches: 0,
             aspirationFailLow: 0,
-            aspirationFailHigh: 0
+            aspirationFailHigh: 0,
+            rootEvaluations: 0
         };
         const checkBudget = () => {
             if (stats.nodes >= maxNodes || this.now() >= deadline) {
@@ -60,6 +63,18 @@ export class SearchEngine {
         };
         let bestMove = rootMoves[0];
         let bestValue = -Infinity;
+        // Establish a full one-ply root evaluation before iterative deepening.
+        // An interrupted deeper iteration never falls back to static ordering.
+        for (const move of rootMoves) {
+            const next = applyMove(rootState, move, getSideToMove(rootState));
+            if (!next) continue;
+            const value = evaluate(next);
+            stats.rootEvaluations++;
+            if (value > bestValue) {
+                bestValue = value;
+                bestMove = move;
+            }
+        }
         let previousScoreDelta = 0;
         let completedDepth = 0;
         let preferredRootMoveKey;
@@ -235,6 +250,7 @@ export class SearchEngine {
             value: bestValue,
             completedDepth,
             nodes: stats.nodes,
+            rootEvaluations: stats.rootEvaluations,
             cutoffs: stats.cutoffs,
             transpositionHits: stats.transpositionHits,
             aspirationResearches: stats.aspirationResearches,

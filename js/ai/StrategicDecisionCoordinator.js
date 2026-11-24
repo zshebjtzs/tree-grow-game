@@ -32,7 +32,7 @@ export class StrategicDecisionCoordinator {
         const defense = analyzeMandatoryDefense(rankedMoves);
         const candidates = defense.hasImmediateThreat ? defense.moves : rankedMoves;
         const defensePriority = defense.hasImmediateThreat && candidates.length < rankedMoves.length;
-        const totalTacticalBudget = Math.min(1200, maxNodes);
+        const totalTacticalBudget = Math.min(12000, maxNodes);
         let usedNodes = 0;
         let allComplete = true;
 
@@ -45,7 +45,7 @@ export class StrategicDecisionCoordinator {
             return result;
         };
 
-        const win = runBounded(options => findForcedWin(candidates, options), 600);
+        const win = runBounded(options => findForcedWin(candidates, options), 4000);
         if (win.moves.length) {
             return {
                 move: win.moves[0],
@@ -56,7 +56,7 @@ export class StrategicDecisionCoordinator {
             };
         }
 
-        const material = runBounded(options => findForcedMaterialGain(candidates, options));
+        const material = runBounded(options => findForcedMaterialGain(candidates, options), 4000);
         if (material.moves.length) {
             return {
                 move: material.moves[0],
@@ -70,6 +70,7 @@ export class StrategicDecisionCoordinator {
                     guaranteedRootLoss: material.guaranteedRootLoss ?? 0,
                     guaranteedCascadeLoss: material.guaranteedCascadeLoss ?? 0,
                     guaranteedNodeLoss: material.guaranteedNodeLoss ?? 0,
+                    guaranteedSelfLoss: material.guaranteedSelfLoss ?? 0,
                     forcedMaterialGain: true
                 }
             };

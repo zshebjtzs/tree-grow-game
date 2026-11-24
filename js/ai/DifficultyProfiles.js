@@ -38,7 +38,10 @@ const SHARED_EVALUATION = {
     disadvantageRiskPenaltyCap: 900,
     disadvantageTacticalPotentialWeight: 320,
     disadvantageSiegePotentialWeight: 180,
-    disadvantageFrontierPotentialWeight: 90
+    disadvantageFrontierPotentialWeight: 90,
+    immediateRecaptureNodePenalty: 110,
+    immediateRecaptureCascadePenalty: 90,
+    immediateRecaptureRootPenalty: 2600
 };
 
 const SEARCH_BUDGETS = {
@@ -46,8 +49,8 @@ const SEARCH_BUDGETS = {
     easy:     { maxDepth: 2, searchBudgetMs: 50,   maxNodes: 1500 },
     medium:   { maxDepth: 4, searchBudgetMs: 150,  maxNodes: 6000 },
     advanced: { maxDepth: 5, searchBudgetMs: 300,  maxNodes: 12000 },
-    hard:     { maxDepth: 7, searchBudgetMs: 700,  maxNodes: 30000 },
-    expert:   { maxDepth: 8, searchBudgetMs: 1200, maxNodes: 60000 }
+    hard:     { maxDepth: 9, searchBudgetMs: 1800, maxNodes: 120000 },
+    expert:   { maxDepth: 10, searchBudgetMs: 3000, maxNodes: 250000 }
 };
 
 const LABELS = {

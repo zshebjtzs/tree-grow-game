@@ -64,11 +64,10 @@ export class AIController {
             guaranteedRootLoss: 0, guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0
         };
         this.lastDecisionExplanation = null;
-        // One deadline covers state preparation, tactical filtering, and search.
-        // Preparation remains non-interruptible to preserve mandatory tactical checks;
-        // SearchEngine receives the same absolute deadline and uses only the remainder.
+        // Quality is bounded by completed depth and node count, not elapsed time.
+        // Search runs in a Worker, so deeper analysis does not block rendering.
         const decisionStartedAt = this.searchEngine.now();
-        const decisionDeadline = decisionStartedAt + this.profile.searchBudgetMs;
+        const decisionDeadline = Infinity;
         const game = this.adapter.createState(gameStateData);
         this.adapter.setSideToMove(game, playerSide);
         const bases = this.adapter.getBases(gameStateData);
@@ -197,8 +196,9 @@ export class AIController {
             ...existing,
             preparationMs: existing.preparationMs ?? Math.max(0, completedAt - decisionStartedAt),
             totalMs: Math.max(0, completedAt - decisionStartedAt),
-            deadlineMs: this.profile.searchBudgetMs,
-            deadlineExceeded: completedAt > deadline,
+            configuredTargetMs: this.profile.searchBudgetMs,
+            deadlineMs: null,
+            deadlineExceeded: false,
             tacticalSequenceNodes: this.lastTacticalSequenceStats?.nodes ?? 0,
             tacticalSequenceComplete: this.lastTacticalSequenceStats?.complete ?? true,
             forcedWinInTwoMoves: this.lastTacticalSequenceStats?.forcedWin ?? false,
@@ -206,6 +206,7 @@ export class AIController {
             guaranteedTacticalRootLoss: this.lastTacticalSequenceStats?.guaranteedRootLoss ?? 0,
             guaranteedTacticalCascadeLoss: this.lastTacticalSequenceStats?.guaranteedCascadeLoss ?? 0,
             guaranteedTacticalNodeLoss: this.lastTacticalSequenceStats?.guaranteedNodeLoss ?? 0,
+            guaranteedTacticalSelfLoss: this.lastTacticalSequenceStats?.guaranteedSelfLoss ?? 0,
             forcedTacticalSequenceInThreeMoves: this.lastTacticalSequenceStats?.forcedTacticalSequence ?? false,
             counterattackSequence: this.lastTacticalSequenceStats?.counterattackSequence ?? false,
             inducementValidated: this.lastTacticalSequenceStats?.inducementValidated ?? false,
@@ -290,9 +291,11 @@ export class AIController {
         }
         preparedChildren.set(game, rootChildren);
 
-        const sharedDeadline = Number.isFinite(deadline)
-            ? deadline
-            : decisionStartedAt + this.profile.searchBudgetMs;
+        const sharedDeadline = deadline === Infinity
+            ? Infinity
+            : Number.isFinite(deadline)
+                ? deadline
+                : decisionStartedAt + this.profile.searchBudgetMs;
         const searchStartedAt = this.searchEngine.now();
         const result = this.searchEngine.search({
             rootState: game,
@@ -356,8 +359,9 @@ export class AIController {
             ...result,
             preparationMs: Math.max(0, searchStartedAt - decisionStartedAt),
             totalMs: Math.max(0, completedAt - decisionStartedAt),
-            deadlineMs: this.profile.searchBudgetMs,
-            deadlineExceeded: completedAt > sharedDeadline
+            configuredTargetMs: this.profile.searchBudgetMs,
+            deadlineMs: null,
+            deadlineExceeded: false
         };
         return result.move || rootMoves[0];
     }

@@ -13,13 +13,16 @@ const WIN_SCORE = 100000;
  * duplicates growth, combat, freeze, or turn-transition rules.
  */
 export class PositionEvaluator {
-    constructor({ adjacency, distanceToBase, softDistanceToBase, getGrowthMetrics, simulateMove, profile }) {
+    constructor({ adjacency, distanceToBase, softDistanceToBase, getGrowthMetrics, generateMoves, simulateMove, profile }) {
         this.adjacency = adjacency || {};
         this.distanceToBase = distanceToBase;
         this.softDistanceToBase = softDistanceToBase;
         this.getGrowthMetrics = getGrowthMetrics;
+        this.generateMoves = generateMoves;
         this.metricsCache = new WeakMap();
         this.evaluationCache = new WeakMap();
+        this.strategicAnalysisCache = new WeakMap();
+        this.recaptureRiskCache = new WeakMap();
         this.simulateMove = simulateMove;
         this.profile = profile;
         this.positionAnalyzer = new PositionAnalyzer({ adjacency: this.adjacency, distanceToBase: (...args) => this.distanceToBase(...args), getStructuralMetrics: (...args) => this.getStructuralMetrics(...args) });
@@ -29,10 +32,23 @@ export class PositionEvaluator {
     }
 
     getStrategicAnalysis(game, side, bases) {
+        let bySide = this.strategicAnalysisCache.get(game);
+        if (!bySide) {
+            bySide = new Map();
+            this.strategicAnalysisCache.set(game, bySide);
+        }
+        const enemy = side === 'red' ? 'blue' : 'red';
+        const key = `${side}:${bases[side]}:${bases[enemy]}`;
+        if (bySide.has(key)) return bySide.get(key);
         const position = this.positionAnalyzer.analyze(game, side, bases);
         const phase = this.phaseDetector.detect(position);
         const weights = this.strategicAnalyzer.getDynamicWeights(this.profile, phase);
-        return Object.freeze({ position, phase, weights, spatialScore: this.strategicAnalyzer.evaluateSpatial(position, this.profile) });
+        const analysis = Object.freeze({
+            position, phase, weights,
+            spatialScore: this.strategicAnalyzer.evaluateSpatial(position, this.profile)
+        });
+        bySide.set(key, analysis);
+        return analysis;
     }
 
     getAdvantageConversionFactor(game, perspective, bases) {
@@ -95,6 +111,46 @@ export class PositionEvaluator {
             const parent = next.getNode(newNode.parentId);
             if (parent && parent.childrenIds.length >= 2) score += 10 * weights.branchingWeight;
             if (parent && parent.isRoot) score += 6 * weights.structureWeight;
+
+            // Inspect only legal enemy attacks that can recapture this exact
+            // new node. This catches exposed leaves without scanning every
+            // opponent move for every candidate.
+            const enemyAreas = new Set(next.getAliveNodesByOwner(enemy).map(node => node.areaId));
+            const enemyAdjacent = (this.adjacency[newNode.areaId] || [])
+                .some(areaId => enemyAreas.has(areaId));
+            if (enemyAdjacent && this.generateMoves) {
+                let bySide = this.recaptureRiskCache.get(next);
+                if (!bySide) {
+                    bySide = new Map();
+                    this.recaptureRiskCache.set(next, bySide);
+                }
+                const riskKey = `${side}:${bases[side]}:${bases[enemy]}:${newNode.id}`;
+                let risk = bySide.get(riskKey);
+                if (!risk) {
+                    risk = { ownNodeLoss: 0, ownRootLoss: 0, cascadeLoss: 0 };
+                    const replies = this.generateMoves(next, enemy, bases).filter(reply =>
+                        reply.attacks && reply.targetAreaId === newNode.areaId
+                    );
+                    const beforeIds = new Set(next.getAliveNodesByOwner(side).map(node => node.id));
+                    const beforeRootIds = new Set(next.getPlayerRootNodes(side).map(node => node.id));
+                    for (const reply of replies) {
+                        const afterReply = this.simulateMove(next, reply, enemy, bases);
+                        if (!afterReply) continue;
+                        const afterIds = new Set(afterReply.getAliveNodesByOwner(side).map(node => node.id));
+                        const removed = [...beforeIds].filter(id => !afterIds.has(id));
+                        const afterRootIds = new Set(afterReply.getPlayerRootNodes(side).map(node => node.id));
+                        const rootLoss = [...beforeRootIds].filter(id => !afterRootIds.has(id)).length;
+                        risk.ownNodeLoss = Math.max(risk.ownNodeLoss, removed.length);
+                        risk.ownRootLoss = Math.max(risk.ownRootLoss, rootLoss);
+                        risk.cascadeLoss = Math.max(risk.cascadeLoss,
+                            removed.filter(id => id !== newNode.id && !beforeRootIds.has(id)).length);
+                    }
+                    bySide.set(riskKey, risk);
+                }
+                score -= risk.ownNodeLoss * (this.profile.immediateRecaptureNodePenalty ?? 110);
+                score -= risk.ownRootLoss * (this.profile.immediateRecaptureRootPenalty ?? 2600);
+                score -= risk.cascadeLoss * (this.profile.immediateRecaptureCascadePenalty ?? 90);
+            }
         }
         const nextStrategic = this.getStrategicAnalysis(next, side, bases);
         score += (nextStrategic.spatialScore - strategic.spatialScore) * 0.18;
@@ -258,14 +314,26 @@ export class PositionEvaluator {
         const comebackRiskFactor = this.disadvantageRiskAnalyzer.getRiskFactor(
             baseScore, this.profile
         );
-        const comebackPotential =
+        const ownComebackPotential =
             ownStrategic.position.tacticalPressure *
                 (this.profile.disadvantageTacticalPotentialWeight ?? 320) +
             ownStrategic.position.siegePressure *
-                (this.profile.disadvantageSiegePotentialWeight ?? 180) +
-            ownStrategic.position.frontierControl *
-                (this.profile.disadvantageFrontierPotentialWeight ?? 90);
-        return finish(baseScore + comebackPotential * comebackRiskFactor);
+                (this.profile.disadvantageSiegePotentialWeight ?? 180);
+        const enemyComebackPotential =
+            enemyStrategic.position.tacticalPressure *
+                (this.profile.disadvantageTacticalPotentialWeight ?? 320) +
+            enemyStrategic.position.siegePressure *
+                (this.profile.disadvantageSiegePotentialWeight ?? 180);
+        const enemyComebackRiskFactor = this.disadvantageRiskAnalyzer.getRiskFactor(
+            -baseScore, this.profile
+        );
+        // Initiative is evaluated symmetrically. Frontier control is spatial
+        // value, not a verified tactical threat, so it is excluded here.
+        return finish(
+            baseScore +
+            ownComebackPotential * comebackRiskFactor -
+            enemyComebackPotential * enemyComebackRiskFactor
+        );
     }
 
     _structureValue(game, side) {
