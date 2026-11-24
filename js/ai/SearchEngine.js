@@ -94,7 +94,7 @@ export class SearchEngine {
         const visit = (state, depth, alpha, beta, maximizing) => {
             consumeWork();
             stats.nodes++;
-            if (isTerminal(state) || depth === 0) return evaluate(state);
+            if (isTerminal(state) || depth === 0) { consumeWork(); return evaluate(state); }
 
             const key = getPositionKey(state);
             const cached = table.get(key);
@@ -117,6 +117,7 @@ export class SearchEngine {
                 return passed ? visit(passed, depth - 1, alpha, beta, !maximizing) : evaluate(state);
             }
             moves = orderMoves(state, moves, maximizing, checkBudget);
+            consumeWork(Math.max(1, moves.length * Math.ceil(Math.log2(Math.max(2, moves.length)))));
             moves = promoteMove(moves, cached?.bestMoveKey);
             let value = maximizing ? -Infinity : Infinity;
             let bestMoveKey;
@@ -181,6 +182,7 @@ export class SearchEngine {
             const beta = initialBeta;
             consumeWork();
             let ordered = orderMoves(rootState, rootMoves, true, checkBudget);
+            consumeWork(Math.max(1, ordered.length * Math.ceil(Math.log2(Math.max(2, ordered.length)))));
             ordered = promoteMove(ordered, preferredRootMoveKey);
 
             for (const move of ordered) {
@@ -189,7 +191,7 @@ export class SearchEngine {
                 const next = applyMove(rootState, move, getSideToMove(rootState));
                 if (!next) continue;
                 const value = isTerminal(next)
-                    ? evaluate(next)
+                    ? (consumeWork(), evaluate(next))
                     : visit(next, depth - 1, alpha, beta, false);
                 if (value > iterationValue) {
                     iterationValue = value;
