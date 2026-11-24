@@ -282,3 +282,40 @@ test('material proof counts descendants of a directly destroyed root as cascade 
     assert.equal(result.guaranteedCascadeLoss, 2);
     assert.equal(result.guaranteedNetNodeGain, 3);
 });
+
+
+test('quiet-position defense analysis orders structural safety without dropping attacks', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = createState('root', ['r0', 'r1'], ['b0']);
+    const exposed = createState('exposed', ['r0', 'r1'], ['b0']);
+    const safe = createState('safe', ['r0', 'r1'], ['b0']);
+    const destroyed = createState('destroyed', [], ['b0']);
+    const riskyAttack = {
+        attacks: true,
+        targetAreaId: 2,
+        nextState: destroyed
+    };
+    const exposedMove = { id: 'exposed', nextState: exposed };
+    const safeMove = { id: 'safe', nextState: safe };
+    const moveMap = new Map([
+        [root, []],
+        [exposed, [riskyAttack]],
+        [safe, []]
+    ]);
+
+    const result = analyzer.findMandatoryDefenses(
+        root,
+        [exposedMove, safeMove],
+        'red',
+        { red: 12, blue: 50 },
+        simulate,
+        state => moveMap.get(state) || [],
+        { maxNodes: 100 }
+    );
+
+    assert.equal(result.complete, true);
+    assert.equal(result.hasImmediateThreat, false);
+    assert.equal(result.immediateWinningMoves, 0);
+    assert.deepEqual(result.moves, [safeMove, exposedMove]);
+    assert.equal(result.moves.length, 2, 'quiet-position risk analysis must preserve all legal candidates');
+});
