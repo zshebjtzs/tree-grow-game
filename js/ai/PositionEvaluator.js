@@ -300,8 +300,8 @@ export class PositionEvaluator {
         const ownWeights = ownStrategic.weights;
         const enemyWeights = enemyStrategic.weights;
         const structuralScore =
-            enemyMetrics.unsafeRoots * ownWeights.rootSafetyWeight - ownMetrics.unsafeRoots * enemyWeights.rootSafetyWeight +
-            enemyMetrics.rootChainRisk * ownWeights.rootChainRiskWeight - ownMetrics.rootChainRisk * enemyWeights.rootChainRiskWeight +
+            enemyMetrics.unsafeRoots * enemyWeights.rootSafetyWeight - ownMetrics.unsafeRoots * ownWeights.rootSafetyWeight +
+            enemyMetrics.rootChainRisk * enemyWeights.rootChainRiskWeight - ownMetrics.rootChainRisk * ownWeights.rootChainRiskWeight +
             ownMetrics.growthHeadroom * ownWeights.growthHeadroomWeight - enemyMetrics.growthHeadroom * enemyWeights.growthHeadroomWeight +
             ownMetrics.baseThreatCount * ownWeights.baseThreatWeight - enemyMetrics.baseThreatCount * enemyWeights.baseThreatWeight +
             ownMetrics.siegePreFortressCount * ownWeights.siegePreparationWeight - enemyMetrics.siegePreFortressCount * enemyWeights.siegePreparationWeight +
