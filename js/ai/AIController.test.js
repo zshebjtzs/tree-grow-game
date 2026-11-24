@@ -655,10 +655,17 @@ test('AI keeps offensive candidates available to search when no immediate defens
     game.currentTurn = 'red';
     game.addNode(null, 0, 0, 6, 'red');
     game.currentTurn = 'blue';
-    game.addNode(null, 0, 0, 3, 'blue');
+    const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
 
     const ai = new AIController('medium', line, centers);
+    const candidates = [
+        { parentNodeId: blueRoot.id, targetAreaId: 2, x: 10, y: 0, attacks: false },
+        { parentNodeId: blueRoot.id, targetAreaId: 3, x: 20, y: 0, attacks: false }
+    ];
     let searchedCandidateCount = 0;
+    ai._generateMoves = () => candidates;
+    ai._simulateMove = state => state.clone();
+    ai._scoreMove = () => 0;
     ai.tacticalAnalyzer.findMandatoryDefenses = (_game, moves) => ({
         moves: moves.slice(0, 1),
         hasImmediateThreat: false,
@@ -672,7 +679,7 @@ test('AI keeps offensive candidates available to search when no immediate defens
     const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
 
     assert.ok(move);
-    assert.ok(searchedCandidateCount >= 2);
+    assert.equal(searchedCandidateCount, 2);
     assert.equal(searchedCandidateCount, ai.lastOffensiveAnalysis.candidateCount);
     assert.equal(ai.lastSearchStats.offensiveCandidateCount, searchedCandidateCount);
 });
