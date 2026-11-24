@@ -165,7 +165,7 @@ export class SearchEngine {
                     break;
                 }
             }
-            if (!Number.isFinite(value)) value = evaluate(state);
+            if (!Number.isFinite(value)) { consumeWork(); value = evaluate(state); }
             const bound = value <= originalAlpha ? 'upper'
                 : value >= originalBeta ? 'lower' : 'exact';
             const previous = table.get(key);
@@ -258,7 +258,7 @@ export class SearchEngine {
                 if (error !== SearchEngine.BUDGET_EXHAUSTED) throw error;
                 break;
             }
-            if (this.now() >= deadline || stats.nodes >= maxNodes) break;
+            if (this.now() >= deadline || stats.workUnits >= maxNodes) break;
         }
 
         return {
@@ -268,6 +268,7 @@ export class SearchEngine {
             nodes: stats.nodes,
             workUnits: stats.workUnits,
             rootEvaluations: stats.rootEvaluations,
+            rootEvaluationComplete,
             cutoffs: stats.cutoffs,
             transpositionHits: stats.transpositionHits,
             aspirationResearches: stats.aspirationResearches,
