@@ -22,7 +22,10 @@ const SHARED_EVALUATION = {
     frontierControlWeight: 24,
     multiRootCoordinationWeight: 110,
     rootSafetyPotentialWeight: 55,
-    defensivePressureWeight: 45
+    defensivePressureWeight: 45,
+    advantageConversionThreshold: 250,
+    advantageConversionScale: 1500,
+    advantageConversionWeight: 0.3
 };
 
 const SEARCH_BUDGETS = {
