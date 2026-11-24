@@ -1004,14 +1004,14 @@ test('quiet defense ordering compares one coherent worst reply, not mixed attack
         original,
         [riskierSingleReply, safeAgainstMixed],
         'blue',
-        { red: 90, blue: 1 },
+        { red: 90, blue: 99 },
         (_state, move) => outcomes.get(move.id),
         state => replies.get(state) || []
     );
 
     assert.deepEqual(ordered, [safeAgainstMixed, riskierSingleReply]);
     const mixedMetrics = analyzer.measureAttackRisk(
-        mixedRisk, 'blue', 'red', { red: 90, blue: 1 },
+        mixedRisk, 'blue', 'red', { red: 90, blue: 99 },
         state => replies.get(state) || [],
         (_state, move) => outcomes.get(move.id)
     );
