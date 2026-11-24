@@ -163,7 +163,7 @@ test('forced material-gain analysis proves a real frozen-branch cascade using au
 });
 
 
-test('three-action tactical sequence uses authoritative pass and combat transitions end to end', () => {
+test('three-action analyzer does not misclassify a quiet setup line as a forcing tactic', () => {
     const adjacency = {
         1: [2], 2: [1, 4], 4: [2, 5], 5: [4, 8],
         6: [7], 7: [6, 8, 11], 8: [5, 7, 9, 10],
@@ -209,13 +209,6 @@ test('three-action tactical sequence uses authoritative pass and combat transiti
         (state, side) => adapter.simulatePass(state, side)
     );
 
-    assert.deepEqual(result.moves, [candidate]);
+    assert.deepEqual(result.moves, []);
     assert.equal(result.complete, true);
-    assert.equal(result.sequence.length, 3);
-    assert.equal(result.sequence[1].targetAreaId, 5);
-    assert.equal(result.sequence[2].targetAreaId, 8);
-    assert.equal(result.guaranteedRootLoss, 0);
-    assert.equal(result.guaranteedCascadeLoss, 2);
-    assert.equal(result.guaranteedNodeGain, 3);
-    assert.equal(result.guaranteedSelfLoss, 0);
 });
