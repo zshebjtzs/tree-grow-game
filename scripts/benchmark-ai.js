@@ -242,6 +242,10 @@ for (const fixture of fixtures) {
                 item.tacticalSequenceComplete === false).length,
             forcedWinInTwoMovesCount: searchStats.filter(item =>
                 item.forcedWinInTwoMoves === true).length,
+            forcedMaterialGainInTwoMovesCount: searchStats.filter(item =>
+                item.forcedMaterialGainInTwoMoves === true).length,
+            tacticalSequenceIncompleteCount: searchStats.filter(item =>
+                item.tacticalSequenceComplete === false).length,
             meanAspirationResearches: searchStats.length
                 ? Number((searchStats.reduce((sum, item) => sum + (item.aspirationResearches || 0), 0) /
                     searchStats.length).toFixed(2))
