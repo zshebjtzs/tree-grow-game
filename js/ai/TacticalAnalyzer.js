@@ -422,7 +422,7 @@ export class TacticalAnalyzer {
                 const responses = replies.length ? replies : [null];
                 let survives = true;
                 let worstGain = null;
-                let attackReplyCount = firstWasAttack ? 1 : 0;
+                let attackReplyCount = 0;
                 let selfLossMax = firstSelfLoss;
 
                 for (const response of responses) {
