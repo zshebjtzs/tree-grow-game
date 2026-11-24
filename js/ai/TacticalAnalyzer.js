@@ -325,16 +325,17 @@ export class TacticalAnalyzer {
             moves: [], nodes: 0, complete: true, sequence: [],
             guaranteedRootLoss: 0, guaranteedCascadeLoss: 0,
             guaranteedNodeGain: 0, guaranteedSelfLoss: 0,
-            opponentAttackReplies: 0, inducedDefensiveReplies: 0,
+            opponentAttackReplies: 0, inducedDefenseBranches: 0,
             inducementValidated: false, sacrificeValidated: false
         };
 
-        const visit = () => {
-            if (result.nodes >= maxNodes || shouldStop()) {
+        const visit = (units = 1) => {
+            const cost = Math.max(1, units);
+            if (result.nodes + cost > maxNodes || shouldStop()) {
                 result.complete = false;
                 return false;
             }
-            result.nodes++;
+            result.nodes += cost;
             return true;
         };
         const alive = (state, side) => state.getAliveNodesByOwner(side);
@@ -365,10 +366,9 @@ export class TacticalAnalyzer {
             return { rootLoss, cascadeLoss, nodeLoss: enemyLoss, selfLoss, ownRootLoss,
                 netNodeGain: enemyLoss - selfLoss };
         };
-        const qualifies = gain => gain && gain.ownRootLoss === 0 && (
-            gain.rootLoss > 0 ||
-            (gain.cascadeLoss >= minCascadeLoss && gain.netNodeGain >= minNetNodeGain)
-        );
+        const qualifies = gain => gain && gain.ownRootLoss === 0 &&
+            gain.netNodeGain >= minNetNodeGain &&
+            (gain.rootLoss > 0 || gain.cascadeLoss >= minCascadeLoss);
         const compareGain = (left,right) => (left.rootLoss-right.rootLoss) ||
             (left.netNodeGain-right.netNodeGain) || (left.cascadeLoss-right.cascadeLoss) ||
             (left.nodeLoss-right.nodeLoss);
