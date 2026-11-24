@@ -132,6 +132,18 @@ export class TreeGrowAIAdapter {
             details.unshift(`有限深度推演验证：对手无论如何回应，下一回合都能至少摧毁 ${guaranteedMaterial}。`);
             summary = '识别到无法通过单次防守化解的连续战术收益，优先执行该行动。';
         }
+        if (selectionReason === 'forced-counterattack-sequence') {
+            details.unshift(`有限深度推演验证：承受对手攻击回应后，仍能完成连续反击；已覆盖 ${searchStats?.tacticalOpponentAttackReplies || 0} 个攻击型回应分支。`);
+            summary = '识别到经过对手反制验证的连续反击组合，优先执行该行动。';
+        }
+        if (selectionReason === 'validated-tactical-sacrifice') {
+            details.unshift(`战术牺牲经过净收益验证：最差分支仍保留 ${searchStats?.guaranteedTacticalNodeLoss || 0} 个节点的净收益，承担的己方节点损失为 ${searchStats?.guaranteedTacticalSelfLoss || 0}。`);
+            summary = '识别到能够以局部损失换取更大整体收益的强制战术组合。';
+        }
+        if (selectionReason === 'forced-three-move-sequence') {
+            details.unshift('有限深度推演验证：经过两轮对手回应后，仍存在可兑现的连续攻击收益。');
+            summary = '识别到需要更长准备过程的连续战术组合，优先执行该行动。';
+        }
         if (selectionReason === 'defense-priority') {
             details.unshift('战术筛选优先保留能最大限度减少对手立即获胜机会的行动。');
         }
@@ -150,7 +162,12 @@ export class TreeGrowAIAdapter {
             forcedMaterialGainInTwoMoves: searchStats.forcedMaterialGainInTwoMoves ?? false,
             guaranteedTacticalRootLoss: searchStats.guaranteedTacticalRootLoss ?? 0,
             guaranteedTacticalCascadeLoss: searchStats.guaranteedTacticalCascadeLoss ?? 0,
-            guaranteedTacticalNodeLoss: searchStats.guaranteedTacticalNodeLoss ?? 0
+            guaranteedTacticalNodeLoss: searchStats.guaranteedTacticalNodeLoss ?? 0,
+            forcedTacticalSequenceInThreeMoves: searchStats.forcedTacticalSequenceInThreeMoves ?? false,
+            counterattackSequence: searchStats.counterattackSequence ?? false,
+            sacrificeValidated: searchStats.sacrificeValidated ?? false,
+            tacticalOpponentAttackReplies: searchStats.tacticalOpponentAttackReplies ?? 0,
+            guaranteedTacticalSelfLoss: searchStats.guaranteedTacticalSelfLoss ?? 0
         } : null;
         return { title: 'AI 行动分析', summary, details: details.slice(0, 4), search };
     }
