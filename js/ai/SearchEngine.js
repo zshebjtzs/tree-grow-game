@@ -51,10 +51,11 @@ export class SearchEngine {
             rootEvaluations: 0
         };
         const consumeWork = (units = 1) => {
-            stats.workUnits += Math.max(1, units);
-            if (stats.workUnits > maxNodes || this.now() >= deadline) {
+            const cost = Math.max(1, units);
+            if (stats.workUnits + cost > maxNodes || this.now() >= deadline) {
                 throw SearchEngine.BUDGET_EXHAUSTED;
             }
+            stats.workUnits += cost;
         };
         const checkBudget = () => consumeWork();
         const table = new Map();
