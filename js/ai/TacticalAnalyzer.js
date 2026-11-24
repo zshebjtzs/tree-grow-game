@@ -353,8 +353,8 @@ export class TacticalAnalyzer {
             moves: [], nodes: 0, complete: true, sequence: [],
             guaranteedRootLoss: 0, guaranteedCascadeLoss: 0,
             guaranteedNodeGain: 0, guaranteedSelfLoss: 0,
-            opponentAttackReplies: 0, inducedAttackReplies: 0,
-            sacrificeValidated: false
+            opponentAttackReplies: 0, inducedDefensiveReplies: 0,
+            inducementValidated: false, sacrificeValidated: false
         };
 
         const visit = () => {
@@ -404,10 +404,13 @@ export class TacticalAnalyzer {
             (left.rootLoss === right.rootLoss && left.netNodeGain === right.netNodeGain &&
                 left.cascadeLoss > right.cascadeLoss);
 
-        const proveAfterFirstReply = (state, firstSelfLoss) => {
+        const proveAfterFirstReply = (state, firstSelfLoss, initialThreat) => {
             if (!visit()) return null;
             if (state.isGameOver || rootCount(state, attackerSide) === 0) return null;
             const setups = generateMoves(state, attackerSide, bases);
+            const inducedDefense = initialThreat && !this.findImmediateWinningMove(
+                setups, attackerSide, bases
+            );
             let bestSetup = null;
 
             for (const setup of setups) {
@@ -479,6 +482,7 @@ export class TacticalAnalyzer {
                         setup, attack: worstGain.attack,
                         ...worstGain,
                         opponentAttackReplies: attackReplyCount,
+                        inducedDefensiveReplies: inducedDefense ? 1 : 0,
                         selfLoss: selfLossMax
                     };
                     if (!bestSetup || better(proof, bestSetup)) bestSetup = proof;
@@ -497,11 +501,16 @@ export class TacticalAnalyzer {
                 rootCount(afterCandidate, attackerSide) === 0) continue;
 
             if (!visit()) break;
+            const initialAttackerMoves = generateMoves(afterCandidate, attackerSide, bases);
+            const initialThreat = Boolean(this.findImmediateWinningMove(
+                initialAttackerMoves, attackerSide, bases
+            ));
             const firstReplies = generateMoves(afterCandidate, defenderSide, bases);
             const responses = firstReplies.length ? firstReplies : [null];
             let survives = true;
             let worstProof = null;
             let attackReplyCount = 0;
+            let inducedDefenseCount = 0;
             let selfLossMax = 0;
 
             for (const response of responses) {
@@ -526,13 +535,14 @@ export class TacticalAnalyzer {
                 const selfLoss = lostNodes(afterCandidate, afterResponse, attackerSide);
                 if (response?.attacks) attackReplyCount++;
                 const proof = proveAfterFirstReply(
-                    afterResponse, selfLoss
+                    afterResponse, selfLoss, initialThreat
                 );
                 if (!proof) {
                     survives = false;
                     break;
                 }
                 attackReplyCount += proof.opponentAttackReplies;
+                inducedDefenseCount += proof.inducedDefensiveReplies;
                 selfLossMax = Math.max(selfLossMax, proof.selfLoss);
                 if (!worstProof || better(worstProof, proof)) worstProof = proof;
                 if (!result.complete) {
@@ -549,7 +559,8 @@ export class TacticalAnalyzer {
                     nodeLoss: worstProof.nodeLoss,
                     netNodeGain: worstProof.netNodeGain,
                     selfLoss: selfLossMax,
-                    opponentAttackReplies: attackReplyCount
+                    opponentAttackReplies: attackReplyCount,
+                    inducedDefensiveReplies: inducedDefenseCount
                 };
                 if (!bestCandidate || better(candidateProof, bestCandidate)) {
                     bestCandidate = candidateProof;
@@ -566,7 +577,8 @@ export class TacticalAnalyzer {
             result.guaranteedNodeGain = bestCandidate.netNodeGain;
             result.guaranteedSelfLoss = bestCandidate.selfLoss;
             result.opponentAttackReplies = bestCandidate.opponentAttackReplies;
-            result.inducedAttackReplies = bestCandidate.opponentAttackReplies;
+            result.inducedDefensiveReplies = bestCandidate.inducedDefensiveReplies;
+            result.inducementValidated = bestCandidate.inducedDefensiveReplies > 0;
             result.sacrificeValidated = bestCandidate.selfLoss > 0 &&
                 bestCandidate.netNodeGain >= minNetNodeGain;
         }
