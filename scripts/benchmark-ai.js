@@ -182,6 +182,14 @@ for (const fixture of fixtures) {
                 ? Math.round(searchStats.reduce((sum, item) => sum + item.nodes, 0) / searchStats.length)
                 : 0,
             maxNodes: searchStats.length ? Math.max(...searchStats.map(item => item.nodes)) : 0,
+            meanTacticalSequenceNodes: searchStats.length
+                ? Number((searchStats.reduce((sum, item) =>
+                    sum + (item.tacticalSequenceNodes || 0), 0) / searchStats.length).toFixed(1))
+                : 0,
+            tacticalSequenceIncompleteCount: searchStats.filter(item =>
+                item.tacticalSequenceComplete === false).length,
+            forcedWinInTwoMovesCount: searchStats.filter(item =>
+                item.forcedWinInTwoMoves === true).length,
             meanAspirationResearches: searchStats.length
                 ? Number((searchStats.reduce((sum, item) => sum + (item.aspirationResearches || 0), 0) /
                     searchStats.length).toFixed(2))
