@@ -26,7 +26,9 @@ test('all difficulty profiles share the same evaluation weights', () => {
         'disadvantageRiskThreshold', 'disadvantageRiskScale', 'disadvantageProgressWeight',
         'disadvantageRootAttackWeight', 'disadvantageCascadeWeight', 'disadvantageNetGainWeight',
         'disadvantageSelfLossPenalty', 'disadvantageOwnRootLossPenalty',
-        'disadvantageRiskBonusCap', 'disadvantageRiskPenaltyCap'
+        'disadvantageRiskBonusCap', 'disadvantageRiskPenaltyCap',
+        'disadvantageTacticalPotentialWeight', 'disadvantageSiegePotentialWeight',
+        'disadvantageFrontierPotentialWeight'
     ];
     for (const key of keys) {
         assert.ok(profiles.every(profile => profile[key] === profiles[0][key]), `${key} must be shared`);
