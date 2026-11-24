@@ -46,6 +46,7 @@ export class AIController {
         this.lastSearchStats = null;
         this.lastTacticalSequenceStats = null;
         this.lastPreparationWorkUnits = 0;
+        this.lastPreparationComplete = true;
     }
 
     getBestMove(gameStateData, playerSide) {
@@ -53,6 +54,7 @@ export class AIController {
             throw new TypeError('AI 玩家阵营无效');
         }
         this.lastSearchStats = null;
+        this.lastPreparationComplete = true;
         this.lastTacticalSequenceStats = {
             nodes: 0, workUnits: 0, totalNodes: 0, totalWorkUnits: 0,
             mandatoryDefenseNodes: 0, mandatoryDefenseWorkUnits: 0,
@@ -86,14 +88,27 @@ export class AIController {
 
         const ranked = [];
         const reportInterval = Math.max(1, Math.ceil(moves.length / 8));
+        let preparationComplete = true;
         for (let index = 0; index < moves.length; index++) {
             const move = moves[index];
-            const nextState = this._simulateMove(
-                game, move, playerSide, bases, { alreadyValidated: true }
-            );
-            const score = this._scoreMove(game, move, playerSide, bases, nextState);
-            preparationWorkUnits += 2;
-            ranked.push({ ...move, score, _nextState: nextState });
+            let nextState = null;
+            let score = Number.NEGATIVE_INFINITY;
+
+            if (this.searchEngine.now() < decisionDeadline) {
+                nextState = this._simulateMove(
+                    game, move, playerSide, bases, { alreadyValidated: true }
+                );
+                score = this._scoreMove(game, move, playerSide, bases, nextState);
+                preparationWorkUnits += 2;
+            } else {
+                preparationComplete = false;
+            }
+
+            ranked.push({
+                ...move,
+                score,
+                ...(nextState ? { _nextState: nextState } : {})
+            });
             if ((index + 1) % reportInterval === 0 || index + 1 === moves.length) {
                 this._emitProgress({
                     phase: 'evaluating',
@@ -102,6 +117,7 @@ export class AIController {
                 });
             }
         }
+        this.lastPreparationComplete = preparationComplete;
         ranked.sort((a, b) => b.score - a.score);
         preparationWorkUnits += Math.max(1, moves.length * Math.ceil(Math.log2(Math.max(2, moves.length))));
         this.lastPreparationWorkUnits = preparationWorkUnits;
@@ -194,6 +210,7 @@ export class AIController {
         this.lastSearchStats = {
             ...existing,
             preparationWorkUnits: this.lastPreparationWorkUnits ?? 0,
+            preparationComplete: this.lastPreparationComplete ?? true,
             totalWorkUnits: (this.lastPreparationWorkUnits ?? 0) + (existing.workUnits ?? 0) +
                 (this.lastTacticalSequenceStats?.totalWorkUnits ?? this.lastTacticalSequenceStats?.totalNodes ?? 0),
             preparationMs: existing.preparationMs ?? Math.max(0, completedAt - decisionStartedAt),
@@ -296,15 +313,12 @@ export class AIController {
         const preparedMoveOrder = new WeakMap();
         const positionKeyCache = new WeakMap();
 
-        // Root candidates were already simulated while calculating their
-        // heuristic scores. Reuse those detached states across every
-        // iterative-deepening pass.
+        // Reuse any states prepared during candidate scoring. Remaining root
+        // moves are simulated lazily by SearchEngine after it charges work and
+        // checks the shared deadline.
         const rootChildren = new Map();
         for (const move of rootMoves) {
-            const next = move._nextState || this._simulateMove(
-                game, move, side, bases, { alreadyValidated: true }
-            );
-            if (next) rootChildren.set(moveKey(move), next);
+            if (move._nextState) rootChildren.set(moveKey(move), move._nextState);
         }
         preparedChildren.set(game, rootChildren);
 
@@ -333,8 +347,14 @@ export class AIController {
                 return key;
             },
             applyMove: (state, move, movingSide) => {
-                const cached = preparedChildren.get(state)?.get(moveKey(move));
-                return cached || this._simulateMove(state, move, movingSide, bases, { alreadyValidated: true });
+                const children = preparedChildren.get(state);
+                const key = moveKey(move);
+                if (children?.has(key)) return children.get(key);
+                const next = this._simulateMove(
+                    state, move, movingSide, bases, { alreadyValidated: true }
+                );
+                children?.set(key, next);
+                return next;
             },
             generateMoves: (state, movingSide) =>
                 this._generateMoves(state, movingSide, bases),

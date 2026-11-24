@@ -807,3 +807,45 @@ test('non-terminal tactical hints reorder the root search without dropping candi
     assert.equal(selected, candidates[2]);
     assert.equal(ai.lastSearchStats.tacticalHintCount, 2);
 });
+
+test('root preparation stops at the shared deadline without dropping legal candidates', () => {
+    const game = new GameState();
+    game.currentTurn = 'red';
+    addRoot(game, 6, 'red');
+    game.currentTurn = 'blue';
+    addRoot(game, 1, 'blue');
+    const ai = new AIController('medium', line, centers);
+    let now = 0;
+    ai.searchEngine.now = () => now;
+    const moves = [
+        { parentNodeId: 2, targetAreaId: 2, x: 10, y: 0 },
+        { parentNodeId: 2, targetAreaId: 3, x: 20, y: 0 },
+        { parentNodeId: 2, targetAreaId: 4, x: 30, y: 0 }
+    ];
+    ai._generateMoves = () => moves;
+    ai._simulateMove = () => {
+        now = 200;
+        return game.clone();
+    };
+    ai._scoreMove = () => 1;
+    let capturedCandidates;
+    ai.decisionCoordinator.resolve = ({ rankedMoves }) => {
+        capturedCandidates = rankedMoves;
+        return {
+            move: rankedMoves[0],
+            reason: 'search-selection',
+            tacticalStats: { nodes: 0, workUnits: 0, totalNodes: 0, totalWorkUnits: 0 }
+        };
+    };
+
+    const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+
+    assert.ok(move);
+    assert.equal(capturedCandidates.length, moves.length);
+    assert.ok(capturedCandidates[0]._nextState);
+    assert.equal(capturedCandidates[1]._nextState, undefined);
+    assert.equal(capturedCandidates[1].score, Number.NEGATIVE_INFINITY);
+    assert.equal(ai.lastPreparationComplete, false);
+    assert.equal(ai.lastSearchStats.preparationComplete, false);
+    assert.equal(ai.lastSearchStats.deadlineExceeded, true);
+});
