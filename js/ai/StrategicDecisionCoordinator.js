@@ -36,16 +36,16 @@ export class StrategicDecisionCoordinator {
         let usedNodes = 0;
         let allComplete = true;
 
-        const runBounded = analyzer => {
+        const runBounded = (analyzer, stageLimit = Infinity) => {
             const result = analyzer({
-                maxNodes: Math.max(0, totalTacticalBudget - usedNodes)
+                maxNodes: Math.max(0, Math.min(stageLimit, totalTacticalBudget - usedNodes))
             });
             usedNodes += result.nodes ?? 0;
             allComplete = allComplete && result.complete !== false;
             return result;
         };
 
-        const win = runBounded(options => findForcedWin(candidates, options));
+        const win = runBounded(options => findForcedWin(candidates, options), 600);
         if (win.moves.length) {
             return {
                 move: win.moves[0],
