@@ -382,6 +382,7 @@ test('forcing-sequence analysis never reports a win when its node budget is exha
     assert.deepEqual(result.moves, []);
     assert.equal(result.complete, false);
     assert.equal(result.nodes, 1);
+    assert.equal(result.workUnits, 1);
 });
 
 test('forcing-sequence analysis recognizes a terminal root-destruction win immediately', () => {
