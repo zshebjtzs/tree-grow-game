@@ -47,6 +47,7 @@ export class AIController {
         this.lastOffensiveAnalysis = null;
         this.lastSearchStats = null;
         this.lastTacticalSequenceStats = null;
+        this.lastPreparationWorkUnits = 0;
     }
 
     getBestMove(gameStateData, playerSide) {
@@ -75,7 +76,9 @@ export class AIController {
 
         this._emitProgress({ phase: 'generating', completedCandidates: 0, totalCandidates: 0 });
         const moves = this._generateMoves(game, playerSide, bases);
+        let preparationWorkUnits = moves.length + 1;
         if (!moves.length) {
+            this.lastPreparationWorkUnits = preparationWorkUnits;
             this.lastDecisionExplanation = this.adapter.createNoMoveExplanation();
             this._recordDecisionTiming(decisionStartedAt, decisionDeadline);
             this._emitProgress({ phase: 'complete', completedCandidates: 0, totalCandidates: 0 });
@@ -89,11 +92,9 @@ export class AIController {
             const nextState = this._simulateMove(
                 game, move, playerSide, bases, { alreadyValidated: true }
             );
-            ranked.push({
-                ...move,
-                score: this._scoreMove(game, move, playerSide, bases, nextState),
-                _nextState: nextState
-            });
+            const score = this._scoreMove(game, move, playerSide, bases, nextState);
+            preparationWorkUnits += 2;
+            ranked.push({ ...move, score, _nextState: nextState });
             if ((index + 1) % reportInterval === 0 || index + 1 === moves.length) {
                 this._emitProgress({
                     phase: 'evaluating',
@@ -103,6 +104,7 @@ export class AIController {
             }
         }
         ranked.sort((a, b) => b.score - a.score);
+        preparationWorkUnits += Math.max(1, moves.length * Math.ceil(Math.log2(Math.max(2, moves.length))));
         const advantageFactor = this.positionEvaluator.getAdvantageConversionFactor(
             game, playerSide, bases
         );
@@ -112,10 +114,12 @@ export class AIController {
         this.lastOffensiveAnalysis = this.offensiveStrategyAnalyzer.analyze(
             game, playerSide, ranked, { advantageFactor, riskFactor: disadvantageRiskFactor }
         );
+        preparationWorkUnits += moves.length + 2;
+        this.lastPreparationWorkUnits = preparationWorkUnits;
 
         const decision = this.decisionCoordinator.resolve({
             rankedMoves: ranked,
-            maxNodes: this.profile.maxNodes,
+            maxNodes: Math.max(0, this.profile.maxNodes - preparationWorkUnits),
             findImmediateWin: candidates =>
                 this.tacticalAnalyzer.findImmediateWinningMove(candidates, playerSide, bases),
             analyzeMandatoryDefense: (candidates, budget) => {
@@ -168,8 +172,8 @@ export class AIController {
                         shouldStop: () => this.searchEngine.now() >= decisionDeadline
                     }
                 ),
-            search: candidates => this._search(
-                game, candidates, playerSide, bases, decisionDeadline, decisionStartedAt
+            search: (candidates, budget) => this._search(
+                game, candidates, playerSide, bases, decisionDeadline, decisionStartedAt, budget.maxNodes
             )
         });
         const selectedMove = decision.move;
@@ -197,6 +201,9 @@ export class AIController {
         };
         this.lastSearchStats = {
             ...existing,
+            preparationWorkUnits: this.lastPreparationWorkUnits ?? 0,
+            totalWorkUnits: (this.lastPreparationWorkUnits ?? 0) + (existing.workUnits ?? 0) +
+                (this.lastTacticalSequenceStats?.totalNodes ?? 0),
             preparationMs: existing.preparationMs ?? Math.max(0, completedAt - decisionStartedAt),
             totalMs: Math.max(0, completedAt - decisionStartedAt),
             configuredTargetMs: this.profile.searchBudgetMs,
@@ -316,7 +323,7 @@ export class AIController {
             maxDepth: this.profile.maxDepth,
             timeBudgetMs: Math.max(0, sharedDeadline - searchStartedAt),
             deadline: sharedDeadline,
-            maxNodes: this.profile.maxNodes,
+            maxNodes,
             getPositionKey: state => {
                 let key = positionKeyCache.get(state);
                 if (key === undefined) {
@@ -367,6 +374,9 @@ export class AIController {
         this.lastSearchStats = {
             difficulty: this.difficulty,
             ...result,
+            preparationWorkUnits: this.lastPreparationWorkUnits ?? 0,
+            totalWorkUnits: (this.lastPreparationWorkUnits ?? 0) + (result.workUnits ?? 0) +
+                (this.lastTacticalSequenceStats?.totalNodes ?? 0),
             preparationMs: Math.max(0, searchStartedAt - decisionStartedAt),
             totalMs: Math.max(0, completedAt - decisionStartedAt),
             configuredTargetMs: this.profile.searchBudgetMs,
