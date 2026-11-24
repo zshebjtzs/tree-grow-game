@@ -44,7 +44,7 @@ export function analyzeExchangeOutcome(game, side, move, next) {
  * combat rules, prove non-forced lines, or assign speculative attack bonuses.
  */
 export class OffensiveStrategyAnalyzer {
-    analyze(game, side, moves, { advantageFactor = 0 } = {}) {
+    analyze(game, side, moves, { advantageFactor = 0, riskFactor = 0 } = {}) {
         const opportunities = [];
 
         for (const move of moves) {
@@ -86,6 +86,7 @@ export class OffensiveStrategyAnalyzer {
             bestNetNodeGain: Math.max(0, ...opportunities.map(item => item.netNodeGain)),
             bestNetRootGain: Math.max(0, ...opportunities.map(item => item.netRootGain)),
             advantageFactor,
+            disadvantageRiskFactor: riskFactor,
             opportunities: Object.freeze(highValueOpportunities.slice(0, 8))
         });
     }
