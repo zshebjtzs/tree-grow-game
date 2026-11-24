@@ -688,21 +688,32 @@ export class TacticalAnalyzer {
                 .map(item => item.move);
         }
 
-        // A live immediate-win threat is mandatory: retain only moves that
-        // minimize the number of remaining immediate winning replies.
-        const ranked = moves.map(move => {
+        // Analyze each resulting position once. The same reply simulations
+        // provide immediate-win, root-loss, total-loss, and cascade metrics.
+        const rootRisk = moves.map(move => {
             const next = move._nextState || simulateMove(game, move, side, bases);
-            if (!next) return { move, remainingThreats: Infinity };
-            const remainingThreats = !next.getPlayerRootNodes(side).length
-                ? Infinity
-                : next.isGameOver
-                    ? 0
-                    : analyze(next).immediateWinningMoves;
-            return { move, remainingThreats };
+            if (!next || !next.getPlayerRootNodes(side).length) {
+                return { move, immediateWinningMoves: Infinity, maxRootLoss: Infinity,
+                    rootLossReplies: Infinity, maxCascadeLoss: Infinity };
+            }
+            if (next.isGameOver) {
+                return { move, immediateWinningMoves: 0, maxRootLoss: 0,
+                    rootLossReplies: 0, maxCascadeLoss: 0 };
+            }
+            return { move, ...analyze(next) };
         });
-        const minimum = Math.min(...ranked.map(item => item.remainingThreats));
-        return ranked
-            .filter(item => item.remainingThreats === minimum)
+        const finiteRisk = rootRisk.filter(item => Number.isFinite(item.maxRootLoss));
+        if (!finiteRisk.length) return moves;
+
+        const minimumImmediateWins = Math.min(...finiteRisk.map(item => item.immediateWinningMoves));
+        const immediateSafe = finiteRisk.filter(item => item.immediateWinningMoves === minimumImmediateWins);
+        const minimumRootLoss = Math.min(...immediateSafe.map(item => item.maxRootLoss));
+        const rootSafe = immediateSafe.filter(item => item.maxRootLoss === minimumRootLoss);
+        const minimumRootLossReplies = Math.min(...rootSafe.map(item => item.rootLossReplies));
+        const rootStable = rootSafe.filter(item => item.rootLossReplies === minimumRootLossReplies);
+        const minimumCascadeLoss = Math.min(...rootStable.map(item => item.maxCascadeLoss));
+        return rootStable
+            .filter(item => item.maxCascadeLoss === minimumCascadeLoss)
             .map(item => item.move);
     }
 
