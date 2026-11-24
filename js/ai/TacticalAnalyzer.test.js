@@ -1029,18 +1029,27 @@ test('extended tactic checks the initial threat using the hypothetical attacker 
     afterCandidate.currentTurn = 'blue';
     const afterResponse = position();
     afterResponse.currentTurn = 'red';
+    const winningState = position({ blueRoots: 0, redRoots: 1, isGameOver: true });
     const candidate = { nextState: afterCandidate };
     const response = { nextState: afterResponse };
+    const hypotheticalWinningAttack = { targetAreaId: 8 };
     const observedTurns = [];
+    let simulatedThreat = false;
     const generateMoves = (state, side) => {
         if (state === afterCandidate && side === 'red') {
             observedTurns.push(state.currentTurn);
-            return [];
+            return [hypotheticalWinningAttack];
         }
         if (state === afterCandidate && side === 'blue') return [response];
         return [];
     };
-    const simulateMove = (_state, move) => move.nextState;
+    const simulateMove = (_state, move) => {
+        if (move === hypotheticalWinningAttack) {
+            simulatedThreat = true;
+            return winningState;
+        }
+        return move.nextState;
+    };
     const simulatePass = state => state;
 
     analyzer.findForcedTacticalSequenceInThreeMoves(
@@ -1050,6 +1059,8 @@ test('extended tactic checks the initial threat using the hypothetical attacker 
 
     assert.deepEqual(observedTurns, ['red'],
         'the threat probe must evaluate legal attacker moves, not defender-turn moves');
+    assert.equal(simulatedThreat, true,
+        'non-base attacks that destroy the final enemy root must be recognized as immediate wins');
     assert.equal(afterCandidate.currentTurn, 'blue',
         'hypothetical turn switching must be restored before defender reply enumeration');
 });
