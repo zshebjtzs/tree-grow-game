@@ -205,6 +205,8 @@ export class AIController {
             decisionReason: this.lastDecisionReason ?? null,
             immediateWinningMove: this.lastDecisionReason === 'immediate-win',
             tacticalSequenceNodes: this.lastTacticalSequenceStats?.nodes ?? 0,
+            totalTacticalNodes: this.lastTacticalSequenceStats?.totalNodes ?? 0,
+            mandatoryDefenseNodes: this.lastTacticalSequenceStats?.mandatoryDefenseNodes ?? 0,
             tacticalSequenceComplete: this.lastTacticalSequenceStats?.complete ?? true,
             tacticalDecisionComplete: this.lastTacticalSequenceStats?.complete !== false &&
                 this.lastTacticalSequenceStats?.defenseComplete !== false,
