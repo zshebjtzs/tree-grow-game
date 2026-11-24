@@ -70,7 +70,7 @@ If the two-action forced-win and material-gain proofs do not find a result, the 
 
 The proof shares the same per-decision 12,000-work-unit tactical ceiling with the shorter tactical analyzers. It returns no result if any branch is unexamined, any opponent reply can win immediately, or a transition is invalid. Its three attacker actions are a bounded tactical horizon, not an unrestricted multi-move solver.
 
-Telemetry includes `forcedTacticalSequenceInThreeMoves`, `counterattackSequence`, `inducementValidated`, `sacrificeValidated`, `tacticalOpponentAttackReplies`, `inducedDefensiveReplies`, and the guaranteed net gain/self-loss fields.
+Telemetry includes `forcedTacticalSequenceInThreeMoves`, `counterattackSequence`, `inducementValidated`, `sacrificeValidated`, `tacticalOpponentAttackReplies`, `inducedDefenseBranches`, and the guaranteed net gain/self-loss fields.
 
 ## SearchEngine boundary
 
