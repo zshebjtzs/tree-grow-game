@@ -1,6 +1,7 @@
 // js/ai/AIController.js
 import { SearchEngine } from './SearchEngine.js';
 import { OffensiveStrategyAnalyzer } from './OffensiveStrategyAnalyzer.js';
+import { StrategicDecisionCoordinator } from './StrategicDecisionCoordinator.js';
 import { getDifficultyProfile, DIFFICULTY_LEVELS } from './DifficultyProfiles.js';
 import { TreeGrowAIAdapter } from './TreeGrowAIAdapter.js';
 
@@ -42,6 +43,7 @@ export class AIController {
         this.positionEvaluator = this.adapter.positionEvaluator;
         this.searchEngine = new SearchEngine();
         this.offensiveStrategyAnalyzer = new OffensiveStrategyAnalyzer();
+        this.decisionCoordinator = new StrategicDecisionCoordinator();
         this.lastOffensiveAnalysis = null;
         this.lastSearchStats = null;
         this.lastTacticalSequenceStats = null;
@@ -104,148 +106,74 @@ export class AIController {
         const advantageFactor = this.positionEvaluator.getAdvantageConversionFactor(
             game, playerSide, bases
         );
+        const disadvantageRiskFactor = this.positionEvaluator.getDisadvantageRiskFactor(
+            game, playerSide, bases
+        );
         this.lastOffensiveAnalysis = this.offensiveStrategyAnalyzer.analyze(
-            game, playerSide, ranked, { advantageFactor }
+            game, playerSide, ranked, { advantageFactor, riskFactor: disadvantageRiskFactor }
         );
 
-        let selectedMove = this.tacticalAnalyzer.findImmediateWinningMove(ranked, playerSide, bases);
-        let selectionReason = selectedMove ? 'immediate-win' : 'profile-selection';
-
-        if (!selectedMove) {
-            this._emitProgress({ phase: 'tactics' });
-            // When the opponent has a one-move win, prefer actions that eliminate
-            // the threat. If no action fully defends, minimize the remaining wins.
-            const defenseResult = this.tacticalAnalyzer.findMandatoryDefenses(
-                game, ranked, playerSide, bases,
-                (state, move, side, matchBases) => this._simulateMove(
-                    state, move, side, matchBases, { alreadyValidated: true }
-                ),
-                (state, side, matchBases) => this._generateMoves(state, side, matchBases)
-            );
-            // Root/cascade risk remains part of search evaluation. Only filter
-            // candidates when the opponent currently has an immediate winning move.
-            const tacticallyRanked = defenseResult.hasImmediateThreat
-                ? defenseResult.moves
-                : ranked;
-            if (defenseResult.hasImmediateThreat && tacticallyRanked.length < ranked.length) {
-                selectionReason = 'defense-priority';
-            }
-
-            const sequenceResult = this.tacticalAnalyzer.findForcedWinInTwoMoves(
-                game,
-                tacticallyRanked,
-                playerSide,
-                bases,
-                (state, move, side, matchBases) => this._simulateMove(
-                    state, move, side, matchBases, { alreadyValidated: true }
-                ),
-                (state, side, matchBases) => this._generateMoves(state, side, matchBases),
-                (state, side) => this._simulatePass(state, side),
-                {
-                    maxNodes: Math.min(600, this.profile.maxNodes),
-                    shouldStop: () => this.searchEngine.now() >= decisionDeadline
-                }
-            );
-            this.lastTacticalSequenceStats = {
-                nodes: sequenceResult.nodes,
-                complete: sequenceResult.complete,
-                forcedWin: sequenceResult.moves.length > 0
-            };
-
-            if (sequenceResult.moves.length) {
-                selectedMove = sequenceResult.moves[0];
-                selectionReason = 'forced-sequence-win';
-                this.lastTacticalSequenceStats = {
-                    ...this.lastTacticalSequenceStats,
-                    nodes: sequenceResult.nodes,
-                    complete: sequenceResult.complete,
-                    forcedWin: true
-                };
-            } else {
-                const materialResult = this.tacticalAnalyzer.findForcedMaterialGainInTwoMoves(
-                    game,
-                    tacticallyRanked,
-                    playerSide,
-                    bases,
+        const decision = this.decisionCoordinator.resolve({
+            rankedMoves: ranked,
+            maxNodes: this.profile.maxNodes,
+            findImmediateWin: candidates =>
+                this.tacticalAnalyzer.findImmediateWinningMove(candidates, playerSide, bases),
+            analyzeMandatoryDefense: candidates => {
+                this._emitProgress({ phase: 'tactics' });
+                return this.tacticalAnalyzer.findMandatoryDefenses(
+                    game, candidates, playerSide, bases,
+                    (state, move, side, matchBases) => this._simulateMove(
+                        state, move, side, matchBases, { alreadyValidated: true }
+                    ),
+                    (state, side, matchBases) => this._generateMoves(state, side, matchBases)
+                );
+            },
+            findForcedWin: (candidates, budget) =>
+                this.tacticalAnalyzer.findForcedWinInTwoMoves(
+                    game, candidates, playerSide, bases,
                     (state, move, side, matchBases) => this._simulateMove(
                         state, move, side, matchBases, { alreadyValidated: true }
                     ),
                     (state, side, matchBases) => this._generateMoves(state, side, matchBases),
                     (state, side) => this._simulatePass(state, side),
                     {
-                        maxNodes: Math.max(0, Math.min(1200, this.profile.maxNodes) - sequenceResult.nodes),
+                        maxNodes: Math.min(600, budget.maxNodes),
                         shouldStop: () => this.searchEngine.now() >= decisionDeadline
                     }
-                );
-                this.lastTacticalSequenceStats = {
-                    nodes: sequenceResult.nodes + materialResult.nodes,
-                    complete: sequenceResult.complete && materialResult.complete,
-                    forcedWin: false,
-                    forcedMaterialGain: materialResult.moves.length > 0,
-                    guaranteedRootLoss: materialResult.guaranteedRootLoss,
-                    guaranteedCascadeLoss: materialResult.guaranteedCascadeLoss,
-                    guaranteedNodeLoss: materialResult.guaranteedNodeLoss
-                };
-
-                if (materialResult.moves.length) {
-                    selectedMove = materialResult.moves[0];
-                    selectionReason = 'forced-material-gain';
-                } else {
-                    const extendedResult = this.tacticalAnalyzer.findForcedTacticalSequenceInThreeMoves(
-                        game,
-                        tacticallyRanked,
-                        playerSide,
-                        bases,
-                        (state, move, side, matchBases) => this._simulateMove(
-                            state, move, side, matchBases, { alreadyValidated: true }
-                        ),
-                        (state, side, matchBases) => this._generateMoves(state, side, matchBases),
-                        (state, side) => this._simulatePass(state, side),
-                        {
-                            maxNodes: Math.max(
-                                0,
-                                Math.min(1200, this.profile.maxNodes) -
-                                    sequenceResult.nodes - materialResult.nodes
-                            ),
-                            shouldStop: () => this.searchEngine.now() >= decisionDeadline
-                        }
-                    );
-                    this.lastTacticalSequenceStats = {
-                        nodes: sequenceResult.nodes + materialResult.nodes + extendedResult.nodes,
-                        complete: sequenceResult.complete && materialResult.complete && extendedResult.complete,
-                        forcedWin: false,
-                        forcedMaterialGain: false,
-                        forcedTacticalSequence: extendedResult.moves.length > 0,
-                        counterattackSequence: extendedResult.moves.length > 0 &&
-                            extendedResult.opponentAttackReplies > 0,
-                        inducementValidated: extendedResult.inducementValidated,
-                        inducedDefensiveReplies: extendedResult.inducedDefensiveReplies,
-                        sacrificeValidated: extendedResult.sacrificeValidated,
-                        opponentAttackReplies: extendedResult.opponentAttackReplies,
-                        guaranteedSelfLoss: extendedResult.guaranteedSelfLoss,
-                        guaranteedRootLoss: extendedResult.guaranteedRootLoss,
-                        guaranteedCascadeLoss: extendedResult.guaranteedCascadeLoss,
-                        guaranteedNodeLoss: extendedResult.guaranteedNodeGain
-                    };
-
-                    if (extendedResult.moves.length) {
-                        selectedMove = extendedResult.moves[0];
-                        selectionReason = extendedResult.sacrificeValidated
-                            ? 'validated-tactical-sacrifice'
-                            : extendedResult.opponentAttackReplies > 0
-                                ? 'forced-counterattack-sequence'
-                                : extendedResult.inducementValidated
-                                    ? 'validated-tactical-inducement'
-                                    : 'forced-three-move-sequence';
-                    } else {
-                        selectedMove = this._search(
-                            game, tacticallyRanked, playerSide, bases, decisionDeadline, decisionStartedAt
-                        );
-                        if (selectionReason !== 'defense-priority') selectionReason = 'search-selection';
+                ),
+            findForcedMaterialGain: (candidates, budget) =>
+                this.tacticalAnalyzer.findForcedMaterialGainInTwoMoves(
+                    game, candidates, playerSide, bases,
+                    (state, move, side, matchBases) => this._simulateMove(
+                        state, move, side, matchBases, { alreadyValidated: true }
+                    ),
+                    (state, side, matchBases) => this._generateMoves(state, side, matchBases),
+                    (state, side) => this._simulatePass(state, side),
+                    {
+                        maxNodes: budget.maxNodes,
+                        shouldStop: () => this.searchEngine.now() >= decisionDeadline
                     }
-                }
-            }
-        }
+                ),
+            findExtendedTactic: (candidates, budget) =>
+                this.tacticalAnalyzer.findForcedTacticalSequenceInThreeMoves(
+                    game, candidates, playerSide, bases,
+                    (state, move, side, matchBases) => this._simulateMove(
+                        state, move, side, matchBases, { alreadyValidated: true }
+                    ),
+                    (state, side, matchBases) => this._generateMoves(state, side, matchBases),
+                    (state, side) => this._simulatePass(state, side),
+                    {
+                        maxNodes: budget.maxNodes,
+                        shouldStop: () => this.searchEngine.now() >= decisionDeadline
+                    }
+                ),
+            search: candidates => this._search(
+                game, candidates, playerSide, bases, decisionDeadline, decisionStartedAt
+            )
+        });
+        const selectedMove = decision.move;
+        const selectionReason = decision.reason;
+        this.lastTacticalSequenceStats = decision.tacticalStats;
 
         this._recordDecisionTiming(decisionStartedAt, decisionDeadline);
         this.lastDecisionExplanation = this._createDecisionExplanation(
@@ -298,7 +226,8 @@ export class AIController {
             offensiveBestNetNodeGain: this.lastOffensiveAnalysis?.bestNetNodeGain ?? 0,
             offensiveBestNetRootGain: this.lastOffensiveAnalysis?.bestNetRootGain ?? 0,
             offensiveNegativeExchangeCount: this.lastOffensiveAnalysis?.negativeExchangeCount ?? 0,
-            advantageConversionFactor: this.lastOffensiveAnalysis?.advantageFactor ?? 0
+            advantageConversionFactor: this.lastOffensiveAnalysis?.advantageFactor ?? 0,
+            disadvantageRiskFactor: this.lastOffensiveAnalysis?.disadvantageRiskFactor ?? 0
         };
     }
 
