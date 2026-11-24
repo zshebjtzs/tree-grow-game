@@ -88,3 +88,30 @@ test('tactical analyzers share one bounded node allowance in strict priority ord
     assert.equal(result.tacticalStats.nodes, 1200);
     assert.equal(result.tacticalStats.complete, false);
 });
+
+
+test('incomplete mandatory-defense scan keeps the full candidate set', () => {
+    const coordinator = new StrategicDecisionCoordinator();
+    const legal = [{ id: 'a' }, { id: 'b' }];
+    let tacticalCandidates;
+    const result = coordinator.resolve(callbacks({
+        rankedMoves: legal,
+        analyzeMandatoryDefense: moves => ({
+            moves: [moves[0]],
+            hasImmediateThreat: true,
+            nodes: 4,
+            complete: false
+        }),
+        findForcedWin: moves => {
+            tacticalCandidates = moves;
+            return { moves: [], nodes: 0, complete: false };
+        },
+        findForcedMaterialGain: () => ({ moves: [], nodes: 0, complete: false }),
+        findExtendedTactic: () => ({ moves: [], nodes: 0, complete: false }),
+        search: moves => moves[1]
+    }));
+    assert.deepEqual(tacticalCandidates, legal);
+    assert.equal(result.move, legal[1]);
+    assert.equal(result.tacticalStats.defenseComplete, false);
+    assert.equal(result.tacticalStats.complete, false);
+});
