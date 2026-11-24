@@ -45,9 +45,12 @@ export class StrategicDecisionCoordinator {
         usedWorkUnits += defenseWorkUnits;
         const candidates = defense.complete === false
             ? rankedMoves
-            : defense.hasImmediateThreat ? defense.moves : rankedMoves;
+            : defense.moves;
         const defensePriority = defense.complete !== false &&
             defense.hasImmediateThreat && candidates.length < rankedMoves.length;
+        const defenseRiskOrdered = defense.complete !== false &&
+            !defense.hasImmediateThreat &&
+            candidates.some((move, index) => move !== rankedMoves[index]);
 
         const makeStats = (overrides = {}) => ({
             ...emptyStats,
@@ -136,7 +139,8 @@ export class StrategicDecisionCoordinator {
             move: search(candidates, {
                 maxNodes: Math.max(0, maxNodes - usedWorkUnits)
             }),
-            reason: defensePriority ? 'defense-priority' : 'search-selection',
+            reason: defensePriority ? 'defense-priority' :
+                defenseRiskOrdered ? 'defense-risk-order' : 'search-selection',
             candidates,
             defense,
             tacticalStats: makeStats()
