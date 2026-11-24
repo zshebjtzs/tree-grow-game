@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { GameState } from '../game/GameState.js';
 import { TreeGrowAIAdapter } from './TreeGrowAIAdapter.js';
 import { getDifficultyProfile } from './DifficultyProfiles.js';
+import { StrategicPhaseDetector } from './StrategicPhaseDetector.js';
 
 function createAdapter(adjacency, areaCount = 12) {
     return new TreeGrowAIAdapter({
@@ -104,4 +105,31 @@ test('multi-root coordination rewards independent active root frontiers', () => 
     assert.equal(analysis.position.activeRoots, 2);
     assert.ok(analysis.position.multiRootCoordination > 0);
     assert.ok(analysis.spatialScore >= 0);
+});
+
+
+test('phase detector exposes root safety and distinct attack-defense transitions', () => {
+    const detector = new StrategicPhaseDetector();
+    const defensive = detector.detect({
+        expansionPotential: 0.4,
+        defensivePressure: 0.8,
+        rootSafety: 0.2,
+        siegePressure: 0.3,
+        multiRootCoordination: 0.5,
+        tacticalPressure: 0.1,
+        frontierControl: 0.2
+    });
+    assert.equal(defensive.rootSafety, 0.2);
+    assert.ok(defensive.defenseTransition > defensive.attackTransition);
+
+    const attacking = detector.detect({
+        expansionPotential: 0.5,
+        defensivePressure: 0.1,
+        rootSafety: 0.9,
+        siegePressure: 0.8,
+        multiRootCoordination: 0.4,
+        tacticalPressure: 0.95,
+        frontierControl: 0.7
+    });
+    assert.ok(attacking.attackTransition > attacking.defenseTransition);
 });
