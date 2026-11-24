@@ -29,7 +29,8 @@ export class AIController {
             typeof this.adapter.positionEvaluator?.evaluateState !== 'function' ||
             typeof this.adapter.tacticalAnalyzer?.findImmediateWinningMove !== 'function' ||
             typeof this.adapter.tacticalAnalyzer?.rankDefenses !== 'function' ||
-            typeof this.adapter.tacticalAnalyzer?.findForcedWinInTwoMoves !== 'function') {
+            typeof this.adapter.tacticalAnalyzer?.findForcedWinInTwoMoves !== 'function' ||
+            typeof this.adapter.tacticalAnalyzer?.findForcedTacticalSequenceInThreeMoves !== 'function') {
             throw new TypeError('AI 适配器接口无效');
         }
 
@@ -49,8 +50,10 @@ export class AIController {
         this.lastSearchStats = null;
         this.lastTacticalSequenceStats = {
             nodes: 0, complete: true, forcedWin: false,
-            forcedMaterialGain: false, guaranteedRootLoss: 0,
-            guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0
+            forcedMaterialGain: false, forcedTacticalSequence: false,
+            counterattackSequence: false, sacrificeValidated: false,
+            opponentAttackReplies: 0, guaranteedSelfLoss: 0,
+            guaranteedRootLoss: 0, guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0
         };
         this.lastDecisionExplanation = null;
         // One deadline covers state preparation, tactical filtering, and search.
@@ -171,10 +174,54 @@ export class AIController {
                     selectedMove = materialResult.moves[0];
                     selectionReason = 'forced-material-gain';
                 } else {
-                    selectedMove = this._search(
-                        game, tacticallyRanked, playerSide, bases, decisionDeadline, decisionStartedAt
+                    const extendedResult = this.tacticalAnalyzer.findForcedTacticalSequenceInThreeMoves(
+                        game,
+                        tacticallyRanked,
+                        playerSide,
+                        bases,
+                        (state, move, side, matchBases) => this._simulateMove(
+                            state, move, side, matchBases, { alreadyValidated: true }
+                        ),
+                        (state, side, matchBases) => this._generateMoves(state, side, matchBases),
+                        (state, side) => this._simulatePass(state, side),
+                        {
+                            maxNodes: Math.max(
+                                0,
+                                Math.min(1200, this.profile.maxNodes) -
+                                    sequenceResult.nodes - materialResult.nodes
+                            ),
+                            shouldStop: () => this.searchEngine.now() >= decisionDeadline
+                        }
                     );
-                    if (selectionReason !== 'defense-priority') selectionReason = 'search-selection';
+                    this.lastTacticalSequenceStats = {
+                        nodes: sequenceResult.nodes + materialResult.nodes + extendedResult.nodes,
+                        complete: sequenceResult.complete && materialResult.complete && extendedResult.complete,
+                        forcedWin: false,
+                        forcedMaterialGain: false,
+                        forcedTacticalSequence: extendedResult.moves.length > 0,
+                        counterattackSequence: extendedResult.moves.length > 0 &&
+                            extendedResult.opponentAttackReplies > 0,
+                        sacrificeValidated: extendedResult.sacrificeValidated,
+                        opponentAttackReplies: extendedResult.opponentAttackReplies,
+                        guaranteedSelfLoss: extendedResult.guaranteedSelfLoss,
+                        guaranteedRootLoss: extendedResult.guaranteedRootLoss,
+                        guaranteedCascadeLoss: extendedResult.guaranteedCascadeLoss,
+                        guaranteedNodeLoss: extendedResult.guaranteedNodeGain
+                    };
+
+                    if (extendedResult.moves.length) {
+                        selectedMove = extendedResult.moves[0];
+                        selectionReason = extendedResult.sacrificeValidated
+                            ? 'validated-tactical-sacrifice'
+                            : extendedResult.opponentAttackReplies > 0
+                                ? 'forced-counterattack-sequence'
+                                : 'forced-three-move-sequence';
+                    } else {
+                        selectedMove = this._search(
+                            game, tacticallyRanked, playerSide, bases, decisionDeadline, decisionStartedAt
+                        );
+                        if (selectionReason !== 'defense-priority') selectionReason = 'search-selection';
+                    }
                 }
             }
         }
@@ -209,7 +256,12 @@ export class AIController {
             forcedMaterialGainInTwoMoves: this.lastTacticalSequenceStats?.forcedMaterialGain ?? false,
             guaranteedTacticalRootLoss: this.lastTacticalSequenceStats?.guaranteedRootLoss ?? 0,
             guaranteedTacticalCascadeLoss: this.lastTacticalSequenceStats?.guaranteedCascadeLoss ?? 0,
-            guaranteedTacticalNodeLoss: this.lastTacticalSequenceStats?.guaranteedNodeLoss ?? 0
+            guaranteedTacticalNodeLoss: this.lastTacticalSequenceStats?.guaranteedNodeLoss ?? 0,
+            forcedTacticalSequenceInThreeMoves: this.lastTacticalSequenceStats?.forcedTacticalSequence ?? false,
+            counterattackSequence: this.lastTacticalSequenceStats?.counterattackSequence ?? false,
+            sacrificeValidated: this.lastTacticalSequenceStats?.sacrificeValidated ?? false,
+            tacticalOpponentAttackReplies: this.lastTacticalSequenceStats?.opponentAttackReplies ?? 0,
+            guaranteedTacticalSelfLoss: this.lastTacticalSequenceStats?.guaranteedSelfLoss ?? 0
         };
     }
 
