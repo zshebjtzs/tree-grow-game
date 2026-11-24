@@ -139,6 +139,10 @@ Mandatory-defense analysis now runs for every root position. If the opponent has
 
 Root structural exposure also counts the full descendant subtree below a vulnerable first branch. A fork does not protect its descendants: authoritative combat deletion removes every descendant of the attacked node.
 
+Candidate move scoring checks legal enemy attacks against every attackable ancestor on the newly grown node's parent chain, not only direct recapture of the new leaf. This reflects the combat rule that attacking an ancestor can remove the new branch as collateral. Recapture penalties partition direct-target, cascade, and root losses so each removed node is charged once, with an additional strategic premium for root loss.
+
+The extended tactical proof generates its hypothetical initial attacker threats with the attacker as side-to-move, restores the real defender turn before enumerating replies, and simulates attacks to detect wins caused by destroying the opponent's final root. A direct base-entry check alone is insufficient for this game rule.
+
 Telemetry includes `offensiveCandidateCount`, `offensiveAttackCandidateCount`, `offensiveHighValueAttackCount`, `offensiveRootAttackCount`, `offensiveCascadeAttackCount`, `offensiveImmediateWinCount`, `offensiveMaxEnemyNodeLoss`, and `offensiveMaxEnemyRootLoss`.
 
 
