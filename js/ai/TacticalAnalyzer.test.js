@@ -413,3 +413,123 @@ test('immediate-win scan recognizes an attack that destroys the opponent final r
         move
     );
 });
+
+
+function materialState({ turn = 'red', blueNodes = [], redNodes = [], isGameOver = false } = {}) {
+    return {
+        currentTurn: turn,
+        isGameOver,
+        getAliveNodesByOwner(side) {
+            return side === 'blue' ? blueNodes : redNodes;
+        },
+        getPlayerRootNodes(side) {
+            return (side === 'blue' ? blueNodes : redNodes).filter(node => node.isRoot);
+        }
+    };
+}
+
+test('forced material-gain analysis requires a qualifying attack after every opponent reply', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = materialState({ turn: 'red' });
+    const afterCandidate = materialState({ turn: 'blue' });
+    const afterReplyA = materialState({
+        turn: 'red',
+        blueNodes: [
+            { id: 1, areaId: 1, isRoot: true },
+            { id: 2, areaId: 2, isRoot: false },
+            { id: 3, areaId: 3, isRoot: false },
+            { id: 4, areaId: 4, isRoot: false }
+        ]
+    });
+    const afterReplyB = materialState({
+        turn: 'red',
+        blueNodes: [
+            { id: 11, areaId: 1, isRoot: true },
+            { id: 12, areaId: 2, isRoot: false },
+            { id: 13, areaId: 3, isRoot: false },
+            { id: 14, areaId: 4, isRoot: false }
+        ]
+    });
+    const afterAttack = materialState({
+        turn: 'blue',
+        blueNodes: [{ id: 1, areaId: 1, isRoot: true }],
+        redNodes: [{ id: 20, areaId: 6, isRoot: true }]
+    });
+    const candidate = { parentNodeId: 20, targetAreaId: 5, _nextState: afterCandidate };
+    const replies = [
+        { targetAreaId: 7, nextState: afterReplyA },
+        { targetAreaId: 8, nextState: afterReplyB }
+    ];
+    const result = analyzer.findForcedMaterialGainInTwoMoves(
+        root, [candidate], 'red', { red: 6, blue: 1 },
+        (_state, move) => move.nextState,
+        (state, side) => side === 'blue'
+            ? replies
+            : [{ attacks: true, targetAreaId: 2, nextState: afterAttack }],
+        state => state
+    );
+
+    assert.deepEqual(result.moves, [candidate]);
+    assert.equal(result.complete, true);
+    assert.equal(result.guaranteedRootLoss, 0);
+    assert.equal(result.guaranteedCascadeLoss, 2);
+    assert.equal(result.guaranteedNodeLoss, 3);
+});
+
+test('forced material-gain analysis rejects a candidate if one opponent reply removes the tactical continuation', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = materialState({ turn: 'red' });
+    const afterCandidate = materialState({ turn: 'blue' });
+    const threatenedPosition = materialState({
+        turn: 'red',
+        blueNodes: [{ id: 1, areaId: 1, isRoot: true }]
+    });
+    const safePosition = materialState({
+        turn: 'red',
+        blueNodes: [
+            { id: 1, areaId: 1, isRoot: true },
+            { id: 2, areaId: 2, isRoot: false },
+            { id: 3, areaId: 3, isRoot: false },
+            { id: 4, areaId: 4, isRoot: false }
+        ]
+    });
+    const afterAttack = materialState({
+        turn: 'blue',
+        blueNodes: [{ id: 1, areaId: 1, isRoot: true }]
+    });
+    const candidate = { parentNodeId: 20, targetAreaId: 5, _nextState: afterCandidate };
+
+    const result = analyzer.findForcedMaterialGainInTwoMoves(
+        root, [candidate], 'red', { red: 6, blue: 1 },
+        (_state, move) => move.nextState,
+        (state, side) => side === 'blue'
+            ? [
+                { targetAreaId: 7, nextState: safePosition },
+                { targetAreaId: 8, nextState: threatenedPosition }
+            ]
+            : [{ attacks: true, targetAreaId: 2, nextState: afterAttack }],
+        state => state
+    );
+
+    assert.deepEqual(result.moves, []);
+    assert.equal(result.complete, true);
+});
+
+test('forced material-gain analysis never promotes an unexamined reply after budget exhaustion', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = materialState({ turn: 'red' });
+    const afterCandidate = materialState({ turn: 'blue' });
+    const candidate = { parentNodeId: 20, targetAreaId: 5, _nextState: afterCandidate };
+
+    const result = analyzer.findForcedMaterialGainInTwoMoves(
+        root, [candidate], 'red', { red: 6, blue: 1 },
+        () => null,
+        () => [{ targetAreaId: 7 }],
+        state => state,
+        { maxNodes: 1 }
+    );
+
+    assert.deepEqual(result.moves, []);
+    assert.equal(result.complete, false);
+    assert.equal(result.nodes, 1);
+});
