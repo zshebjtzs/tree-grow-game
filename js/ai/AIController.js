@@ -194,6 +194,8 @@ export class AIController {
 
     _recordDecisionTiming(decisionStartedAt, deadline) {
         const completedAt = this.searchEngine.now();
+        const totalMs = Math.max(0, completedAt - decisionStartedAt);
+        const targetLatencyExceeded = totalMs > this.profile.searchBudgetMs;
         const existing = this.lastSearchStats || {
             difficulty: this.difficulty,
             nodes: 0,
@@ -208,10 +210,13 @@ export class AIController {
             totalWorkUnits: (this.lastPreparationWorkUnits ?? 0) + (existing.workUnits ?? 0) +
                 (this.lastTacticalSequenceStats?.totalWorkUnits ?? this.lastTacticalSequenceStats?.totalNodes ?? 0),
             preparationMs: existing.preparationMs ?? Math.max(0, completedAt - decisionStartedAt),
-            totalMs: Math.max(0, completedAt - decisionStartedAt),
+            totalMs,
             configuredTargetMs: this.profile.searchBudgetMs,
             deadlineMs: this.profile.searchBudgetMs,
-            deadlineExceeded: false,
+            targetLatencyExceeded,
+            // Backward-compatible alias used by existing benchmark reports.
+            // This reports target overruns; it does not mean the search was aborted.
+            deadlineExceeded: targetLatencyExceeded,
             decisionReason: this.lastDecisionReason ?? null,
             immediateWinningMove: this.lastDecisionReason === 'immediate-win',
             tacticalSequenceNodes: this.lastTacticalSequenceStats?.nodes ?? 0,
@@ -377,6 +382,8 @@ export class AIController {
             }
         });
         const completedAt = this.searchEngine.now();
+        const totalMs = Math.max(0, completedAt - decisionStartedAt);
+        const targetLatencyExceeded = totalMs > this.profile.searchBudgetMs;
         this.lastSearchStats = {
             difficulty: this.difficulty,
             ...result,
@@ -384,10 +391,11 @@ export class AIController {
             totalWorkUnits: (this.lastPreparationWorkUnits ?? 0) + (result.workUnits ?? 0) +
                 (this.lastTacticalSequenceStats?.totalWorkUnits ?? 0),
             preparationMs: Math.max(0, searchStartedAt - decisionStartedAt),
-            totalMs: Math.max(0, completedAt - decisionStartedAt),
+            totalMs,
             configuredTargetMs: this.profile.searchBudgetMs,
             deadlineMs: this.profile.searchBudgetMs,
-            deadlineExceeded: false
+            targetLatencyExceeded,
+            deadlineExceeded: targetLatencyExceeded
         };
         return result.move || rootMoves[0];
     }
