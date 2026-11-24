@@ -482,3 +482,56 @@ test('minimax evaluation recognizes comeback initiative only when the side is be
     assert.equal(initiativeAhead, quietAhead,
         'the comeback bonus must remain inactive when the evaluated side is ahead');
 });
+
+
+test('root safety and root-chain penalties use each side own strategic weights', () => {
+    const evaluator = Object.create(PositionEvaluator.prototype);
+    evaluator.evaluationCache = new WeakMap();
+    evaluator.profile = {
+        disadvantageRiskThreshold: 250,
+        disadvantageRiskScale: 1500,
+        disadvantageTacticalPotentialWeight: 0,
+        disadvantageSiegePotentialWeight: 0
+    };
+    evaluator.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
+    evaluator.distanceToBase = () => Infinity;
+    evaluator.getStructuralMetrics = (_game, side) => side === 'red'
+        ? {
+            unsafeRoots: 1, rootChainRisk: 3, growthHeadroom: 0,
+            baseThreatCount: 0, siegePreFortressCount: 0,
+            siegeFortressCount: 0, softDistanceToBase: Infinity
+        }
+        : {
+            unsafeRoots: 1, rootChainRisk: 2, growthHeadroom: 0,
+            baseThreatCount: 0, siegePreFortressCount: 0,
+            siegeFortressCount: 0, softDistanceToBase: Infinity
+        };
+    evaluator.getStrategicAnalysis = (_game, side) => ({
+        weights: {
+            softDistanceWeight: 0,
+            rootSafetyWeight: side === 'red' ? 10 : 100,
+            rootChainRiskWeight: side === 'red' ? 5 : 50,
+            growthHeadroomWeight: 0,
+            baseThreatWeight: 0,
+            siegePreparationWeight: 0,
+            siegeFortressWeight: 0,
+            structureWeight: 0
+        },
+        position: { tacticalPressure: 0, siegePressure: 0 },
+        spatialScore: 0
+    });
+    evaluator._structureValue = () => 0;
+
+    const game = {
+        isGameOver: false,
+        getPlayerRootNodes: () => [{ id: 1 }],
+        getAliveNodesByOwner: () => [{ id: 1 }]
+    };
+
+    // Enemy exposure is positive at enemy-side weights (100 + 2*50);
+    // own exposure is negative at own-side weights (10 + 3*5).
+    assert.equal(
+        evaluator.evaluateState(game, 'red', { red: 1, blue: 50 }),
+        175
+    );
+});
