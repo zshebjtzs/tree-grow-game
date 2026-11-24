@@ -9,10 +9,13 @@ export class StrategicPhaseDetector {
         const signals = {
             expansion: this._clamp(position.expansionPotential),
             defense: this._clamp(position.defensivePressure),
+            rootSafety: this._clamp(position.rootSafety),
             siege: this._clamp(position.siegePressure),
             multiRoot: this._clamp(position.multiRootCoordination),
             tactical: this._clamp(position.tacticalPressure),
-            frontier: this._clamp(position.frontierControl)
+            frontier: this._clamp(position.frontierControl),
+            attackTransition: this._clamp(position.tacticalPressure - position.defensivePressure * 0.65),
+            defenseTransition: this._clamp(position.defensivePressure - position.tacticalPressure * 0.5)
         };
         const dominant = Object.entries(signals)
             .filter(([, value]) => value >= 0.35)
