@@ -198,7 +198,7 @@ export class TreeGrowAIAdapter {
             forcedTacticalSequenceInThreeMoves: searchStats.forcedTacticalSequenceInThreeMoves ?? false,
             counterattackSequence: searchStats.counterattackSequence ?? false,
             inducementValidated: searchStats.inducementValidated ?? false,
-            inducedDefensiveReplies: searchStats.inducedDefensiveReplies ?? 0,
+            inducedDefenseBranches: searchStats.inducedDefenseBranches ?? 0,
             sacrificeValidated: searchStats.sacrificeValidated ?? false,
             tacticalOpponentAttackReplies: searchStats.tacticalOpponentAttackReplies ?? 0,
             guaranteedTacticalSelfLoss: searchStats.guaranteedTacticalSelfLoss ?? 0,
