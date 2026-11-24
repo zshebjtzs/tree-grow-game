@@ -231,10 +231,10 @@ export class AIController {
             }
         }
 
+        this._recordDecisionTiming(decisionStartedAt, decisionDeadline);
         this.lastDecisionExplanation = this._createDecisionExplanation(
             game, selectedMove, playerSide, bases, ranked, selectionReason
         );
-        this._recordDecisionTiming(decisionStartedAt, decisionDeadline);
         this._emitProgress({ phase: 'complete', completedCandidates: moves.length, totalCandidates: moves.length });
         return this.adapter.toPublicMove(selectedMove);
     }
