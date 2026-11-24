@@ -21,7 +21,7 @@ A mode adapter supplied to `AIController` must provide:
 - Match metadata: `getBases`.
 - Search identity: `getPositionKey`, `getMoveKey`.
 - Rules and transitions: `generateMoves`, `simulateMove`, `simulatePass`.
-- Evaluation and tactics: `positionEvaluator.scoreMove`, `positionEvaluator.evaluateState`, `tacticalAnalyzer.findImmediateWinningMove`, `tacticalAnalyzer.rankDefenses`, `tacticalAnalyzer.findForcedWinInTwoMoves`.
+- Evaluation and tactics: `positionEvaluator.scoreMove`, `positionEvaluator.evaluateState`, `tacticalAnalyzer.findImmediateWinningMove`, `tacticalAnalyzer.rankDefenses`, `tacticalAnalyzer.findForcedWinInTwoMoves`, `tacticalAnalyzer.findForcedMaterialGainInTwoMoves`.
 - Presentation boundary: `toPublicMove`, `createDecisionExplanation`, `createNoMoveExplanation`.
 - Topology/evaluation support: `distanceToBase`.
 
@@ -38,6 +38,20 @@ Before general search, the controller runs a bounded AND/OR proof for a two-turn
 A candidate is accepted only when every opponent reply preserves an immediate win. This distinguishes a genuine forcing combination from simply counting multiple apparent threats. A node cap and the shared decision deadline bound the analysis; budget exhaustion is reported and never treated as proof. The analysis may discover cooperation between different roots because the continuation is generated from the complete side-to-move position rather than being restricted to the original parent node.
 
 The result is exposed through `lastSearchStats.tacticalSequenceNodes`, `tacticalSequenceComplete`, and `forcedWinInTwoMoves`. It is a bounded tactical capability, not a general multi-move mate solver.
+
+## Forced material-gain analysis
+
+If no forced win is proven, the controller performs a second bounded AND/OR pass using the remaining tactical node budget:
+
+1. Apply a candidate action and enumerate every legal opponent reply (or the authoritative pass transition).
+2. For each reply, inspect the AI's legal attacking continuations.
+3. Simulate each attack with the authoritative combat rules and measure enemy root loss and cascade loss.
+4. Require every opponent reply to leave at least one continuation that destroys an enemy root or at least two non-root descendants. A single isolated leaf loss is deliberately insufficient.
+5. Rank qualifying candidates by their worst-case guaranteed root loss, then cascade loss, then total node loss.
+
+An opponent reply that wins immediately, a missing continuation, an invalid transition, or an exhausted node/deadline budget prevents the candidate from being reported as a proven gain. The forced-win and material-gain checks share a maximum tactical node allowance of 1,200 per decision; each is bounded and the second receives only the remainder.
+
+Telemetry is exposed as `forcedMaterialGainInTwoMoves`, `guaranteedTacticalRootLoss`, `guaranteedTacticalCascadeLoss`, and `guaranteedTacticalNodeLoss`. This remains a deliberately narrow two-turn tactical proof, not a general-purpose combination solver.
 
 ## SearchEngine boundary
 
@@ -69,7 +83,7 @@ The current six levels are:
 | hard | 7 | 700 ms | 30,000 |
 | expert | 8 | 1,200 ms | 60,000 |
 
-These are initial tuning values, not proven strength ratings. All six levels share the same evaluation weights and search implementation. Tournament results and target-device measurements must guide later calibration.
+These are initial tuning values, not proven strength ratings. All six levels share the same evaluation weights and search implementation. Fixed-position tactical regressions, target-device measurements, and observed human-player experience must guide later calibration. AI-vs-AI tournaments are not part of the validation plan unless the project owner explicitly authorizes them.
 
 ## Position-key invariant
 
