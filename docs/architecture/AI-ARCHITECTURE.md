@@ -138,3 +138,16 @@ Strategic transition signals also distinguish attack-oriented and defense-orient
 Mandatory defense filtering is now conditional on an actual immediate winning reply in the current position. When no such threat exists, all legal root candidates remain available to search. Root and cascade exposure are still evaluated through successor-state analysis and search; the tactical analyzer's broader `rankDefenses` behavior remains available for direct analysis and regression coverage, but it no longer acts as a blanket pre-search filter.
 
 Telemetry includes `offensiveCandidateCount`, `offensiveAttackCandidateCount`, `offensiveHighValueAttackCount`, `offensiveRootAttackCount`, `offensiveCascadeAttackCount`, `offensiveImmediateWinCount`, `offensiveMaxEnemyNodeLoss`, and `offensiveMaxEnemyRootLoss`.
+
+
+## Offensive exchange evaluation (Issue #37, Phase B)
+
+`analyzeExchangeOutcome` compares node identities in the parent and simulated successor states. It separately counts enemy losses, own losses, enemy-root losses, own-root losses, and cascade losses, then derives net node/root gains. A newly grown attacker therefore cannot hide an own-node loss, and gross enemy casualties are not mistaken for a favorable exchange.
+
+`PositionEvaluator.scoreMove` uses net node and root gains for attack ordering. It does not double-count cascade losses, and it does not reward an even one-for-one exchange as a net material gain. The authoritative adapter simulation remains the sole source of combat outcomes.
+
+## Advantage conversion (Issue #37, Phase C)
+
+`PositionEvaluator` derives a bounded conversion factor from the current side-to-move perspective's cached position evaluation. Only positive conversion evidence—net-positive exchanges, enemy-root damage, and progress toward the enemy base—receives the additional shared conversion multiplier. A negative exchange does not become attractive merely because the AI is ahead.
+
+The conversion threshold, scale, and multiplier are shared by all six difficulty profiles; difficulty continues to differ through computation budgets. Conversion telemetry is exposed alongside gross and net exchange metrics so real-game decisions can be inspected. This is a bounded move-ordering preference, not a tactical proof or a replacement for minimax evaluation.
