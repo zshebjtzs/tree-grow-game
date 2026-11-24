@@ -636,9 +636,13 @@ export class TacticalAnalyzer {
             // immediate winning move. Preserve every legal candidate in that
             // case, but order candidates by the opponent's strongest and
             // aggregate root/cascade attack outcomes.
-            const ranked = this.rankDefenses(
-                game, moves, side, bases, boundedSimulate, boundedGenerate, immediateWinningMoves
-            );
+            const ranked = immediateWinningMoves
+                ? this.rankDefenses(
+                    game, moves, side, bases, boundedSimulate, boundedGenerate, immediateWinningMoves
+                )
+                : this.orderByStructuralRisk(
+                    game, moves, side, bases, boundedSimulate, boundedGenerate
+                );
             return { moves: ranked, hasImmediateThreat: immediateWinningMoves > 0,
                 immediateWinningMoves, nodes, workUnits, complete: true };
         } catch (error) {
@@ -684,9 +688,41 @@ export class TacticalAnalyzer {
                 .map(item => item.move);
         }
 
-        // Analyze each resulting position once. In a quiet position this is
-        // an ordering signal, not a hard filter: an attack that accepts some
-        // structural risk may still be the best minimax continuation.
+        // A live immediate-win threat is mandatory: retain only moves that
+        // minimize the number of remaining immediate winning replies.
+        const ranked = moves.map(move => {
+            const next = move._nextState || simulateMove(game, move, side, bases);
+            if (!next) return { move, remainingThreats: Infinity };
+            const remainingThreats = !next.getPlayerRootNodes(side).length
+                ? Infinity
+                : next.isGameOver
+                    ? 0
+                    : analyze(next).immediateWinningMoves;
+            return { move, remainingThreats };
+        });
+        const minimum = Math.min(...ranked.map(item => item.remainingThreats));
+        return ranked
+            .filter(item => item.remainingThreats === minimum)
+            .map(item => item.move);
+    }
+
+    orderByStructuralRisk(game, moves, side, bases, simulateMove, generateMoves) {
+        const opponent = side === 'red' ? 'blue' : 'red';
+        const analysisCache = new WeakMap();
+        const analyze = state => {
+            let result = analysisCache.get(state);
+            if (!result) {
+                result = this.analyzeOpponentReplies(
+                    state, side, opponent, bases, generateMoves, simulateMove
+                );
+                analysisCache.set(state, result);
+            }
+            return result;
+        };
+
+        // Analyze every candidate and preserve the complete legal set. The
+        // resulting order prioritizes structural safety without pruning
+        // tactically justified counterattacks.
         const rootRisk = moves.map((move, index) => {
             const next = move._nextState || simulateMove(game, move, side, bases);
             if (!next || !next.getPlayerRootNodes(side).length) {
