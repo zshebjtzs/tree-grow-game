@@ -44,6 +44,54 @@ function createFixture() {
 }
 
 function createPositionFixture(kind) {
+    if (kind === 'quiet') {
+        const adjacency = {};
+        for (let area = 1; area <= AREA_COUNT; area++) {
+            adjacency[area] = [];
+        }
+        const connect = (left, right) => {
+            adjacency[left].push(right);
+            adjacency[right].push(left);
+        };
+        for (let area = 1; area < AREA_COUNT; area++) connect(area, area + 1);
+        connect(2, 4);
+        connect(3, 5);
+        connect(4, 6);
+        connect(5, 9);
+        connect(6, 10);
+        connect(49, 47);
+        connect(49, 48);
+        connect(48, 46);
+        connect(47, 45);
+        connect(46, 42);
+        connect(45, 43);
+
+        const game = new GameState();
+        game.currentTurn = 'red';
+        const redRoot = game.addNode(null, 0, 0, 1, 'red');
+        const redBranch = game.addNode(redRoot.id, 10, 0, 2, 'red');
+        const redLeft = game.addNode(redBranch.id, 20, 0, 3, 'red');
+        const redRight = game.addNode(redBranch.id, 30, 0, 4, 'red');
+        game.addNode(redLeft.id, 40, 0, 5, 'red');
+        game.addNode(redRight.id, 50, 0, 6, 'red');
+
+        game.currentTurn = 'blue';
+        const blueRoot = game.addNode(null, 490, 0, 50, 'blue');
+        const blueBranch = game.addNode(blueRoot.id, 480, 0, 49, 'blue');
+        const blueLeft = game.addNode(blueBranch.id, 470, 0, 48, 'blue');
+        const blueRight = game.addNode(blueBranch.id, 460, 0, 47, 'blue');
+        game.addNode(blueLeft.id, 450, 0, 46, 'blue');
+        game.addNode(blueRight.id, 440, 0, 45, 'blue');
+        game.currentTurn = 'blue';
+
+        return {
+            name: kind,
+            snapshot: { ...game.toJSON(), redBaseId: 1, blueBaseId: 50 },
+            adjacency,
+            areaCenters: Array.from({ length: AREA_COUNT }, (_, index) => [index * 10, 0])
+        };
+    }
+
     const base = createFixture();
     const game = new GameState();
 
@@ -88,6 +136,7 @@ function percentile(sorted, fraction) {
 
 const fixtures = [
     { name: 'sparse', ...createFixture() },
+    createPositionFixture('quiet'),
     createPositionFixture('branching'),
     createPositionFixture('combat')
 ];
@@ -148,6 +197,9 @@ for (const fixture of fixtures) {
         for (let index = 0; index < ITERATIONS; index++) {
             const start = performance.now();
             ai.getBestMove(fixture.snapshot, 'blue');
+            if (fixture.name === 'quiet' && ai.lastSearchStats?.forcedWinInTwoMoves) {
+                throw new Error('Quiet fixture unexpectedly produced a proven forcing win');
+            }
             const totalElapsedMs = performance.now() - start;
             samples.push(totalElapsedMs);
             if (ai.lastSearchStats) {
