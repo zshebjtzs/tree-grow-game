@@ -343,12 +343,12 @@ export class AIController {
                 for (const move of moves) {
                     checkBudget();
                     const next = this._simulateMove(state, move, movingSide, bases, { alreadyValidated: true });
+                    checkBudget();
                     if (!next) continue;
                     children.set(moveKey(move), next);
-                    scored.push({
-                        move,
-                        score: this._scoreMove(state, move, movingSide, bases, next)
-                    });
+                    const score = this._scoreMove(state, move, movingSide, bases, next);
+                    checkBudget();
+                    scored.push({ move, score });
                 }
                 // Scores are from the side-to-move's own perspective, so
                 // search that player's strongest replies first at every ply.
