@@ -161,6 +161,7 @@ The risk preference is outcome-dependent, not a generic bonus for aggressive mov
 - Forward progress, enemy-root damage, cascade damage, and positive net exchange can justify measured volatility.
 - Own node losses are charged against the candidate.
 - Own-root loss carries a dominant penalty and cannot be made attractive by ordinary material or progress bonuses.
+- The evaluator also adds a bounded comeback-potential term to the actual minimax state value, derived from tactical pressure, siege pressure, and frontier control. This lets a completed search prefer a position with credible breakthrough potential instead of affecting only move ordering.
 - The existing terminal checks and proven tactical results remain higher priority than strategic risk preference.
 - When behind, the ordinary proximity-to-base safety penalty is softened only within a fixed bound; it is not removed.
 
