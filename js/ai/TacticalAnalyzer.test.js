@@ -828,3 +828,31 @@ test('three-action tactical proof never accepts an incomplete node-budget search
     assert.equal(result.complete, false);
     assert.equal(result.nodes, 1);
 });
+
+
+test('mandatory defense filtering preserves every candidate when no immediate win exists', () => {
+    const analyzer = new TacticalAnalyzer();
+    const game = position({ blueRoots: 2 });
+    const safe = { parentNodeId: 1, targetAreaId: 4 };
+    const risky = { parentNodeId: 2, targetAreaId: 5 };
+    const generateMoves = (state, side) => side === 'red' && state.vulnerable
+        ? [{ parentNodeId: 9, targetAreaId: 5, attacks: true }]
+        : [];
+    const simulateMove = (state, move, side) => {
+        if (side === 'blue') {
+            return position({ blueRoots: 2, vulnerable: move.targetAreaId === risky.targetAreaId });
+        }
+        if (side === 'red' && state.vulnerable && move.attacks) {
+            return position({ blueRoots: 1 });
+        }
+        return state;
+    };
+
+    const result = analyzer.findMandatoryDefenses(
+        game, [safe, risky], 'blue', { red: 6, blue: 1 }, simulateMove, generateMoves
+    );
+
+    assert.equal(result.hasImmediateThreat, false);
+    assert.equal(result.immediateWinningMoves, 0);
+    assert.deepEqual(result.moves, [safe, risky]);
+});
