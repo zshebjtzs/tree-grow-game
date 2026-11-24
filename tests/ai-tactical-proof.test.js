@@ -254,3 +254,31 @@ test('mandatory-defense budget exhaustion preserves every legal candidate', () =
     assert.deepEqual(result.moves, moves);
     assert.equal(result.nodes, 0);
 });
+
+
+test('material proof counts descendants of a directly destroyed root as cascade losses', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = createState('root', ['r0', 'r1'], ['b0', 'b1', 'b2']);
+    const afterCandidate = createState('candidate', ['r0', 'r1'], ['b0', 'b1', 'b2']);
+    const afterReply = createState('reply', ['r0', 'r1'], ['b0', 'b1', 'b2']);
+    const afterAttack = createState('attack', ['r0', 'r1'], []);
+    const candidate = { nextState: afterCandidate };
+    const reply = { nextState: afterReply };
+    const rootAttack = { attacks: true, targetAreaId: 11, nextState: afterAttack };
+    const moveMap = new Map([
+        [afterCandidate, [reply]],
+        [afterReply, [rootAttack]]
+    ]);
+
+    const result = analyzer.findForcedMaterialGainInTwoMoves(
+        root, [candidate], 'red', bases, simulate,
+        state => moveMap.get(state) || [], pass,
+        { maxNodes: 100 }
+    );
+
+    assert.equal(result.complete, true);
+    assert.deepEqual(result.moves, [candidate]);
+    assert.equal(result.guaranteedRootLoss, 1);
+    assert.equal(result.guaranteedCascadeLoss, 2);
+    assert.equal(result.guaranteedNetNodeGain, 3);
+});
