@@ -52,18 +52,24 @@ test('mandatory defense narrows candidates before tactical proofs without overri
     assert.equal(searched, false);
 });
 
-test('without an immediate threat all legal candidates reach tactical analysis and search', () => {
+test('without an immediate threat structural risk reorders but does not drop legal candidates', () => {
     const coordinator = new StrategicDecisionCoordinator();
     const legal = [{ id: 'a' }, { id: 'b' }];
+    const riskOrdered = [legal[1], legal[0]];
     let searchedMoves;
     const result = coordinator.resolve(callbacks({
         rankedMoves: legal,
-        analyzeMandatoryDefense: () => ({ moves: [legal[0]], hasImmediateThreat: false }),
+        analyzeMandatoryDefense: () => ({
+            moves: riskOrdered,
+            hasImmediateThreat: false,
+            complete: true
+        }),
         search: moves => { searchedMoves = moves; return moves[1]; }
     }));
-    assert.deepEqual(searchedMoves, legal);
-    assert.equal(result.move, legal[1]);
-    assert.equal(result.reason, 'search-selection');
+    assert.deepEqual(searchedMoves, riskOrdered);
+    assert.equal(searchedMoves.length, legal.length);
+    assert.equal(result.move, legal[0]);
+    assert.equal(result.reason, 'defense-risk-order');
 });
 
 test('tactical analyzers share one bounded node allowance in strict priority order', () => {
