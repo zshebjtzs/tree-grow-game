@@ -1019,3 +1019,37 @@ test('quiet defense ordering compares one coherent worst reply, not mixed attack
         rootLoss: 1, cascadeLoss: 0, nodeLoss: 1
     });
 });
+
+
+test('extended tactic checks the initial threat using the hypothetical attacker turn', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = position();
+    root.currentTurn = 'red';
+    const afterCandidate = position();
+    afterCandidate.currentTurn = 'blue';
+    const afterResponse = position();
+    afterResponse.currentTurn = 'red';
+    const candidate = { nextState: afterCandidate };
+    const response = { nextState: afterResponse };
+    const observedTurns = [];
+    const generateMoves = (state, side) => {
+        if (state === afterCandidate && side === 'red') {
+            observedTurns.push(state.currentTurn);
+            return [];
+        }
+        if (state === afterCandidate && side === 'blue') return [response];
+        return [];
+    };
+    const simulateMove = (_state, move) => move.nextState;
+    const simulatePass = state => state;
+
+    analyzer.findForcedTacticalSequenceInThreeMoves(
+        root, [candidate], 'red', { red: 1, blue: 9 },
+        simulateMove, generateMoves, simulatePass, { maxNodes: 100 }
+    );
+
+    assert.deepEqual(observedTurns, ['red'],
+        'the threat probe must evaluate legal attacker moves, not defender-turn moves');
+    assert.equal(afterCandidate.currentTurn, 'blue',
+        'hypothetical turn switching must be restored before defender reply enumeration');
+});
