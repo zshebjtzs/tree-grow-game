@@ -557,3 +557,25 @@ test('AIController prioritizes a proven forcing sequence and exposes its tactica
     assert.match(ai.lastDecisionExplanation.summary, /连续攻击组合/);
     assert.ok(ai.lastDecisionExplanation.details.some(detail => detail.includes('对手选择哪一种合法回应')));
 });
+
+
+test('AIController prioritizes an attack that destroys the opponent final root immediately', () => {
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const redRoot = game.addNode(null, 0, 0, 1, 'red');
+    const first = game.addNode(redRoot.id, 10, 0, 2, 'red');
+    const second = game.addNode(first.id, 20, 0, 3, 'red');
+    game.addNode(second.id, 30, 0, 4, 'red');
+    game.currentTurn = 'blue';
+    const blueRoot = game.addNode(null, 50, 0, 6, 'blue');
+    game.addNode(blueRoot.id, 40, 0, 5, 'blue');
+
+    const ai = new AIController('medium', line, centers);
+    const move = ai.getBestMove(snapshot(game, 1, 6), 'blue');
+
+    assert.ok(move);
+    assert.equal(move.targetAreaId, 4);
+    assert.equal(ai.lastSearchStats.completedDepth, 0);
+    assert.match(ai.lastDecisionExplanation.summary, /立即获胜/);
+    assert.ok(ai.lastDecisionExplanation.details.some(detail => detail.includes('1 个根节点')));
+});
