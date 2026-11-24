@@ -3,6 +3,7 @@ import { PositionAnalyzer } from './PositionAnalyzer.js';
 import { StrategicPhaseDetector } from './StrategicPhaseDetector.js';
 import { StrategicAnalyzer } from './StrategicAnalyzer.js';
 import { analyzeExchangeOutcome } from './OffensiveStrategyAnalyzer.js';
+import { DisadvantageRiskAnalyzer } from './DisadvantageRiskAnalyzer.js';
 
 const WIN_SCORE = 100000;
 
@@ -24,6 +25,7 @@ export class PositionEvaluator {
         this.positionAnalyzer = new PositionAnalyzer({ adjacency: this.adjacency, distanceToBase: (...args) => this.distanceToBase(...args), getStructuralMetrics: (...args) => this.getStructuralMetrics(...args) });
         this.phaseDetector = new StrategicPhaseDetector();
         this.strategicAnalyzer = new StrategicAnalyzer();
+        this.disadvantageRiskAnalyzer = new DisadvantageRiskAnalyzer();
     }
 
     getStrategicAnalysis(game, side, bases) {
@@ -38,6 +40,13 @@ export class PositionEvaluator {
         const scale = Math.max(1, this.profile.advantageConversionScale ?? 1500);
         const advantage = this.evaluateState(game, perspective, bases);
         return Math.max(0, Math.min(1, (advantage - threshold) / scale));
+    }
+
+    getDisadvantageRiskFactor(game, perspective, bases) {
+        return this.disadvantageRiskAnalyzer.getRiskFactor(
+            this.evaluateState(game, perspective, bases),
+            this.profile
+        );
     }
 
     scoreMove(game, move, side, bases, simulatedNext = null) {
@@ -71,7 +80,11 @@ export class PositionEvaluator {
         score += ownAreaGain * 8 * weights.expansionWeight;
 
         const ownThreat = this.distanceToBase(next, enemy, bases[side]);
-        if (Number.isFinite(ownThreat)) score -= Math.max(0, 5 - ownThreat) * 24 * weights.safetyWeight;
+        const disadvantageRiskFactor = this.getDisadvantageRiskFactor(game, side, bases);
+        if (Number.isFinite(ownThreat)) {
+            const safetyMultiplier = 1 - disadvantageRiskFactor * 0.35;
+            score -= Math.max(0, 5 - ownThreat) * 24 * weights.safetyWeight * safetyMultiplier;
+        }
 
         // Structural value: preserve branching flexibility and avoid leaving
         // the newly created frontier as an isolated, immediately vulnerable leaf.
@@ -96,6 +109,15 @@ export class PositionEvaluator {
                 Math.max(0, exchange.netRootGain) * 900 * weights.rootAttackWeight : 0);
         score += conversionPotential * advantageFactor *
             (this.profile.advantageConversionWeight ?? 0.3);
+
+        // Behind positions accept measured tactical volatility, not arbitrary
+        // sacrifices. The bonus requires concrete progress, enemy-root damage,
+        // cascade value, or positive net exchange; own losses are charged.
+        score += this.disadvantageRiskAnalyzer.evaluateMove({
+            riskFactor: disadvantageRiskFactor,
+            progress,
+            exchange
+        }, this.profile);
         return score;
     }
 
