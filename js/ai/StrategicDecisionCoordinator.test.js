@@ -118,3 +118,27 @@ test('incomplete mandatory-defense scan keeps the full candidate set', () => {
     assert.equal(result.tacticalStats.defenseComplete, false);
     assert.equal(result.tacticalStats.complete, false);
 });
+
+
+test('coordinator keeps tactical check counts separate from weighted work units', () => {
+    const coordinator = new StrategicDecisionCoordinator();
+    let searchBudget = null;
+    const result = coordinator.resolve(callbacks({
+        maxNodes: 1000,
+        analyzeMandatoryDefense: moves => ({
+            moves, hasImmediateThreat: false, nodes: 2, workUnits: 10, complete: true
+        }),
+        findForcedWin: () => ({ moves: [], nodes: 3, workUnits: 20, complete: true }),
+        findForcedMaterialGain: () => ({ moves: [], nodes: 4, workUnits: 30, complete: true }),
+        findExtendedTactic: () => ({ moves: [], nodes: 1, workUnits: 5, complete: true }),
+        search: (moves, budget) => { searchBudget = budget.maxNodes; return moves[0]; }
+    }));
+
+    assert.equal(searchBudget, 935);
+    assert.equal(result.tacticalStats.nodes, 8);
+    assert.equal(result.tacticalStats.workUnits, 55);
+    assert.equal(result.tacticalStats.totalNodes, 10);
+    assert.equal(result.tacticalStats.totalWorkUnits, 65);
+    assert.equal(result.tacticalStats.mandatoryDefenseNodes, 2);
+    assert.equal(result.tacticalStats.mandatoryDefenseWorkUnits, 10);
+});
