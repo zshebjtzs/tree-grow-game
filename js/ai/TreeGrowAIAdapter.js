@@ -173,7 +173,15 @@ export class TreeGrowAIAdapter {
             inducedDefensiveReplies: searchStats.inducedDefensiveReplies ?? 0,
             sacrificeValidated: searchStats.sacrificeValidated ?? false,
             tacticalOpponentAttackReplies: searchStats.tacticalOpponentAttackReplies ?? 0,
-            guaranteedTacticalSelfLoss: searchStats.guaranteedTacticalSelfLoss ?? 0
+            guaranteedTacticalSelfLoss: searchStats.guaranteedTacticalSelfLoss ?? 0,
+            offensiveCandidateCount: searchStats.offensiveCandidateCount ?? 0,
+            offensiveAttackCandidateCount: searchStats.offensiveAttackCandidateCount ?? 0,
+            offensiveHighValueAttackCount: searchStats.offensiveHighValueAttackCount ?? 0,
+            offensiveRootAttackCount: searchStats.offensiveRootAttackCount ?? 0,
+            offensiveCascadeAttackCount: searchStats.offensiveCascadeAttackCount ?? 0,
+            offensiveImmediateWinCount: searchStats.offensiveImmediateWinCount ?? 0,
+            offensiveMaxEnemyNodeLoss: searchStats.offensiveMaxEnemyNodeLoss ?? 0,
+            offensiveMaxEnemyRootLoss: searchStats.offensiveMaxEnemyRootLoss ?? 0
         } : null;
         return { title: 'AI 行动分析', summary, details: details.slice(0, 4), search };
     }
