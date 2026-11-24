@@ -199,7 +199,8 @@ for (const fixture of fixtures) {
             ai.getBestMove(fixture.snapshot, 'blue');
             if (fixture.name === 'quiet' && (
                 ai.lastSearchStats?.forcedWinInTwoMoves ||
-                ai.lastSearchStats?.forcedMaterialGainInTwoMoves
+                ai.lastSearchStats?.forcedMaterialGainInTwoMoves ||
+                ai.lastSearchStats?.forcedTacticalSequenceInThreeMoves
             )) {
                 throw new Error('Quiet fixture unexpectedly produced a forced tactical sequence');
             }
@@ -247,6 +248,14 @@ for (const fixture of fixtures) {
                 item.forcedWinInTwoMoves === true).length,
             forcedMaterialGainInTwoMovesCount: searchStats.filter(item =>
                 item.forcedMaterialGainInTwoMoves === true).length,
+            forcedTacticalSequenceInThreeMovesCount: searchStats.filter(item =>
+                item.forcedTacticalSequenceInThreeMoves === true).length,
+            counterattackSequenceCount: searchStats.filter(item =>
+                item.counterattackSequence === true).length,
+            inducementValidatedCount: searchStats.filter(item =>
+                item.inducementValidated === true).length,
+            sacrificeValidatedCount: searchStats.filter(item =>
+                item.sacrificeValidated === true).length,
             meanAspirationResearches: searchStats.length
                 ? Number((searchStats.reduce((sum, item) => sum + (item.aspirationResearches || 0), 0) /
                     searchStats.length).toFixed(2))
