@@ -6,8 +6,14 @@
  */
 export class TacticalAnalyzer {
     findImmediateWinningMove(moves, side, bases) {
-        const enemyBaseId = bases[side === 'red' ? 'blue' : 'red'];
-        return moves.find(move => move.targetAreaId === enemyBaseId) || null;
+        const enemy = side === 'red' ? 'blue' : 'red';
+        const enemyBaseId = bases[enemy];
+        return moves.find(move =>
+            move.targetAreaId === enemyBaseId ||
+            (move._nextState?.isGameOver &&
+                move._nextState.getPlayerRootNodes(enemy).length === 0 &&
+                move._nextState.getPlayerRootNodes(side).length > 0)
+        ) || null;
     }
 
     analyzeOpponentReplies(game, defenderSide, attackerSide, bases, generateMoves, simulateMove) {
