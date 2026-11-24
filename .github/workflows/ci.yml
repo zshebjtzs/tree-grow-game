@@ -19,11 +19,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - run: npm install
       - run: npm test
+      - name: Compare AI decisions with PR base
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          AI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/compare-ai-baseline.js > ai-baseline-comparison.json
+      - name: Upload AI baseline comparison
+        if: always() && github.event_name == 'pull_request' && hashFiles('ai-baseline-comparison.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-baseline-comparison
+          path: ai-baseline-comparison.json
       - name: Collect replay save performance baseline
         run: npm run benchmark:replay
       - name: Collect AI decision-time baseline
