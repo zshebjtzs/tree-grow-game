@@ -531,6 +531,53 @@ test('forced material-gain analysis rejects a candidate if one opponent reply re
     assert.equal(result.complete, true);
 });
 
+test('material proof does not count direct targets from earlier attacks as cascade losses', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = materialState({
+        turn: 'red',
+        redNodes: [{ id: 20, areaId: 6, isRoot: true }],
+        blueNodes: [
+            { id: 1, areaId: 1, isRoot: true },
+            { id: 2, areaId: 2, isRoot: false },
+            { id: 3, areaId: 3, isRoot: false },
+            { id: 4, areaId: 4, isRoot: false }
+        ]
+    });
+    const afterCandidate = materialState({
+        turn: 'blue',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: [
+            { id: 1, areaId: 1, isRoot: true },
+            { id: 3, areaId: 3, isRoot: false },
+            { id: 4, areaId: 4, isRoot: false }
+        ]
+    });
+    const afterReply = materialState({
+        turn: 'red',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: afterCandidate.getAliveNodesByOwner('blue')
+    });
+    const afterAttack = materialState({
+        turn: 'blue',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: [{ id: 1, areaId: 1, isRoot: true }]
+    });
+    const candidate = { attacks: true, targetAreaId: 2, _nextState: afterCandidate };
+    const reply = { targetAreaId: 7, _nextState: afterReply };
+    const attack = { attacks: true, targetAreaId: 3, _nextState: afterAttack };
+    const moveMap = new Map([[afterCandidate, [reply]], [afterReply, [attack]]]);
+
+    const result = analyzer.findForcedMaterialGainInTwoMoves(
+        root, [candidate], 'red', { red: 6, blue: 1 },
+        (_state, move) => move._nextState,
+        state => moveMap.get(state) || [],
+        state => state
+    );
+
+    // Two direct kills and one cascade kill do not satisfy the two-cascade rule.
+    assert.deepEqual(result.moves, []);
+});
+
 test('forced material-gain analysis never promotes an unexamined reply after budget exhaustion', () => {
     const analyzer = new TacticalAnalyzer();
     const root = materialState({

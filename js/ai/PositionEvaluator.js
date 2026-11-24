@@ -127,29 +127,35 @@ export class PositionEvaluator {
                 const riskKey = `${side}:${bases[side]}:${bases[enemy]}:${newNode.id}`;
                 let risk = bySide.get(riskKey);
                 if (!risk) {
-                    risk = { ownNodeLoss: 0, ownRootLoss: 0, cascadeLoss: 0 };
+                    risk = { ownNodeLoss: 0, ownRootLoss: 0, cascadeLoss: 0, penalty: 0 };
                     const replies = this.generateMoves(next, enemy, bases).filter(reply =>
                         reply.attacks && reply.targetAreaId === newNode.areaId
                     );
                     const beforeIds = new Set(next.getAliveNodesByOwner(side).map(node => node.id));
                     const beforeRootIds = new Set(next.getPlayerRootNodes(side).map(node => node.id));
+                    const nodePenalty = this.profile.immediateRecaptureNodePenalty ?? 110;
+                    const rootPenalty = this.profile.immediateRecaptureRootPenalty ?? 2600;
+                    const cascadePenalty = this.profile.immediateRecaptureCascadePenalty ?? 90;
                     for (const reply of replies) {
                         const afterReply = this.simulateMove(next, reply, enemy, bases);
                         if (!afterReply) continue;
                         const afterIds = new Set(afterReply.getAliveNodesByOwner(side).map(node => node.id));
+                        if (afterIds.has(newNode.id)) continue;
                         const removed = [...beforeIds].filter(id => !afterIds.has(id));
                         const afterRootIds = new Set(afterReply.getPlayerRootNodes(side).map(node => node.id));
-                        const rootLoss = [...beforeRootIds].filter(id => !afterRootIds.has(id)).length;
-                        risk.ownNodeLoss = Math.max(risk.ownNodeLoss, removed.length);
-                        risk.ownRootLoss = Math.max(risk.ownRootLoss, rootLoss);
-                        risk.cascadeLoss = Math.max(risk.cascadeLoss,
-                            removed.filter(id => id !== newNode.id && !beforeRootIds.has(id)).length);
+                        const branchRisk = {
+                            ownNodeLoss: removed.length,
+                            ownRootLoss: [...beforeRootIds].filter(id => !afterRootIds.has(id)).length,
+                            cascadeLoss: removed.filter(id => id !== newNode.id && !beforeRootIds.has(id)).length
+                        };
+                        branchRisk.penalty = branchRisk.ownNodeLoss * nodePenalty +
+                            branchRisk.ownRootLoss * rootPenalty +
+                            branchRisk.cascadeLoss * cascadePenalty;
+                        if (branchRisk.penalty > risk.penalty) risk = branchRisk;
                     }
                     bySide.set(riskKey, risk);
                 }
-                score -= risk.ownNodeLoss * (this.profile.immediateRecaptureNodePenalty ?? 110);
-                score -= risk.ownRootLoss * (this.profile.immediateRecaptureRootPenalty ?? 2600);
-                score -= risk.cascadeLoss * (this.profile.immediateRecaptureCascadePenalty ?? 90);
+                score -= risk.penalty;
             }
         }
         const nextStrategic = this.getStrategicAnalysis(next, side, bases);
