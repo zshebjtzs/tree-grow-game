@@ -203,7 +203,7 @@ export class AIController {
             ...existing,
             preparationWorkUnits: this.lastPreparationWorkUnits ?? 0,
             totalWorkUnits: (this.lastPreparationWorkUnits ?? 0) + (existing.workUnits ?? 0) +
-                (this.lastTacticalSequenceStats?.totalNodes ?? 0),
+                (this.lastTacticalSequenceStats?.totalWorkUnits ?? this.lastTacticalSequenceStats?.totalNodes ?? 0),
             preparationMs: existing.preparationMs ?? Math.max(0, completedAt - decisionStartedAt),
             totalMs: Math.max(0, completedAt - decisionStartedAt),
             configuredTargetMs: this.profile.searchBudgetMs,
@@ -212,8 +212,11 @@ export class AIController {
             decisionReason: this.lastDecisionReason ?? null,
             immediateWinningMove: this.lastDecisionReason === 'immediate-win',
             tacticalSequenceNodes: this.lastTacticalSequenceStats?.nodes ?? 0,
+            tacticalSequenceWorkUnits: this.lastTacticalSequenceStats?.workUnits ?? this.lastTacticalSequenceStats?.nodes ?? 0,
             totalTacticalNodes: this.lastTacticalSequenceStats?.totalNodes ?? 0,
+            totalTacticalWorkUnits: this.lastTacticalSequenceStats?.totalWorkUnits ?? this.lastTacticalSequenceStats?.totalNodes ?? 0,
             mandatoryDefenseNodes: this.lastTacticalSequenceStats?.mandatoryDefenseNodes ?? 0,
+            mandatoryDefenseWorkUnits: this.lastTacticalSequenceStats?.mandatoryDefenseWorkUnits ?? this.lastTacticalSequenceStats?.mandatoryDefenseNodes ?? 0,
             tacticalSequenceComplete: this.lastTacticalSequenceStats?.complete ?? true,
             tacticalDecisionComplete: this.lastTacticalSequenceStats?.complete !== false &&
                 this.lastTacticalSequenceStats?.defenseComplete !== false,
