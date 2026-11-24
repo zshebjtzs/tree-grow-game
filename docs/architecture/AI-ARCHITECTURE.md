@@ -53,6 +53,24 @@ An opponent reply that wins immediately, a missing continuation, an invalid tran
 
 Telemetry is exposed as `forcedMaterialGainInTwoMoves`, `guaranteedTacticalRootLoss`, `guaranteedTacticalCascadeLoss`, and `guaranteedTacticalNodeLoss`. This remains a deliberately narrow two-turn tactical proof, not a general-purpose combination solver.
 
+## Extended counterattack, inducement, and sacrifice analysis
+
+If the two-action forced-win and material-gain proofs do not find a result, the controller runs a final bounded AND/OR proof for:
+
+`candidate -> defender reply -> attacker setup -> defender reply -> final attack`
+
+- Attacker nodes are existential: the AI may choose a setup and a final attack.
+- Defender nodes are universal: every legal response must preserve the proof; an unavailable move uses the authoritative pass transition.
+- The final attack is simulated through the adapter's authoritative rules and combat resolver.
+- Opponent attack replies are explicitly counted. Any losses to the AI during those replies are charged against the final material gain.
+- A sacrifice is accepted only if the same worst-case branch proves a positive tactical result; a material exchange must retain at least a two-node net gain unless it removes an enemy root. The AI's own last root may never be sacrificed.
+- Inducement is reported only when the candidate creates an immediate winning threat, an opponent reply removes that immediate threat, and the deeper combination remains proven after that defense.
+- Counterattack and inducement telemetry are descriptive; they do not replace the all-replies proof.
+
+The proof shares the same per-decision 1,200-node tactical ceiling and absolute deadline with the shorter tactical analyzers. It returns no result if any branch is unexamined, any opponent reply can win immediately, or a transition is invalid. Its three attacker actions are a bounded tactical horizon, not an unrestricted multi-move solver.
+
+Telemetry includes `forcedTacticalSequenceInThreeMoves`, `counterattackSequence`, `inducementValidated`, `sacrificeValidated`, `tacticalOpponentAttackReplies`, `inducedDefensiveReplies`, and the guaranteed net gain/self-loss fields.
+
 ## SearchEngine boundary
 
 `SearchEngine` receives the following state-dependent callbacks:
