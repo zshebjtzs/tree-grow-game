@@ -140,6 +140,10 @@ export class TreeGrowAIAdapter {
             details.unshift(`战术牺牲经过净收益验证：最差分支仍保留 ${searchStats?.guaranteedTacticalNodeLoss || 0} 个节点的净收益，承担的己方节点损失为 ${searchStats?.guaranteedTacticalSelfLoss || 0}。`);
             summary = '识别到能够以局部损失换取更大整体收益的强制战术组合。';
         }
+        if (selectionReason === 'validated-tactical-inducement') {
+            details.unshift(`先手行动制造了立即胜利威胁，对手的 ${searchStats?.inducedDefensiveReplies || 0} 个防守回应消除了该威胁，但仍无法阻止后续战术收益。`);
+            summary = '识别到通过威胁诱导对手防守、再兑现后续收益的战术组合。';
+        }
         if (selectionReason === 'forced-three-move-sequence') {
             details.unshift('有限深度推演验证：经过两轮对手回应后，仍存在可兑现的连续攻击收益。');
             summary = '识别到需要更长准备过程的连续战术组合，优先执行该行动。';
@@ -165,6 +169,8 @@ export class TreeGrowAIAdapter {
             guaranteedTacticalNodeLoss: searchStats.guaranteedTacticalNodeLoss ?? 0,
             forcedTacticalSequenceInThreeMoves: searchStats.forcedTacticalSequenceInThreeMoves ?? false,
             counterattackSequence: searchStats.counterattackSequence ?? false,
+            inducementValidated: searchStats.inducementValidated ?? false,
+            inducedDefensiveReplies: searchStats.inducedDefensiveReplies ?? 0,
             sacrificeValidated: searchStats.sacrificeValidated ?? false,
             tacticalOpponentAttackReplies: searchStats.tacticalOpponentAttackReplies ?? 0,
             guaranteedTacticalSelfLoss: searchStats.guaranteedTacticalSelfLoss ?? 0
