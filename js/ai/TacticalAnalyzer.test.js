@@ -236,3 +236,166 @@ test('tactical reply analysis sets and restores the attacker turn', () => {
     assert.equal(game.currentTurn, 'blue',
         'tactical analysis must not leak its temporary turn change into the caller');
 });
+
+
+function tacticalState({ turn = 'blue', redRoots = 1, blueRoots = 1, isGameOver = false, tag = '' } = {}) {
+    return {
+        currentTurn: turn,
+        isGameOver,
+        tag,
+        getPlayerRootNodes(side) {
+            const count = side === 'red' ? redRoots : blueRoots;
+            return Array.from({ length: count }, (_, id) => ({ id, owner: side }));
+        }
+    };
+}
+
+test('forcing-sequence analysis proves a win only when every opponent reply permits an immediate win', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = tacticalState({ turn: 'red', tag: 'root' });
+    const afterCandidate = tacticalState({ turn: 'blue', tag: 'after-candidate' });
+    const afterFirstReply = tacticalState({ turn: 'red', tag: 'reply-a' });
+    const afterSecondReply = tacticalState({ turn: 'red', tag: 'reply-b' });
+    const candidate = { parentNodeId: 1, targetAreaId: 4, _nextState: afterCandidate };
+    const opponentReplies = [
+        { parentNodeId: 20, targetAreaId: 10, nextState: afterFirstReply },
+        { parentNodeId: 21, targetAreaId: 11, nextState: afterSecondReply }
+    ];
+    const visitedReplies = [];
+    const result = analyzer.findForcedWinInTwoMoves(
+        root,
+        [candidate],
+        'red',
+        { red: 1, blue: 6 },
+        (_state, move) => move.nextState,
+        (state, side) => {
+            if (side === 'blue') return opponentReplies;
+            visitedReplies.push(state.tag);
+            // The winning continuation may come from a different root:
+            // this explicitly covers multi-root tactical cooperation.
+            return [{ parentNodeId: state.tag === 'reply-a' ? 30 : 40, targetAreaId: 6 }];
+        },
+        state => state
+    );
+
+    assert.deepEqual(result.moves, [candidate]);
+    assert.equal(result.complete, true);
+    assert.ok(visitedReplies.includes('reply-a'));
+    assert.ok(visitedReplies.includes('reply-b'));
+});
+
+test('forcing-sequence analysis rejects a candidate when one legal defense refutes the continuation', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = tacticalState({ turn: 'red' });
+    const afterCandidate = tacticalState({ turn: 'blue', tag: 'after-candidate' });
+    const winningReplyPosition = tacticalState({ turn: 'red', tag: 'winning-reply' });
+    const refutedPosition = tacticalState({ turn: 'red', tag: 'refuted' });
+    const candidate = { parentNodeId: 1, targetAreaId: 4, _nextState: afterCandidate };
+    const replies = [
+        { parentNodeId: 20, targetAreaId: 10, nextState: winningReplyPosition },
+        { parentNodeId: 21, targetAreaId: 11, nextState: refutedPosition }
+    ];
+
+    const result = analyzer.findForcedWinInTwoMoves(
+        root,
+        [candidate],
+        'red',
+        { red: 1, blue: 6 },
+        (_state, move) => move.nextState,
+        (state, side) => side === 'blue'
+            ? replies
+            : state.tag === 'winning-reply'
+                ? [{ parentNodeId: 30, targetAreaId: 6 }]
+                : [],
+        state => state
+    );
+
+    assert.deepEqual(result.moves, []);
+    assert.equal(result.complete, true);
+});
+
+test('forcing-sequence analysis rejects an opponent reply that wins immediately', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = tacticalState({ turn: 'red' });
+    const afterCandidate = tacticalState({ turn: 'blue' });
+    const candidate = { parentNodeId: 1, targetAreaId: 4, _nextState: afterCandidate };
+
+    const result = analyzer.findForcedWinInTwoMoves(
+        root,
+        [candidate],
+        'red',
+        { red: 1, blue: 6 },
+        () => null,
+        (_state, side) => side === 'blue'
+            ? [{ parentNodeId: 20, targetAreaId: 1 }]
+            : [{ parentNodeId: 30, targetAreaId: 6 }],
+        state => state
+    );
+
+    assert.deepEqual(result.moves, []);
+});
+
+test('forcing-sequence analysis treats a no-move opponent turn as a pass', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = tacticalState({ turn: 'red' });
+    const afterCandidate = tacticalState({ turn: 'blue', tag: 'after-candidate' });
+    const afterPass = tacticalState({ turn: 'red', tag: 'after-pass' });
+    const candidate = { parentNodeId: 1, targetAreaId: 4, _nextState: afterCandidate };
+    let passCount = 0;
+
+    const result = analyzer.findForcedWinInTwoMoves(
+        root,
+        [candidate],
+        'red',
+        { red: 1, blue: 6 },
+        () => null,
+        (state, side) => side === 'blue'
+            ? []
+            : [{ parentNodeId: 30, targetAreaId: 6 }],
+        () => {
+            passCount++;
+            return afterPass;
+        }
+    );
+
+    assert.deepEqual(result.moves, [candidate]);
+    assert.equal(passCount, 1);
+});
+
+test('forcing-sequence analysis never reports a win when its node budget is exhausted', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = tacticalState({ turn: 'red' });
+    const afterCandidate = tacticalState({ turn: 'blue' });
+    const candidate = { parentNodeId: 1, targetAreaId: 4, _nextState: afterCandidate };
+
+    const result = analyzer.findForcedWinInTwoMoves(
+        root,
+        [candidate],
+        'red',
+        { red: 1, blue: 6 },
+        () => null,
+        () => [{ parentNodeId: 20, targetAreaId: 10 }],
+        state => state,
+        { maxNodes: 1 }
+    );
+
+    assert.deepEqual(result.moves, []);
+    assert.equal(result.complete, false);
+    assert.equal(result.nodes, 1);
+});
+
+test('forcing-sequence analysis recognizes a terminal root-destruction win immediately', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = tacticalState({ turn: 'red' });
+    const terminalWin = tacticalState({
+        turn: 'blue', redRoots: 1, blueRoots: 0, isGameOver: true
+    });
+    const candidate = { parentNodeId: 1, targetAreaId: 5, _nextState: terminalWin };
+
+    const result = analyzer.findForcedWinInTwoMoves(
+        root, [candidate], 'red', { red: 1, blue: 6 },
+        () => null, () => [], state => state
+    );
+
+    assert.deepEqual(result.moves, [candidate]);
+});
