@@ -41,11 +41,12 @@ function createFixtures(GameState) {
             name,
             snapshot: { ...game.toJSON(), redBaseId, blueBaseId },
             adjacency,
-            areaCenters
+            areaCenters,
+            side: 'blue'
         };
     };
 
-    return [
+    const fixtures = [
         build('sparse', game => {
             game.currentTurn = 'red';
             game.addNode(null, 0, 0, 1, 'red');
@@ -83,6 +84,28 @@ function createFixtures(GameState) {
             game.addNode(blueBranch.id, 270, 0, 28, 'blue');
         }, 1, 26)
     ];
+
+    const defenseAdjacency = {
+        1: [4], 2: [3], 3: [2, 4], 4: [1, 3, 6], 5: [6], 6: [4, 5]
+    };
+    const defenseCenters = Array.from({ length: 6 }, (_, index) => [index * 10, 0]);
+    const defenseGame = new GameState();
+    defenseGame.currentTurn = 'red';
+    const redRoot = defenseGame.addNode(null, 0, 0, 2, 'red');
+    const redLeaf = defenseGame.addNode(redRoot.id, 20, 0, 3, 'red');
+    defenseGame.currentTurn = 'blue';
+    const blueRoot = defenseGame.addNode(null, 60, 0, 6, 'blue');
+    defenseGame.addNode(blueRoot.id, 40, 0, 4, 'blue');
+    defenseGame.currentTurn = 'red';
+    fixtures.push({
+        name: 'base-defense',
+        snapshot: { ...defenseGame.toJSON(), redBaseId: 1, blueBaseId: 6 },
+        adjacency: defenseAdjacency,
+        areaCenters: defenseCenters,
+        side: 'red'
+    });
+
+    return fixtures;
 }
 
 function moveKey(move) {
@@ -100,16 +123,17 @@ async function loadVersion(root) {
 
 function getLegacyStaticRanking(AIController, fixture, difficulty) {
     const ai = new AIController(difficulty, fixture.adjacency, fixture.areaCenters);
+    const side = fixture.side ?? 'blue';
     const state = ai.adapter.createState(fixture.snapshot);
-    ai.adapter.setSideToMove(state, 'blue');
+    ai.adapter.setSideToMove(state, side);
     const bases = ai.adapter.getBases(fixture.snapshot);
-    const moves = ai._generateMoves(state, 'blue', bases);
+    const moves = ai._generateMoves(state, side, bases);
 
     return moves.map((move, index) => {
-        const next = ai._simulateMove(state, move, 'blue', bases, { alreadyValidated: true });
+        const next = ai._simulateMove(state, move, side, bases, { alreadyValidated: true });
         return {
             key: moveKey(move),
-            score: ai._scoreMove(state, move, 'blue', bases, next),
+            score: ai._scoreMove(state, move, side, bases, next),
             index
         };
     }).sort((left, right) => right.score - left.score || left.index - right.index);
@@ -123,14 +147,15 @@ async function runVersion(root) {
     for (const fixture of fixtures) {
         for (const difficulty of ['hard', 'expert']) {
             const ai = new AIController(difficulty, fixture.adjacency, fixture.areaCenters);
-            const move = ai.getBestMove(fixture.snapshot, 'blue');
+            const side = fixture.side ?? 'blue';
+            const move = ai.getBestMove(fixture.snapshot, side);
             const stats = ai.lastSearchStats || {};
             results.push({
                 fixture: fixture.name,
                 difficulty,
                 legalMoveCount: ai._generateMoves(
                     ai.adapter.createState(fixture.snapshot),
-                    'blue',
+                    side,
                     ai.adapter.getBases(fixture.snapshot)
                 ).length,
                 move,
@@ -199,7 +224,7 @@ try {
         schemaVersion: 1,
         baseSha,
         candidateSha: git(['rev-parse', 'HEAD']),
-        fixtures: ['sparse', 'branching', 'combat'],
+        fixtures: ['sparse', 'branching', 'combat', 'base-defense'],
         difficulties: ['hard', 'expert'],
         interpretation: [
             'This is a deterministic decision comparison, not a strength verdict.',
