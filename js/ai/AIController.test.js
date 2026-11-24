@@ -759,3 +759,42 @@ test('expert AI neutralizes a branch-cut threat instead of growing past it', () 
         { parentNodeId: counterattack.parentNodeId, targetAreaId: counterattack.targetAreaId }
     );
 });
+
+test('non-terminal tactical hints reorder the root search without dropping candidates', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 6, 'red');
+    const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
+    const ai = new AIController('hard', line, centers);
+    const state = ai.adapter.createState(snapshot(game, 6, 1));
+    ai.adapter.setSideToMove(state, 'blue');
+    const candidates = [
+        { parentNodeId: blueRoot.id, targetAreaId: 2, x: 10, y: 0, _nextState: state.clone() },
+        { parentNodeId: blueRoot.id, targetAreaId: 3, x: 20, y: 0, _nextState: state.clone() },
+        { parentNodeId: blueRoot.id, targetAreaId: 4, x: 30, y: 0, _nextState: state.clone() }
+    ];
+    const hints = [candidates[2], candidates[0]];
+    let searchedMoves;
+
+    ai.searchEngine.search = options => {
+        searchedMoves = options.rootMoves;
+        return {
+            move: options.rootMoves[0],
+            value: 0,
+            completedDepth: 1,
+            nodes: 1,
+            workUnits: 1,
+            elapsedMs: 0
+        };
+    };
+
+    const selected = ai._search(
+        state, candidates, 'blue', { red: 6, blue: 1 },
+        Infinity, ai.searchEngine.now(), 100, hints
+    );
+
+    assert.deepEqual(searchedMoves, [candidates[2], candidates[0], candidates[1]]);
+    assert.equal(searchedMoves.length, candidates.length);
+    assert.equal(selected, candidates[2]);
+    assert.equal(ai.lastSearchStats.tacticalHintCount, 2);
+});
