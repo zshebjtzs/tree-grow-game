@@ -585,8 +585,9 @@ export class TacticalAnalyzer {
     ) {
         let nodes = 0;
         const consume = (units = 1) => {
-            nodes += Math.max(1, units);
-            if (nodes > maxNodes || shouldStop()) throw TacticalAnalyzer.BUDGET_EXHAUSTED;
+            const cost = Math.max(1, units);
+            if (nodes + cost > maxNodes || shouldStop()) throw TacticalAnalyzer.BUDGET_EXHAUSTED;
+            nodes += cost;
         };
         const boundedGenerate = (...args) => {
             consume();
