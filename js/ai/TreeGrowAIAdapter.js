@@ -172,7 +172,13 @@ export class TreeGrowAIAdapter {
         const search = searchStats ? {
             completedDepth: searchStats.completedDepth,
             nodes: searchStats.nodes,
+            rootEvaluations: searchStats.rootEvaluations ?? 0,
             elapsedMs: searchStats.elapsedMs,
+            preparationMs: searchStats.preparationMs ?? 0,
+            totalMs: searchStats.totalMs ?? searchStats.elapsedMs,
+            configuredTargetMs: searchStats.configuredTargetMs ?? null,
+            decisionReason: searchStats.decisionReason ?? null,
+            immediateWinningMove: searchStats.immediateWinningMove ?? false,
             transpositionHits: searchStats.transpositionHits,
             tacticalSequenceNodes: searchStats.tacticalSequenceNodes ?? 0,
             tacticalSequenceComplete: searchStats.tacticalSequenceComplete ?? true,
