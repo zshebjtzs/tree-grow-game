@@ -1,8 +1,8 @@
 // js/ai/StrategicDecisionCoordinator.js
 /**
- * Applies one explicit priority order to tactical and strategic decisions.
- * Expensive analyzers are lazy callbacks so a higher-priority result prevents
- * lower-priority work from consuming time or replacing the chosen action.
+ * Coordinates tactical checks before the shared search.
+ * Only an immediate win or a fully proven forced win may bypass search.
+ * Non-terminal tactical gains are hints, never replacements for global evaluation.
  */
 export class StrategicDecisionCoordinator {
     resolve({
@@ -18,13 +18,14 @@ export class StrategicDecisionCoordinator {
         const emptyStats = {
             nodes: 0, workUnits: 0, totalNodes: 0, totalWorkUnits: 0,
             mandatoryDefenseNodes: 0, mandatoryDefenseWorkUnits: 0,
-            complete: true, forcedWin: false, forcedMaterialGain: false,
+            complete: true, defenseComplete: true,
+            forcedWin: false, forcedMaterialGain: false,
             forcedTacticalSequence: false, counterattackSequence: false,
             inducementValidated: false, inducedDefenseBranches: 0,
             sacrificeValidated: false, opponentAttackReplies: 0,
             guaranteedSelfLoss: 0, guaranteedRootLoss: 0,
             guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0,
-            guaranteedNetNodeGain: 0
+            guaranteedNetNodeGain: 0, tacticalHintCount: 0
         };
 
         const immediateWin = findImmediateWin(rankedMoves);
@@ -43,6 +44,7 @@ export class StrategicDecisionCoordinator {
         const defenseWorkUnits = defense.workUnits ?? defense.nodes ?? 0;
         const defenseNodes = defense.nodes ?? 0;
         usedWorkUnits += defenseWorkUnits;
+
         const preservesAllCandidates = Array.isArray(defense.moves) &&
             defense.moves.length === rankedMoves.length &&
             rankedMoves.every(move => defense.moves.includes(move));
@@ -81,10 +83,10 @@ export class StrategicDecisionCoordinator {
             return result;
         };
 
-        const win = runBounded(options => findForcedWin(candidates, options), 4000);
-        if (win.moves.length) {
+        const forcedWin = runBounded(options => findForcedWin(candidates, options), 4000);
+        if (forcedWin.moves.length) {
             return {
-                move: win.moves[0],
+                move: forcedWin.moves[0],
                 reason: 'forced-sequence-win',
                 candidates,
                 defense,
@@ -92,62 +94,53 @@ export class StrategicDecisionCoordinator {
             };
         }
 
-        const material = runBounded(options => findForcedMaterialGain(candidates, options), 4000);
-        if (material.moves.length) {
-            return {
-                move: material.moves[0],
-                reason: 'forced-material-gain',
-                candidates,
-                defense,
-                tacticalStats: makeStats({
-                    guaranteedRootLoss: material.guaranteedRootLoss ?? 0,
-                    guaranteedCascadeLoss: material.guaranteedCascadeLoss ?? 0,
-                    guaranteedNodeLoss: material.guaranteedNodeLoss ?? 0,
-                    guaranteedNetNodeGain: material.guaranteedNetNodeGain ?? 0,
-                    guaranteedSelfLoss: material.guaranteedSelfLoss ?? 0,
-                    forcedMaterialGain: true
-                })
-            };
-        }
+        const tacticalHints = [];
+        const hintSet = new Set();
+        const addHints = moves => {
+            for (const move of moves || []) {
+                if (candidates.includes(move) && !hintSet.has(move)) {
+                    hintSet.add(move);
+                    tacticalHints.push(move);
+                }
+            }
+        };
+
+        const material = runBounded(
+            options => findForcedMaterialGain(candidates, options),
+            4000
+        );
+        addHints(material.moves);
 
         const extended = runBounded(options => findExtendedTactic(candidates, options));
-        if (extended.moves.length) {
-            const reason = extended.sacrificeValidated
-                ? 'validated-tactical-sacrifice'
-                : extended.opponentAttackReplies > 0
-                    ? 'forced-counterattack-sequence'
-                    : extended.inducementValidated
-                        ? 'validated-tactical-inducement'
-                        : 'forced-three-move-sequence';
-            return {
-                move: extended.moves[0],
-                reason,
-                candidates,
-                defense,
-                tacticalStats: makeStats({
-                    forcedTacticalSequence: true,
-                    counterattackSequence: extended.opponentAttackReplies > 0,
-                    inducementValidated: Boolean(extended.inducementValidated),
-                    inducedDefenseBranches: extended.inducedDefenseBranches ?? 0,
-                    sacrificeValidated: Boolean(extended.sacrificeValidated),
-                    opponentAttackReplies: extended.opponentAttackReplies ?? 0,
-                    guaranteedSelfLoss: extended.guaranteedSelfLoss ?? 0,
-                    guaranteedRootLoss: extended.guaranteedRootLoss ?? 0,
-                    guaranteedCascadeLoss: extended.guaranteedCascadeLoss ?? 0,
-                    guaranteedNetNodeGain: extended.guaranteedNodeGain ?? 0
-                })
-            };
-        }
+        addHints(extended.moves);
+
+        const tacticalStats = makeStats({
+            forcedMaterialGain: material.moves.length > 0,
+            forcedTacticalSequence: extended.moves.length > 0,
+            counterattackSequence: extended.opponentAttackReplies > 0,
+            inducementValidated: Boolean(extended.inducementValidated),
+            inducedDefenseBranches: extended.inducedDefenseBranches ?? 0,
+            sacrificeValidated: Boolean(extended.sacrificeValidated),
+            opponentAttackReplies: extended.opponentAttackReplies ?? 0,
+            guaranteedSelfLoss: extended.guaranteedSelfLoss ?? material.guaranteedSelfLoss ?? 0,
+            guaranteedRootLoss: material.guaranteedRootLoss ?? extended.guaranteedRootLoss ?? 0,
+            guaranteedCascadeLoss: material.guaranteedCascadeLoss ?? extended.guaranteedCascadeLoss ?? 0,
+            guaranteedNodeLoss: material.guaranteedNodeLoss ?? extended.guaranteedNodeLoss ?? 0,
+            guaranteedNetNodeGain: material.guaranteedNetNodeGain ?? extended.guaranteedNodeGain ?? 0,
+            tacticalHintCount: tacticalHints.length
+        });
 
         return {
             move: search(candidates, {
                 maxNodes: Math.max(0, maxNodes - usedWorkUnits)
-            }),
+            }, tacticalHints),
             reason: defensePriority ? 'defense-priority' :
-                defenseRiskOrdered ? 'defense-risk-order' : 'search-selection',
+                defenseRiskOrdered ? 'defense-risk-order' :
+                    tacticalHints.length ? 'search-with-tactical-hints' : 'search-selection',
             candidates,
             defense,
-            tacticalStats: makeStats()
+            tacticalHints,
+            tacticalStats
         };
     }
 }
