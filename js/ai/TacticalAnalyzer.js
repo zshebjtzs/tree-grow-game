@@ -97,15 +97,16 @@ export class TacticalAnalyzer {
         { maxNodes = 1200, shouldStop = () => false } = {}
     ) {
         const defenderSide = attackerSide === 'red' ? 'blue' : 'red';
-        const result = { moves: [], nodes: 0, complete: true };
+        const result = { moves: [], nodes: 0, workUnits: 0, complete: true };
 
         const visit = (units = 1) => {
             const cost = Math.max(1, units);
-            if (result.nodes + cost > maxNodes || shouldStop()) {
+            if (result.workUnits + cost > maxNodes || shouldStop()) {
                 result.complete = false;
                 return false;
             }
-            result.nodes += cost;
+            result.nodes++;
+            result.workUnits += cost;
             return true;
         };
 
@@ -201,12 +202,12 @@ export class TacticalAnalyzer {
         { maxNodes = 4000, shouldStop = () => false, minCascadeLoss = 2, minNetNodeGain = 2 } = {}
     ) {
         const defenderSide = attackerSide === 'red' ? 'blue' : 'red';
-        const result = { moves: [], nodes: 0, complete: true, guaranteedRootLoss: 0,
+        const result = { moves: [], nodes: 0, workUnits: 0, complete: true, guaranteedRootLoss: 0,
             guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0, guaranteedSelfLoss: 0,
             guaranteedNetNodeGain: 0 };
         const visit = (units = 1) => {
             const cost = Math.max(1, units);
-            if (result.nodes + cost > maxNodes || shouldStop()) { result.complete = false; return false; }
+            if (result.workUnits + cost > maxNodes || shouldStop()) { result.complete = false; return false; }
             result.nodes += cost;
             return true;
         };
@@ -322,7 +323,7 @@ export class TacticalAnalyzer {
     ) {
         const defenderSide = attackerSide === 'red' ? 'blue' : 'red';
         const result = {
-            moves: [], nodes: 0, complete: true, sequence: [],
+            moves: [], nodes: 0, workUnits: 0, complete: true, sequence: [],
             guaranteedRootLoss: 0, guaranteedCascadeLoss: 0,
             guaranteedNodeGain: 0, guaranteedSelfLoss: 0,
             opponentAttackReplies: 0, inducedDefenseBranches: 0,
@@ -331,7 +332,7 @@ export class TacticalAnalyzer {
 
         const visit = (units = 1) => {
             const cost = Math.max(1, units);
-            if (result.nodes + cost > maxNodes || shouldStop()) {
+            if (result.workUnits + cost > maxNodes || shouldStop()) {
                 result.complete = false;
                 return false;
             }
@@ -596,10 +597,12 @@ export class TacticalAnalyzer {
         { maxNodes = 4000, shouldStop = () => false } = {}
     ) {
         let nodes = 0;
+        let workUnits = 0;
         const consume = (units = 1) => {
             const cost = Math.max(1, units);
-            if (nodes + cost > maxNodes || shouldStop()) throw TacticalAnalyzer.BUDGET_EXHAUSTED;
-            nodes += cost;
+            if (workUnits + cost > maxNodes || shouldStop()) throw TacticalAnalyzer.BUDGET_EXHAUSTED;
+            nodes++;
+            workUnits += cost;
         };
         const boundedGenerate = (...args) => {
             consume();
@@ -617,7 +620,7 @@ export class TacticalAnalyzer {
             );
             if (!immediateWinningMoves) {
                 return { moves, hasImmediateThreat: false, immediateWinningMoves: 0,
-                    nodes, workUnits: nodes, complete: true };
+                    nodes, workUnits, complete: true };
             }
             const ranked = this.rankDefenses(
                 game, moves, side, bases, boundedSimulate, boundedGenerate, immediateWinningMoves
@@ -628,7 +631,7 @@ export class TacticalAnalyzer {
             if (error !== TacticalAnalyzer.BUDGET_EXHAUSTED) throw error;
             // An incomplete threat scan must never narrow the legal candidate set.
             return { moves, hasImmediateThreat: false, immediateWinningMoves: 0,
-                nodes, workUnits: nodes, complete: false };
+                nodes, workUnits, complete: false };
         }
     }
 
