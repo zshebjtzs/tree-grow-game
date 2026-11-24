@@ -29,12 +29,19 @@ export class StrategicDecisionCoordinator {
             return { move: immediateWin, reason: 'immediate-win', tacticalStats: emptyStats };
         }
 
-        const defense = analyzeMandatoryDefense(rankedMoves);
-        const candidates = defense.hasImmediateThreat ? defense.moves : rankedMoves;
-        const defensePriority = defense.hasImmediateThreat && candidates.length < rankedMoves.length;
         const totalTacticalBudget = Math.min(12000, maxNodes);
         let usedNodes = 0;
         let allComplete = true;
+        const defense = analyzeMandatoryDefense(rankedMoves, {
+            maxNodes: Math.min(4000, totalTacticalBudget)
+        });
+        usedNodes += defense.nodes ?? 0;
+        allComplete = allComplete && defense.complete !== false;
+        const candidates = defense.complete === false
+            ? rankedMoves
+            : defense.hasImmediateThreat ? defense.moves : rankedMoves;
+        const defensePriority = defense.complete !== false &&
+            defense.hasImmediateThreat && candidates.length < rankedMoves.length;
 
         const runBounded = (analyzer, stageLimit = Infinity) => {
             const result = analyzer({
@@ -52,7 +59,7 @@ export class StrategicDecisionCoordinator {
                 reason: 'forced-sequence-win',
                 candidates,
                 defense,
-                tacticalStats: { ...emptyStats, nodes: usedNodes, complete: allComplete, forcedWin: true }
+                tacticalStats: { ...emptyStats, nodes: usedNodes, complete: allComplete, defenseComplete: defense.complete !== false, forcedWin: true }
             };
         }
 
@@ -94,6 +101,7 @@ export class StrategicDecisionCoordinator {
                     ...emptyStats,
                     nodes: usedNodes,
                     complete: allComplete,
+                    defenseComplete: defense.complete !== false,
                     forcedTacticalSequence: true,
                     counterattackSequence: extended.opponentAttackReplies > 0,
                     inducementValidated: Boolean(extended.inducementValidated),
@@ -113,7 +121,7 @@ export class StrategicDecisionCoordinator {
             reason: defensePriority ? 'defense-priority' : 'search-selection',
             candidates,
             defense,
-            tacticalStats: { ...emptyStats, nodes: usedNodes, complete: allComplete }
+            tacticalStats: { ...emptyStats, nodes: usedNodes, complete: allComplete, defenseComplete: defense.complete !== false }
         };
     }
 }
