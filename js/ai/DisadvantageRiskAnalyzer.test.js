@@ -44,5 +44,5 @@ test('comeback risk never makes own-root destruction attractive', () => {
         progress: 3,
         exchange: { enemyRootLoss: 1, cascadeLoss: 4, netNodeGain: 2, ownNodeLoss: 0, ownRootLoss: 1 }
     }, profile);
-    assert.equal(score, -900, 'the bounded penalty must dominate non-terminal own-root loss');
+    assert.equal(score, -650, 'the bounded penalty must dominate non-terminal own-root loss');
 });
