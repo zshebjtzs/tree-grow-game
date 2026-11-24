@@ -59,8 +59,9 @@ test('unsafe root and single-chain metrics follow the authoritative combat ances
     forkedGame.currentTurn = 'red';
     const forkedRoot = addRoot(forkedGame, 6, 'red');
     const twoWayFork = forkedGame.addNode(forkedRoot.id, 70, 0, 7, 'red');
-    forkedGame.addNode(twoWayFork.id, 80, 0, 8, 'red');
+    const leftBranch = forkedGame.addNode(twoWayFork.id, 80, 0, 8, 'red');
     forkedGame.addNode(twoWayFork.id, 90, 0, 9, 'red');
+    forkedGame.addNode(leftBranch.id, 100, 0, 10, 'red');
     forkedGame.currentTurn = 'blue';
     addRoot(forkedGame, 5, 'blue');
     const forkedMetrics = adapter.positionEvaluator.getStructuralMetrics(
@@ -68,7 +69,8 @@ test('unsafe root and single-chain metrics follow the authoritative combat ances
     );
     assert.equal(forkedMetrics.unsafeRoots, 1,
         'a degree-3 first child is still attackable and does not protect its root');
-    assert.equal(forkedMetrics.rootChainRisk, 1);
+    assert.equal(forkedMetrics.rootChainRisk, 4,
+        'risk must include every descendant across all branches of the exposed subtree');
 });
 
 test('terminal base invasion is scored as a win for the side that moved', () => {
