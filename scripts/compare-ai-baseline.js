@@ -86,16 +86,30 @@ function createFixtures(GameState) {
     ];
 
     const defenseAdjacency = {
-        1: [4], 2: [3], 3: [2, 4], 4: [1, 3, 6], 5: [6], 6: [4, 5]
+        1: [4],
+        2: [3],
+        3: [2, 4, 10],
+        4: [1, 3, 5, 6],
+        5: [4, 6, 7, 8, 9],
+        6: [4, 5],
+        7: [5],
+        8: [5],
+        9: [5],
+        10: [3, 11],
+        11: [10]
     };
-    const defenseCenters = Array.from({ length: 6 }, (_, index) => [index * 10, 0]);
+    const defenseCenters = Array.from({ length: 11 }, (_, index) => [index * 10, 0]);
     const defenseGame = new GameState();
     defenseGame.currentTurn = 'red';
     const redRoot = defenseGame.addNode(null, 0, 0, 2, 'red');
-    const redLeaf = defenseGame.addNode(redRoot.id, 20, 0, 3, 'red');
+    defenseGame.addNode(redRoot.id, 20, 0, 3, 'red');
     defenseGame.currentTurn = 'blue';
     const blueRoot = defenseGame.addNode(null, 60, 0, 6, 'blue');
-    defenseGame.addNode(blueRoot.id, 40, 0, 4, 'blue');
+    const blueFortress = defenseGame.addNode(blueRoot.id, 50, 0, 5, 'blue');
+    defenseGame.addNode(blueFortress.id, 40, 0, 4, 'blue');
+    defenseGame.addNode(blueFortress.id, 70, 0, 7, 'blue');
+    defenseGame.addNode(blueFortress.id, 80, 0, 8, 'blue');
+    defenseGame.addNode(blueFortress.id, 90, 0, 9, 'blue');
     defenseGame.currentTurn = 'red';
     fixtures.push({
         name: 'base-defense',
