@@ -64,6 +64,7 @@ export class AIController {
             guaranteedRootLoss: 0, guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0
         };
         this.lastDecisionExplanation = null;
+        this.lastDecisionReason = null;
         // Quality is bounded by completed depth and node count, not elapsed time.
         // Search runs in a Worker, so deeper analysis does not block rendering.
         const decisionStartedAt = this.searchEngine.now();
@@ -172,6 +173,7 @@ export class AIController {
         });
         const selectedMove = decision.move;
         const selectionReason = decision.reason;
+        this.lastDecisionReason = selectionReason;
         this.lastTacticalSequenceStats = decision.tacticalStats;
 
         this._recordDecisionTiming(decisionStartedAt, decisionDeadline);
@@ -199,6 +201,8 @@ export class AIController {
             configuredTargetMs: this.profile.searchBudgetMs,
             deadlineMs: this.profile.searchBudgetMs,
             deadlineExceeded: false,
+            decisionReason: this.lastDecisionReason ?? null,
+            immediateWinningMove: this.lastDecisionReason === 'immediate-win',
             tacticalSequenceNodes: this.lastTacticalSequenceStats?.nodes ?? 0,
             tacticalSequenceComplete: this.lastTacticalSequenceStats?.complete ?? true,
             forcedWinInTwoMoves: this.lastTacticalSequenceStats?.forcedWin ?? false,

@@ -197,6 +197,19 @@ for (const fixture of fixtures) {
         for (let index = 0; index < ITERATIONS; index++) {
             const start = performance.now();
             ai.getBestMove(fixture.snapshot, 'blue');
+            const stats = ai.lastSearchStats;
+            const provenTactic = Boolean(
+                stats?.immediateWinningMove ||
+                stats?.forcedWinInTwoMoves ||
+                stats?.forcedMaterialGainInTwoMoves ||
+                stats?.forcedTacticalSequenceInThreeMoves
+            );
+            if (!provenTactic && (stats?.completedDepth ?? 0) < 1) {
+                throw new Error(
+                    `Search quality regression for ${fixture.name}/${difficulty}: ` +
+                    `no proven tactical result and completedDepth=${stats?.completedDepth ?? 0}`
+                );
+            }
             if (fixture.name === 'quiet' && (
                 ai.lastSearchStats?.forcedWinInTwoMoves ||
                 ai.lastSearchStats?.forcedMaterialGainInTwoMoves ||

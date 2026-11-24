@@ -419,7 +419,8 @@ test('AI decision explanation reports measurable route and search evidence', () 
     assert.ok(ai.lastSearchStats.preparationMs >= 0);
     assert.ok(ai.lastSearchStats.totalMs >= ai.lastSearchStats.preparationMs);
     assert.equal(ai.lastSearchStats.deadlineMs, ai.profile.searchBudgetMs);
-    assert.equal(typeof ai.lastSearchStats.deadlineExceeded, 'boolean');
+    assert.equal(ai.lastSearchStats.deadlineExceeded, false);
+    assert.ok(ai.lastSearchStats.completedDepth >= 1);
     assert.ok(progress.some(item => item.phase === 'evaluating'));
     assert.ok(progress.some(item => item.phase === 'search'));
     assert.equal(progress.at(-1).phase, 'complete');

@@ -93,7 +93,7 @@ All existing difficulty levels use the same rules, tactical filters, evaluation 
 
 The current six levels are:
 
-| Level | Maximum depth | Time budget | Node budget |
+| Level | Maximum depth | Target latency (telemetry only) | Node budget |
 |---|---:|---:|---:|
 | beginner | 1 | 25 ms | 500 |
 | easy | 2 | 50 ms | 1,500 |
