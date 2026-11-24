@@ -51,7 +51,8 @@ export class AIController {
         this.lastTacticalSequenceStats = {
             nodes: 0, complete: true, forcedWin: false,
             forcedMaterialGain: false, forcedTacticalSequence: false,
-            counterattackSequence: false, sacrificeValidated: false,
+            counterattackSequence: false, inducementValidated: false,
+            inducedDefensiveReplies: 0, sacrificeValidated: false,
             opponentAttackReplies: 0, guaranteedSelfLoss: 0,
             guaranteedRootLoss: 0, guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0
         };
@@ -201,6 +202,8 @@ export class AIController {
                         forcedTacticalSequence: extendedResult.moves.length > 0,
                         counterattackSequence: extendedResult.moves.length > 0 &&
                             extendedResult.opponentAttackReplies > 0,
+                        inducementValidated: extendedResult.inducementValidated,
+                        inducedDefensiveReplies: extendedResult.inducedDefensiveReplies,
                         sacrificeValidated: extendedResult.sacrificeValidated,
                         opponentAttackReplies: extendedResult.opponentAttackReplies,
                         guaranteedSelfLoss: extendedResult.guaranteedSelfLoss,
@@ -215,7 +218,9 @@ export class AIController {
                             ? 'validated-tactical-sacrifice'
                             : extendedResult.opponentAttackReplies > 0
                                 ? 'forced-counterattack-sequence'
-                                : 'forced-three-move-sequence';
+                                : extendedResult.inducementValidated
+                                    ? 'validated-tactical-inducement'
+                                    : 'forced-three-move-sequence';
                     } else {
                         selectedMove = this._search(
                             game, tacticallyRanked, playerSide, bases, decisionDeadline, decisionStartedAt
@@ -259,6 +264,8 @@ export class AIController {
             guaranteedTacticalNodeLoss: this.lastTacticalSequenceStats?.guaranteedNodeLoss ?? 0,
             forcedTacticalSequenceInThreeMoves: this.lastTacticalSequenceStats?.forcedTacticalSequence ?? false,
             counterattackSequence: this.lastTacticalSequenceStats?.counterattackSequence ?? false,
+            inducementValidated: this.lastTacticalSequenceStats?.inducementValidated ?? false,
+            inducedDefensiveReplies: this.lastTacticalSequenceStats?.inducedDefensiveReplies ?? 0,
             sacrificeValidated: this.lastTacticalSequenceStats?.sacrificeValidated ?? false,
             tacticalOpponentAttackReplies: this.lastTacticalSequenceStats?.opponentAttackReplies ?? 0,
             guaranteedTacticalSelfLoss: this.lastTacticalSequenceStats?.guaranteedSelfLoss ?? 0
