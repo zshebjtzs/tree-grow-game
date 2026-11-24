@@ -1,5 +1,6 @@
 // js/ai/AIController.js
 import { SearchEngine } from './SearchEngine.js';
+import { OffensiveStrategyAnalyzer } from './OffensiveStrategyAnalyzer.js';
 import { getDifficultyProfile, DIFFICULTY_LEVELS } from './DifficultyProfiles.js';
 import { TreeGrowAIAdapter } from './TreeGrowAIAdapter.js';
 
@@ -39,6 +40,8 @@ export class AIController {
         this.tacticalAnalyzer = this.adapter.tacticalAnalyzer;
         this.positionEvaluator = this.adapter.positionEvaluator;
         this.searchEngine = new SearchEngine();
+        this.offensiveStrategyAnalyzer = new OffensiveStrategyAnalyzer();
+        this.lastOffensiveAnalysis = null;
         this.lastSearchStats = null;
         this.lastTacticalSequenceStats = null;
     }
@@ -48,6 +51,7 @@ export class AIController {
             throw new TypeError('AI 玩家阵营无效');
         }
         this.lastSearchStats = null;
+        this.lastOffensiveAnalysis = null;
         this.lastTacticalSequenceStats = {
             nodes: 0, complete: true, forcedWin: false,
             forcedMaterialGain: false, forcedTacticalSequence: false,
@@ -96,6 +100,9 @@ export class AIController {
             }
         }
         ranked.sort((a, b) => b.score - a.score);
+        this.lastOffensiveAnalysis = this.offensiveStrategyAnalyzer.analyze(
+            game, playerSide, ranked
+        );
 
         let selectedMove = this.tacticalAnalyzer.findImmediateWinningMove(ranked, playerSide, bases);
         let selectionReason = selectedMove ? 'immediate-win' : 'profile-selection';
@@ -104,16 +111,21 @@ export class AIController {
             this._emitProgress({ phase: 'tactics' });
             // When the opponent has a one-move win, prefer actions that eliminate
             // the threat. If no action fully defends, minimize the remaining wins.
-            const defenseMoves = this.tacticalAnalyzer.rankDefenses(
+            const defenseResult = this.tacticalAnalyzer.findMandatoryDefenses(
                 game, ranked, playerSide, bases,
                 (state, move, side, matchBases) => this._simulateMove(
                     state, move, side, matchBases, { alreadyValidated: true }
                 ),
                 (state, side, matchBases) => this._generateMoves(state, side, matchBases)
             );
-            const defenseSet = new Set(defenseMoves);
-            const tacticallyRanked = ranked.filter(move => defenseSet.has(move));
-            if (tacticallyRanked.length < ranked.length) selectionReason = 'defense-priority';
+            // Root/cascade risk remains part of search evaluation. Only filter
+            // candidates when the opponent currently has an immediate winning move.
+            const tacticallyRanked = defenseResult.hasImmediateThreat
+                ? defenseResult.moves
+                : ranked;
+            if (defenseResult.hasImmediateThreat && tacticallyRanked.length < ranked.length) {
+                selectionReason = 'defense-priority';
+            }
 
             const sequenceResult = this.tacticalAnalyzer.findForcedWinInTwoMoves(
                 game,
@@ -268,7 +280,15 @@ export class AIController {
             inducedDefensiveReplies: this.lastTacticalSequenceStats?.inducedDefensiveReplies ?? 0,
             sacrificeValidated: this.lastTacticalSequenceStats?.sacrificeValidated ?? false,
             tacticalOpponentAttackReplies: this.lastTacticalSequenceStats?.opponentAttackReplies ?? 0,
-            guaranteedTacticalSelfLoss: this.lastTacticalSequenceStats?.guaranteedSelfLoss ?? 0
+            guaranteedTacticalSelfLoss: this.lastTacticalSequenceStats?.guaranteedSelfLoss ?? 0,
+            offensiveCandidateCount: this.lastOffensiveAnalysis?.candidateCount ?? 0,
+            offensiveAttackCandidateCount: this.lastOffensiveAnalysis?.attackCandidateCount ?? 0,
+            offensiveHighValueAttackCount: this.lastOffensiveAnalysis?.highValueAttackCount ?? 0,
+            offensiveRootAttackCount: this.lastOffensiveAnalysis?.rootAttackCount ?? 0,
+            offensiveCascadeAttackCount: this.lastOffensiveAnalysis?.cascadeAttackCount ?? 0,
+            offensiveImmediateWinCount: this.lastOffensiveAnalysis?.immediateWinningAttackCount ?? 0,
+            offensiveMaxEnemyNodeLoss: this.lastOffensiveAnalysis?.maxEnemyNodeLoss ?? 0,
+            offensiveMaxEnemyRootLoss: this.lastOffensiveAnalysis?.maxEnemyRootLoss ?? 0
         };
     }
 
