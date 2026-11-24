@@ -97,8 +97,9 @@ test('AI simulation preserves a sibling branch and freezes the actual combat sto
 
 test('forced material-gain analysis proves a real frozen-branch cascade using authoritative rules', () => {
     const adjacency = {
-        1: [2], 2: [1, 5], 5: [2, 7],
-        6: [7], 7: [6, 5, 8, 9], 8: [7], 9: [7], 10: []
+        1: [2], 2: [1, 5], 5: [2, 8],
+        6: [7], 7: [6, 8, 11], 8: [5, 7, 9, 10],
+        9: [8], 10: [8], 11: [7], 12: []
     };
     const adapter = new TreeGrowAIAdapter({
         adjacency,
@@ -112,15 +113,17 @@ test('forced material-gain analysis proves a real frozen-branch cascade using au
 
     game.currentTurn = 'red';
     const redRoot = addNode(game, null, 6, 'red');
-    const redBranch = addNode(game, redRoot.id, 7, 'red');
-    addNode(game, redBranch.id, 8, 'red');
+    const redTrunk = addNode(game, redRoot.id, 7, 'red');
+    const redBranch = addNode(game, redTrunk.id, 8, 'red');
     addNode(game, redBranch.id, 9, 'red');
+    addNode(game, redBranch.id, 10, 'red');
+    addNode(game, redTrunk.id, 11, 'red');
     // This branch is frozen by an earlier combat interaction. Its descendants
     // have no other legal growth targets, so the opponent's only response is pass.
     redBranch.isFrozen = true;
     game.currentTurn = 'blue';
 
-    const bases = { blue: 1, red: 10 };
+    const bases = { blue: 1, red: 12 };
     const candidate = adapter.generateMoves(game, 'blue', bases)
         .find(move => move.targetAreaId === 5);
     assert.ok(candidate, 'the blue branch must be able to grow into area 5');
@@ -148,11 +151,13 @@ test('forced material-gain analysis proves a real frozen-branch cascade using au
 
     const afterPass = adapter.simulatePass(candidate._nextState, 'red');
     const attack = adapter.generateMoves(afterPass, 'blue', bases)
-        .find(move => move.targetAreaId === 7);
+        .find(move => move.targetAreaId === 8);
     assert.ok(attack, 'the blue branch must be able to attack the frozen branch after the pass');
     const afterAttack = adapter.simulateMove(
         afterPass, attack, 'blue', bases, { alreadyValidated: true }
     );
     assert.equal(afterAttack.getPlayerRootNodes('red').length, 1);
-    assert.equal(afterAttack.getAliveNodesByOwner('red').length, 1);
+    assert.equal(afterAttack.getAliveNodesByOwner('red').length, 3);
+    assert.ok(afterAttack.getAliveNodesByOwner('red').some(node => node.areaId === 11),
+        'the sibling branch must survive the cascade');
 });
