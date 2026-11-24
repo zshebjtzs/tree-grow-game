@@ -336,14 +336,12 @@ export class TacticalAnalyzer {
     }
 
     /**
-     * Proves a three-action tactical combination:
-     * candidate -> defender reply -> attacker setup -> defender reply -> attack.
+     * Proves a three-action forcing combination:
+     * candidate -> defender reply -> attacker counterattack.
      *
-     * Every defender reply is an AND branch; the attacker may choose a setup
-     * and a final attack (OR branches). Opponent attacks are allowed, but their
-     * actual losses are charged against the final material gain. This models
-     * counterattacks and sound tactical sacrifices without rewarding a
-     * materially losing line.
+     * Every defender reply is an AND branch; the attacker may choose a
+     * qualifying counterattack (OR branch). Opponent attacks are allowed, but
+     * their actual losses are charged against the resulting material gain.
      */
     findForcedTacticalSequenceInThreeMoves(
         rootState, moves, attackerSide, bases, simulateMove, generateMoves, simulatePass,

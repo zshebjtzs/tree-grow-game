@@ -33,7 +33,9 @@ export class StrategicDecisionCoordinator {
             return { move: immediateWin, reason: 'immediate-win', tacticalStats: emptyStats };
         }
 
-        const totalTacticalBudget = Math.min(12000, maxNodes);
+        // Keep 40% of the remaining work budget for the global search. Tactical
+        // proofs are valuable, but must not consume the entire decision budget.
+        const totalTacticalBudget = Math.min(12000, Math.floor(maxNodes * 0.6));
         let usedWorkUnits = 0;
         let proofWorkUnits = 0;
         let proofNodes = 0;

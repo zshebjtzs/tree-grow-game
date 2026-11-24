@@ -92,7 +92,7 @@ test('tactical analyzers share one bounded node allowance in strict priority ord
         },
         search: (moves, budget) => { searchBudget = budget.maxNodes; return moves[0]; }
     }));
-    assert.deepEqual(budgets, [4000, 4000, 7800]);
+    assert.deepEqual(budgets, [4000, 4000, 4200]);
     assert.equal(result.tacticalStats.nodes, 1200);
     assert.equal(result.tacticalStats.complete, false);
     assert.equal(searchBudget, 7800);
@@ -189,4 +189,43 @@ test('non-terminal tactical proofs become search hints instead of bypassing mini
     assert.equal(result.tacticalStats.forcedTacticalSequence, true);
     assert.equal(result.tacticalStats.counterattackSequence, true);
     assert.equal(result.tacticalStats.tacticalHintCount, 2);
+});
+
+
+test('tactical analysis preserves a minimum work budget for global search', () => {
+    const coordinator = new StrategicDecisionCoordinator();
+    let defenseBudget;
+    let proofBudgets = [];
+    let searchBudget;
+    const result = coordinator.resolve(callbacks({
+        maxNodes: 6000,
+        analyzeMandatoryDefense: (moves, budget) => {
+            defenseBudget = budget.maxNodes;
+            return {
+                moves, hasImmediateThreat: false,
+                nodes: 3600, workUnits: 3600, complete: true
+            };
+        },
+        findForcedWin: (_moves, budget) => {
+            proofBudgets.push(budget.maxNodes);
+            return { moves: [], nodes: 0, workUnits: 0, complete: true };
+        },
+        findForcedMaterialGain: (_moves, budget) => {
+            proofBudgets.push(budget.maxNodes);
+            return { moves: [], nodes: 0, workUnits: 0, complete: true };
+        },
+        findExtendedTactic: (_moves, budget) => {
+            proofBudgets.push(budget.maxNodes);
+            return { moves: [], nodes: 0, workUnits: 0, complete: true };
+        },
+        search: (moves, budget) => {
+            searchBudget = budget.maxNodes;
+            return moves[0];
+        }
+    }));
+
+    assert.equal(defenseBudget, 3600);
+    assert.deepEqual(proofBudgets, [0, 0, 0]);
+    assert.equal(searchBudget, 2400);
+    assert.equal(result.tacticalStats.totalWorkUnits, 3600);
 });
