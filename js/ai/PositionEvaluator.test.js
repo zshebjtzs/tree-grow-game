@@ -537,3 +537,67 @@ test('root safety and root-chain penalties use each side own strategic weights',
         175
     );
 });
+
+
+test('move scoring detects an enemy attack on an ancestor that cascades through the new branch', () => {
+    const adjacency = {
+        1: [2],
+        2: [1, 3, 4],
+        3: [2],
+        4: [2, 5],
+        5: [4]
+    };
+    const adapter = createAdapter(adjacency, 5);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const redRoot = addRoot(game, 1, 'red');
+    const redParent = game.addNode(redRoot.id, 20, 0, 2, 'red');
+    game.currentTurn = 'blue';
+    addRoot(game, 4, 'blue');
+    game.currentTurn = 'red';
+
+    const bases = { red: 1, blue: 5 };
+    const move = {
+        parentNodeId: redParent.id,
+        targetAreaId: 3,
+        x: 30,
+        y: 0
+    };
+    const next = adapter.simulateMove(game, move, 'red', bases);
+    assert.ok(next);
+    const newNode = next.getAliveNodesByOwner('red')
+        .find(node => node.areaId === move.targetAreaId);
+    assert.ok(newNode);
+
+    const enemyMoves = adapter.generateMoves(next, 'blue', bases);
+    const ancestorAttack = enemyMoves.find(reply =>
+        reply.attacks && reply.targetAreaId === redParent.areaId
+    );
+    assert.ok(ancestorAttack,
+        'the enemy must have a legal attack against the new node parent');
+    const afterAncestorAttack = adapter.simulateMove(next, ancestorAttack, 'blue', bases);
+    assert.ok(afterAncestorAttack);
+    assert.ok(!afterAncestorAttack.getAliveNodesByOwner('red')
+        .some(node => node.id === newNode.id),
+    'attacking the ancestor must remove the newly grown descendant');
+
+    const simulatedEnemyTargets = [];
+    const originalGenerateMoves = adapter.generateMoves.bind(adapter);
+    const originalSimulateMove = adapter.simulateMove.bind(adapter);
+    adapter.generateMoves = (state, side, matchBases) => {
+        const generated = originalGenerateMoves(state, side, matchBases);
+        if (side === 'blue') {
+            for (const reply of generated) {
+                if (reply.attacks) simulatedEnemyTargets.push(reply.targetAreaId);
+            }
+        }
+        return generated;
+    };
+    adapter.simulateMove = (state, reply, side, matchBases, options) => {
+        return originalSimulateMove(state, reply, side, matchBases, options);
+    };
+
+    adapter.positionEvaluator.scoreMove(game, move, 'red', bases, next);
+    assert.ok(simulatedEnemyTargets.includes(redParent.areaId),
+        'candidate scoring must inspect the ancestor attack, not only direct recapture of the new node');
+});
