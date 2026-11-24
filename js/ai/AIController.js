@@ -118,14 +118,15 @@ export class AIController {
             maxNodes: this.profile.maxNodes,
             findImmediateWin: candidates =>
                 this.tacticalAnalyzer.findImmediateWinningMove(candidates, playerSide, bases),
-            analyzeMandatoryDefense: candidates => {
+            analyzeMandatoryDefense: (candidates, budget) => {
                 this._emitProgress({ phase: 'tactics' });
                 return this.tacticalAnalyzer.findMandatoryDefenses(
                     game, candidates, playerSide, bases,
                     (state, move, side, matchBases) => this._simulateMove(
                         state, move, side, matchBases, { alreadyValidated: true }
                     ),
-                    (state, side, matchBases) => this._generateMoves(state, side, matchBases)
+                    (state, side, matchBases) => this._generateMoves(state, side, matchBases),
+                    { maxNodes: budget.maxNodes, shouldStop: () => this.searchEngine.now() >= decisionDeadline }
                 );
             },
             findForcedWin: (candidates, budget) =>
@@ -205,6 +206,7 @@ export class AIController {
             immediateWinningMove: this.lastDecisionReason === 'immediate-win',
             tacticalSequenceNodes: this.lastTacticalSequenceStats?.nodes ?? 0,
             tacticalSequenceComplete: this.lastTacticalSequenceStats?.complete ?? true,
+            mandatoryDefenseComplete: this.lastTacticalSequenceStats?.defenseComplete ?? true,
             forcedWinInTwoMoves: this.lastTacticalSequenceStats?.forcedWin ?? false,
             forcedMaterialGainInTwoMoves: this.lastTacticalSequenceStats?.forcedMaterialGain ?? false,
             guaranteedTacticalRootLoss: this.lastTacticalSequenceStats?.guaranteedRootLoss ?? 0,
