@@ -376,3 +376,41 @@ test('advantage conversion increases ordering value only when the position is fa
     assert.ok(favorableScore > neutralScore,
         'a favorable position should value concrete progress toward converting the advantage');
 });
+
+
+test('disadvantage risk adds bounded initiative value to concrete forward progress', () => {
+    const createEvaluator = riskFactor => {
+        const evaluator = Object.create(PositionEvaluator.prototype);
+        evaluator.profile = { advantageConversionWeight: 0.3, disadvantageProgressWeight: 80 };
+        evaluator.distanceToBase = (state, side) => state.before
+            ? (side === 'red' ? 4 : Infinity)
+            : (side === 'red' ? 3 : Infinity);
+        evaluator.getStrategicAnalysis = () => ({
+            weights: {
+                progressWeight: 1, attackWeight: 1, rootAttackWeight: 1,
+                expansionWeight: 1, safetyWeight: 1, branchingWeight: 1,
+                structureWeight: 1
+            },
+            spatialScore: 0
+        });
+        evaluator.getAdvantageConversionFactor = () => 0;
+        evaluator.getDisadvantageRiskFactor = () => riskFactor;
+        return evaluator;
+    };
+    const before = {
+        before: true,
+        getAliveNodesByOwner: side => side === 'red' ? [{ id: 1 }] : [{ id: 2 }]
+    };
+    const after = {
+        before: false,
+        getAliveNodesByOwner: side => side === 'red' ? [{ id: 1 }, { id: 3 }] : [{ id: 2 }],
+        getAliveNodes: () => []
+    };
+    const move = { attacks: false, targetAreaId: 3 };
+    const bases = { red: 1, blue: 6 };
+    const neutral = createEvaluator(0).scoreMove(before, move, 'red', bases, after);
+    const comeback = createEvaluator(1).scoreMove(before, move, 'red', bases, after);
+
+    assert.equal(comeback - neutral, 80,
+        'risk preference should add only its configured bounded value to concrete progress');
+});
