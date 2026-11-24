@@ -21,7 +21,8 @@ test('all difficulty profiles share the same evaluation weights', () => {
         'progressWeight', 'attackWeight', 'rootAttackWeight', 'expansionWeight',
         'safetyWeight', 'structureWeight', 'branchingWeight', 'rootSafetyWeight',
         'rootChainRiskWeight', 'softDistanceWeight', 'growthHeadroomWeight',
-        'baseThreatWeight', 'siegePreparationWeight', 'siegeFortressWeight'
+        'baseThreatWeight', 'siegePreparationWeight', 'siegeFortressWeight',
+        'advantageConversionThreshold', 'advantageConversionScale', 'advantageConversionWeight'
     ];
     for (const key of keys) {
         assert.ok(profiles.every(profile => profile[key] === profiles[0][key]), `${key} must be shared`);
