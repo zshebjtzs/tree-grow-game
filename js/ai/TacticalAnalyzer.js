@@ -754,14 +754,6 @@ export class TacticalAnalyzer {
             (left.totalNodeLoss - right.totalNodeLoss) ||
             (left.index - right.index);
 
-        if (currentThreats) {
-            const minimumThreats = Math.min(...rootRisk.map(item => item.immediateWinningMoves));
-            return rootRisk
-                .filter(item => item.immediateWinningMoves === minimumThreats)
-                .sort(compareRisk)
-                .map(item => item.move);
-        }
-
         return rootRisk.sort(compareRisk).map(item => item.move);
     }
 }
