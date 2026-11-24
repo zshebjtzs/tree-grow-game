@@ -290,7 +290,7 @@ export class AIController {
         return this.positionEvaluator.evaluateState(game, perspective, bases);
     }
 
-    _search(game, rankedMoves, side, bases, deadline = null, decisionStartedAt = this.searchEngine.now()) {
+    _search(game, rankedMoves, side, bases, deadline = null, decisionStartedAt = this.searchEngine.now(), maxNodes = this.profile.maxNodes) {
         // Search every legal root candidate; static ordering must not permanently
         // discard a move before the search can evaluate its consequences.
         const rootMoves = rankedMoves;
