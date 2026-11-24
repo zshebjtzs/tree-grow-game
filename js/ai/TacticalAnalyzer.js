@@ -187,6 +187,160 @@ export class TacticalAnalyzer {
         return result;
     }
 
+    /**
+     * Finds a two-turn tactical gain that survives every legal opponent reply.
+     * A qualifying continuation must remove an enemy root or at least two
+     * non-root nodes (including cascade losses). This avoids treating a lone
+     * expendable leaf as a meaningful forcing combination.
+     */
+    findForcedMaterialGainInTwoMoves(
+        rootState, moves, attackerSide, bases, simulateMove, generateMoves, simulatePass,
+        { maxNodes = 600, shouldStop = () => false, minCascadeLoss = 2 } = {}
+    ) {
+        const defenderSide = attackerSide === 'red' ? 'blue' : 'red';
+        const result = {
+            moves: [],
+            nodes: 0,
+            complete: true,
+            guaranteedRootLoss: 0,
+            guaranteedCascadeLoss: 0,
+            guaranteedNodeLoss: 0
+        };
+
+        const visit = () => {
+            if (result.nodes >= maxNodes || shouldStop()) {
+                result.complete = false;
+                return false;
+            }
+            result.nodes++;
+            return true;
+        };
+
+        const measureGain = (before, after, move) => {
+            if (!after) return null;
+            const beforeNodes = before.getAliveNodesByOwner(defenderSide);
+            const afterIds = new Set(
+                after.getAliveNodesByOwner(defenderSide).map(node => node.id)
+            );
+            const beforeRoots = before.getPlayerRootNodes(defenderSide);
+            const afterRootIds = new Set(
+                after.getPlayerRootNodes(defenderSide).map(node => node.id)
+            );
+            const removedIds = beforeNodes
+                .filter(node => !afterIds.has(node.id))
+                .map(node => node.id);
+            const beforeRootIds = new Set(beforeRoots.map(node => node.id));
+            const rootLoss = [...beforeRootIds].filter(id => !afterRootIds.has(id)).length;
+            const directTarget = beforeNodes.find(node => node.areaId === move.targetAreaId);
+            const cascadeLoss = removedIds.filter(id =>
+                id !== directTarget?.id && !beforeRootIds.has(id)
+            ).length;
+            return {
+                rootLoss,
+                nodeLoss: removedIds.length,
+                cascadeLoss
+            };
+        };
+
+        const isQualifyingGain = gain =>
+            gain && (gain.rootLoss > 0 || gain.cascadeLoss >= minCascadeLoss);
+
+        const betterGain = (left, right) => {
+            if (!right) return true;
+            if (left.rootLoss !== right.rootLoss) return left.rootLoss > right.rootLoss;
+            if (left.cascadeLoss !== right.cascadeLoss) return left.cascadeLoss > right.cascadeLoss;
+            return left.nodeLoss > right.nodeLoss;
+        };
+
+        let bestCandidate = null;
+        for (const candidate of moves) {
+            if (!visit()) break;
+            const afterCandidate = candidate._nextState ||
+                simulateMove(rootState, candidate, attackerSide, bases);
+            if (!afterCandidate || afterCandidate.isGameOver) continue;
+
+            if (!visit()) break;
+            const opponentMoves = generateMoves(afterCandidate, defenderSide, bases);
+            const responses = opponentMoves.length ? opponentMoves : [null];
+            let survivesEveryReply = true;
+            let minRootLoss = Infinity;
+            let minCascadeLoss = Infinity;
+            let minNodeLoss = Infinity;
+
+            for (const response of responses) {
+                if (!visit()) {
+                    survivesEveryReply = false;
+                    break;
+                }
+
+                if (response?.targetAreaId === bases[attackerSide]) {
+                    survivesEveryReply = false;
+                    break;
+                }
+
+                const afterResponse = response
+                    ? response._nextState || simulateMove(
+                        afterCandidate, response, defenderSide, bases
+                    )
+                    : simulatePass(afterCandidate, defenderSide);
+
+                if (!afterResponse || afterResponse.isGameOver) {
+                    survivesEveryReply = false;
+                    break;
+                }
+
+                const continuations = generateMoves(afterResponse, attackerSide, bases);
+                let bestReplyGain = null;
+                for (const continuation of continuations) {
+                    if (!continuation.attacks) continue;
+                    if (!visit()) {
+                        survivesEveryReply = false;
+                        break;
+                    }
+                    const afterContinuation = continuation._nextState ||
+                        simulateMove(afterResponse, continuation, attackerSide, bases);
+                    const gain = measureGain(afterResponse, afterContinuation, continuation);
+                    if (isQualifyingGain(gain) && betterGain(gain, bestReplyGain)) {
+                        bestReplyGain = gain;
+                    }
+                }
+
+                if (!survivesEveryReply || !isQualifyingGain(bestReplyGain)) {
+                    survivesEveryReply = false;
+                    break;
+                }
+                minRootLoss = Math.min(minRootLoss, bestReplyGain.rootLoss);
+                minCascadeLoss = Math.min(minCascadeLoss, bestReplyGain.cascadeLoss);
+                minNodeLoss = Math.min(minNodeLoss, bestReplyGain.nodeLoss);
+                if (!result.complete) {
+                    survivesEveryReply = false;
+                    break;
+                }
+            }
+
+            if (survivesEveryReply && result.complete) {
+                const candidateGain = {
+                    move: candidate,
+                    rootLoss: minRootLoss,
+                    cascadeLoss: minCascadeLoss,
+                    nodeLoss: minNodeLoss
+                };
+                if (!bestCandidate || betterGain(candidateGain, bestCandidate)) {
+                    bestCandidate = candidateGain;
+                }
+            }
+            if (!result.complete) break;
+        }
+
+        if (bestCandidate && result.complete) {
+            result.moves = [bestCandidate.move];
+            result.guaranteedRootLoss = bestCandidate.rootLoss;
+            result.guaranteedCascadeLoss = bestCandidate.cascadeLoss;
+            result.guaranteedNodeLoss = bestCandidate.nodeLoss;
+        }
+        return result;
+    }
+
     rankDefenses(game, moves, side, bases, simulateMove, generateMoves) {
         const opponent = side === 'red' ? 'blue' : 'red';
         const originalTurn = game.currentTurn;
