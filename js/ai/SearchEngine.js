@@ -41,6 +41,7 @@ export class SearchEngine {
                 : startedAt + Math.max(1, timeBudgetMs);
         const stats = {
             nodes: 0,
+            workUnits: 0,
             cutoffs: 0,
             transpositionHits: 0,
             aspirationResearches: 0,
@@ -49,11 +50,13 @@ export class SearchEngine {
             aspirationFailHigh: 0,
             rootEvaluations: 0
         };
-        const checkBudget = () => {
-            if (stats.nodes >= maxNodes || this.now() >= deadline) {
+        const consumeWork = (units = 1) => {
+            stats.workUnits += Math.max(1, units);
+            if (stats.workUnits > maxNodes || this.now() >= deadline) {
                 throw SearchEngine.BUDGET_EXHAUSTED;
             }
         };
+        const checkBudget = () => consumeWork();
         const table = new Map();
         const promoteMove = (moves, preferredKey) => {
             if (preferredKey === undefined || preferredKey === null) return moves;
@@ -66,8 +69,10 @@ export class SearchEngine {
         // Establish a full one-ply root evaluation before iterative deepening.
         // An interrupted deeper iteration never falls back to static ordering.
         for (const move of rootMoves) {
+            consumeWork();
             const next = applyMove(rootState, move, getSideToMove(rootState));
             if (!next) continue;
+            consumeWork();
             const value = evaluate(next);
             stats.rootEvaluations++;
             if (value > bestValue) {
@@ -80,9 +85,7 @@ export class SearchEngine {
         let preferredRootMoveKey;
 
         const visit = (state, depth, alpha, beta, maximizing) => {
-            if (stats.nodes >= maxNodes || this.now() >= deadline) {
-                throw SearchEngine.BUDGET_EXHAUSTED;
-            }
+            consumeWork();
             stats.nodes++;
             if (isTerminal(state) || depth === 0) return evaluate(state);
 
@@ -99,8 +102,9 @@ export class SearchEngine {
             }
 
             const side = getSideToMove(state);
+            consumeWork();
             let moves = generateMoves(state, side);
-            checkBudget();
+            consumeWork(moves.length + 1);
             if (!moves.length) {
                 const passed = passTurn?.(state, side);
                 return passed ? visit(passed, depth - 1, alpha, beta, !maximizing) : evaluate(state);
@@ -112,6 +116,7 @@ export class SearchEngine {
 
             for (let index = 0; index < moves.length; index++) {
                 const move = moves[index];
+                consumeWork();
                 const next = applyMove(state, move, side);
                 if (!next) continue;
 
@@ -167,11 +172,13 @@ export class SearchEngine {
             let iterationValue = -Infinity;
             let alpha = initialAlpha;
             const beta = initialBeta;
+            consumeWork();
             let ordered = orderMoves(rootState, rootMoves, true, checkBudget);
             ordered = promoteMove(ordered, preferredRootMoveKey);
 
             for (const move of ordered) {
                 checkBudget();
+                consumeWork();
                 const next = applyMove(rootState, move, getSideToMove(rootState));
                 if (!next) continue;
                 const value = isTerminal(next)
@@ -250,6 +257,7 @@ export class SearchEngine {
             value: bestValue,
             completedDepth,
             nodes: stats.nodes,
+            workUnits: stats.workUnits,
             rootEvaluations: stats.rootEvaluations,
             cutoffs: stats.cutoffs,
             transpositionHits: stats.transpositionHits,
