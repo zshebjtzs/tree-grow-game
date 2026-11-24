@@ -231,7 +231,7 @@ export class AIController {
             forcedTacticalSequenceInThreeMoves: this.lastTacticalSequenceStats?.forcedTacticalSequence ?? false,
             counterattackSequence: this.lastTacticalSequenceStats?.counterattackSequence ?? false,
             inducementValidated: this.lastTacticalSequenceStats?.inducementValidated ?? false,
-            inducedDefensiveReplies: this.lastTacticalSequenceStats?.inducedDefensiveReplies ?? 0,
+            inducedDefenseBranches: this.lastTacticalSequenceStats?.inducedDefenseBranches ?? 0,
             sacrificeValidated: this.lastTacticalSequenceStats?.sacrificeValidated ?? false,
             tacticalOpponentAttackReplies: this.lastTacticalSequenceStats?.opponentAttackReplies ?? 0,
             offensiveCandidateCount: this.lastOffensiveAnalysis?.candidateCount ?? 0,
