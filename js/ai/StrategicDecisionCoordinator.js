@@ -16,7 +16,8 @@ export class StrategicDecisionCoordinator {
         search
     }) {
         const emptyStats = {
-            nodes: 0, totalNodes: 0, mandatoryDefenseNodes: 0, complete: true, forcedWin: false,
+            nodes: 0, workUnits: 0, totalNodes: 0, totalWorkUnits: 0,
+            mandatoryDefenseNodes: 0, mandatoryDefenseWorkUnits: 0, complete: true, forcedWin: false,
             forcedMaterialGain: false, forcedTacticalSequence: false,
             counterattackSequence: false, inducementValidated: false,
             inducedDefenseBranches: 0, sacrificeValidated: false,
@@ -36,7 +37,8 @@ export class StrategicDecisionCoordinator {
         const defense = analyzeMandatoryDefense(rankedMoves, {
             maxNodes: Math.min(4000, totalTacticalBudget)
         });
-        usedNodes += defense.nodes ?? 0;
+        const defenseWorkUnits = defense.workUnits ?? defense.nodes ?? 0;
+        usedNodes += defenseWorkUnits;
         const candidates = defense.complete === false
             ? rankedMoves
             : defense.hasImmediateThreat ? defense.moves : rankedMoves;
@@ -47,8 +49,9 @@ export class StrategicDecisionCoordinator {
             const result = analyzer({
                 maxNodes: Math.max(0, Math.min(stageLimit, totalTacticalBudget - usedNodes))
             });
-            usedNodes += result.nodes ?? 0;
-            proofNodes += result.nodes ?? 0;
+            const stageWorkUnits = result.workUnits ?? result.nodes ?? 0;
+            usedNodes += stageWorkUnits;
+            proofNodes += stageWorkUnits;
             proofComplete = proofComplete && result.complete !== false;
             return result;
         };
@@ -60,7 +63,9 @@ export class StrategicDecisionCoordinator {
                 reason: 'forced-sequence-win',
                 candidates,
                 defense,
-                tacticalStats: { ...emptyStats, nodes: proofNodes, totalNodes: usedNodes, mandatoryDefenseNodes: defense.nodes ?? 0, complete: proofComplete, defenseComplete: defense.complete !== false, forcedWin: true }
+                tacticalStats: { ...emptyStats, nodes: proofNodes, workUnits: proofNodes, totalNodes: usedNodes,
+                    totalWorkUnits: usedNodes, mandatoryDefenseNodes: defenseWorkUnits,
+                    mandatoryDefenseWorkUnits: defenseWorkUnits, complete: proofComplete, defenseComplete: defense.complete !== false, forcedWin: true }
             };
         }
 
@@ -75,7 +80,8 @@ export class StrategicDecisionCoordinator {
                     ...emptyStats,
                     nodes: proofNodes,
                     totalNodes: usedNodes,
-                    mandatoryDefenseNodes: defense.nodes ?? 0,
+                    mandatoryDefenseNodes: defenseWorkUnits,
+                    mandatoryDefenseWorkUnits: defenseWorkUnits,
                     complete: proofComplete,
                     defenseComplete: defense.complete !== false,
                     guaranteedRootLoss: material.guaranteedRootLoss ?? 0,
@@ -131,7 +137,9 @@ export class StrategicDecisionCoordinator {
             reason: defensePriority ? 'defense-priority' : 'search-selection',
             candidates,
             defense,
-            tacticalStats: { ...emptyStats, nodes: proofNodes, totalNodes: usedNodes, mandatoryDefenseNodes: defense.nodes ?? 0, complete: proofComplete, defenseComplete: defense.complete !== false }
+            tacticalStats: { ...emptyStats, nodes: proofNodes, workUnits: proofNodes, totalNodes: usedNodes,
+                totalWorkUnits: usedNodes, mandatoryDefenseNodes: defenseWorkUnits,
+                mandatoryDefenseWorkUnits: defenseWorkUnits, complete: proofComplete, defenseComplete: defense.complete !== false }
         };
     }
 }
