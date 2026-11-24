@@ -126,7 +126,10 @@ export class TreeGrowAIAdapter {
             summary = '识别到经过对手回应验证的连续攻击组合，优先执行该行动。';
         }
         if (selectionReason === 'forced-material-gain') {
-            details.unshift(`有限深度推演验证：对手无论如何回应，下一回合都能至少摧毁 ${searchStats?.guaranteedTacticalRootLoss || 0} 个敌方根节点或 ${searchStats?.guaranteedTacticalCascadeLoss || 0} 个级联节点。`);
+            const guaranteedMaterial = searchStats?.guaranteedTacticalRootLoss > 0
+                ? `${searchStats.guaranteedTacticalRootLoss} 个敌方根节点`
+                : `${searchStats?.guaranteedTacticalCascadeLoss || 0} 个级联节点`;
+            details.unshift(`有限深度推演验证：对手无论如何回应，下一回合都能至少摧毁 ${guaranteedMaterial}。`);
             summary = '识别到无法通过单次防守化解的连续战术收益，优先执行该行动。';
         }
         if (selectionReason === 'defense-priority') {
