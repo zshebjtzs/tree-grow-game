@@ -69,7 +69,7 @@ All six levels share the same rules, tactical proofs, evaluation weights and sea
 | hard | 9 | 1,800 ms | 120,000 |
 | expert | 10 | 3,000 ms | 250,000 |
 
-One absolute deadline is established before state preparation and passed to tactical analysis and search. Root candidate generation and initial scoring are synchronous; their time is included in the total decision measurement and reduces the time available to later stages. `deadlineExceeded` reports an actual overrun, not merely a target-latency warning. Work units are a deterministic budget estimate, not a count of CPU instructions.
+One absolute deadline is established before state preparation and passed to tactical analysis and search. Root candidate generation and initial scoring are synchronous; their time is included in the total decision measurement and reduces the time available to later stages. Of the remaining work-unit budget passed to the coordinator, tactical analysis may consume at most 60%; at least 40% remains available to global search. `deadlineExceeded` reports an actual overrun, not merely a target-latency warning. Work units are a deterministic budget estimate, not a count of CPU instructions.
 
 These are initial tuning values, not proven strength ratings. They must be calibrated against fixed positions and target-device timings rather than assumed to represent expert-level play.
 
