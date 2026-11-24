@@ -101,8 +101,11 @@ export class AIController {
             }
         }
         ranked.sort((a, b) => b.score - a.score);
+        const advantageFactor = this.positionEvaluator.getAdvantageConversionFactor(
+            game, playerSide, bases
+        );
         this.lastOffensiveAnalysis = this.offensiveStrategyAnalyzer.analyze(
-            game, playerSide, ranked
+            game, playerSide, ranked, { advantageFactor }
         );
 
         let selectedMove = this.tacticalAnalyzer.findImmediateWinningMove(ranked, playerSide, bases);
@@ -289,7 +292,13 @@ export class AIController {
             offensiveCascadeAttackCount: this.lastOffensiveAnalysis?.cascadeAttackCount ?? 0,
             offensiveImmediateWinCount: this.lastOffensiveAnalysis?.immediateWinningAttackCount ?? 0,
             offensiveMaxEnemyNodeLoss: this.lastOffensiveAnalysis?.maxEnemyNodeLoss ?? 0,
-            offensiveMaxEnemyRootLoss: this.lastOffensiveAnalysis?.maxEnemyRootLoss ?? 0
+            offensiveMaxOwnNodeLoss: this.lastOffensiveAnalysis?.maxOwnNodeLoss ?? 0,
+            offensiveMaxEnemyRootLoss: this.lastOffensiveAnalysis?.maxEnemyRootLoss ?? 0,
+            offensiveMaxOwnRootLoss: this.lastOffensiveAnalysis?.maxOwnRootLoss ?? 0,
+            offensiveBestNetNodeGain: this.lastOffensiveAnalysis?.bestNetNodeGain ?? 0,
+            offensiveBestNetRootGain: this.lastOffensiveAnalysis?.bestNetRootGain ?? 0,
+            offensiveNegativeExchangeCount: this.lastOffensiveAnalysis?.negativeExchangeCount ?? 0,
+            advantageConversionFactor: this.lastOffensiveAnalysis?.advantageFactor ?? 0
         };
     }
 
