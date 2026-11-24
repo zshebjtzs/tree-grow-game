@@ -426,7 +426,6 @@ export class TacticalAnalyzer {
                 let survives = true;
                 let worstGain = null;
                 let attackReplyCount = 0;
-                let selfLossMax = firstSelfLoss;
 
                 for (const response of responses) {
                     if (!visit()) return null;
@@ -447,7 +446,6 @@ export class TacticalAnalyzer {
 
                     const branchSelfLoss = firstSelfLoss +
                         lostNodes(afterSetup, afterResponse, attackerSide);
-                    selfLossMax = Math.max(selfLossMax, branchSelfLoss);
                     if (response?.attacks) attackReplyCount++;
 
                     if (!visit()) return null;
@@ -483,7 +481,7 @@ export class TacticalAnalyzer {
                         ...worstGain,
                         opponentAttackReplies: attackReplyCount,
                         inducedDefensiveReplies: inducedDefense ? 1 : 0,
-                        selfLoss: selfLossMax
+                        selfLoss: worstGain.selfLoss
                     };
                     if (!bestSetup || better(proof, bestSetup)) bestSetup = proof;
                 }
@@ -511,7 +509,6 @@ export class TacticalAnalyzer {
             let worstProof = null;
             let attackReplyCount = 0;
             let inducedDefenseCount = 0;
-            let selfLossMax = 0;
 
             for (const response of responses) {
                 if (!visit()) {
@@ -543,7 +540,6 @@ export class TacticalAnalyzer {
                 }
                 attackReplyCount += proof.opponentAttackReplies;
                 inducedDefenseCount += proof.inducedDefensiveReplies;
-                selfLossMax = Math.max(selfLossMax, proof.selfLoss);
                 if (!worstProof || better(worstProof, proof)) worstProof = proof;
                 if (!result.complete) {
                     survives = false;
@@ -558,7 +554,7 @@ export class TacticalAnalyzer {
                     cascadeLoss: worstProof.cascadeLoss,
                     nodeLoss: worstProof.nodeLoss,
                     netNodeGain: worstProof.netNodeGain,
-                    selfLoss: selfLossMax,
+                    selfLoss: worstProof.selfLoss,
                     opponentAttackReplies: attackReplyCount,
                     inducedDefensiveReplies: inducedDefenseCount
                 };
