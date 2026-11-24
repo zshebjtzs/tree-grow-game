@@ -9,8 +9,9 @@ export class OffensiveStrategyAnalyzer {
         const enemy = side === 'red' ? 'blue' : 'red';
         const ownBefore = game.getAliveNodesByOwner(side);
         const enemyBefore = game.getAliveNodesByOwner(enemy);
-        const ownRootCount = game.getPlayerRootNodes(side).length;
-        const enemyRootsBefore = game.getPlayerRootNodes(enemy).length;
+        const ownBeforeIds = new Set(ownBefore.map(node => node.id));
+        const enemyBeforeIds = new Set(enemyBefore.map(node => node.id));
+        const enemyRootBeforeIds = new Set(game.getPlayerRootNodes(enemy).map(root => root.id));
         const opportunities = [];
 
         for (const move of moves) {
@@ -19,13 +20,16 @@ export class OffensiveStrategyAnalyzer {
             const next = move._nextState;
             const ownAfter = next.getAliveNodesByOwner(side);
             const enemyAfter = next.getAliveNodesByOwner(enemy);
+            const ownAfterIds = new Set(ownAfter.map(node => node.id));
+            const enemyAfterIds = new Set(enemyAfter.map(node => node.id));
+            const enemyRootAfterIds = new Set(next.getPlayerRootNodes(enemy).map(root => root.id));
             const ownRootsAfter = next.getPlayerRootNodes(side).length;
-            const enemyRootsAfter = next.getPlayerRootNodes(enemy).length;
-            const enemyNodeLoss = Math.max(0, enemyBefore.length - enemyAfter.length);
-            const ownNodeLoss = Math.max(0, ownBefore.length - ownAfter.length);
+            const enemyRootsAfter = enemyRootAfterIds.size;
+            const enemyNodeLoss = [...enemyBeforeIds].filter(id => !enemyAfterIds.has(id)).length;
+            const ownNodeLoss = [...ownBeforeIds].filter(id => !ownAfterIds.has(id)).length;
             const directTarget = enemyBefore.some(node => node.areaId === move.targetAreaId);
             const cascadeLoss = Math.max(0, enemyNodeLoss - (directTarget ? 1 : 0));
-            const enemyRootLoss = Math.max(0, enemyRootsBefore - enemyRootsAfter);
+            const enemyRootLoss = [...enemyRootBeforeIds].filter(id => !enemyRootAfterIds.has(id)).length;
             const immediateWin = enemyRootsAfter === 0 && ownRootsAfter > 0 ||
                 Boolean(next.isGameOver && ownRootsAfter > 0);
             const highValue = immediateWin || enemyRootLoss > 0 ||
