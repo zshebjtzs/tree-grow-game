@@ -35,7 +35,10 @@ const SHARED_EVALUATION = {
     disadvantageSelfLossPenalty: 90,
     disadvantageOwnRootLossPenalty: 2400,
     disadvantageRiskBonusCap: 1800,
-    disadvantageRiskPenaltyCap: 900
+    disadvantageRiskPenaltyCap: 900,
+    disadvantageTacticalPotentialWeight: 320,
+    disadvantageSiegePotentialWeight: 180,
+    disadvantageFrontierPotentialWeight: 90
 };
 
 const SEARCH_BUDGETS = {
