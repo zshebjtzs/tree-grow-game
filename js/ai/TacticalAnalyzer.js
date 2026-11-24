@@ -222,7 +222,9 @@ export class TacticalAnalyzer {
             if (!move?.attacks) return 0;
             const target = before.getAliveNodesByOwner(side)
                 .find(node => node.areaId === move.targetAreaId);
-            if (!target) return 0;
+            // Root losses are already counted separately; do not subtract
+            // a directly attacked root a second time from cascade losses.
+            if (!target || target.isRoot) return 0;
             return after.getAliveNodesByOwner(side).some(node => node.id === target.id) ? 0 : 1;
         };
         const measure = (candidate, afterCandidate, afterResponse, continuation, afterContinuation) => {
@@ -349,7 +351,9 @@ export class TacticalAnalyzer {
         const directTargetLoss = (before, after, move, side) => {
             if (!move?.attacks) return 0;
             const target = alive(before, side).find(node => node.areaId === move.targetAreaId);
-            if (!target) return 0;
+            // Root losses are already counted separately; do not subtract
+            // a directly attacked root a second time from cascade losses.
+            if (!target || target.isRoot) return 0;
             return alive(after, side).some(node => node.id === target.id) ? 0 : 1;
         };
         const rootCount = (state, side) => state.getPlayerRootNodes(side).length;
