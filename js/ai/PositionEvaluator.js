@@ -2,6 +2,7 @@
 import { PositionAnalyzer } from './PositionAnalyzer.js';
 import { StrategicPhaseDetector } from './StrategicPhaseDetector.js';
 import { StrategicAnalyzer } from './StrategicAnalyzer.js';
+import { analyzeExchangeOutcome } from './OffensiveStrategyAnalyzer.js';
 
 const WIN_SCORE = 100000;
 
@@ -17,6 +18,7 @@ export class PositionEvaluator {
         this.softDistanceToBase = softDistanceToBase;
         this.getGrowthMetrics = getGrowthMetrics;
         this.metricsCache = new WeakMap();
+        this.evaluationCache = new WeakMap();
         this.simulateMove = simulateMove;
         this.profile = profile;
         this.positionAnalyzer = new PositionAnalyzer({ adjacency: this.adjacency, distanceToBase: (...args) => this.distanceToBase(...args), getStructuralMetrics: (...args) => this.getStructuralMetrics(...args) });
@@ -29,6 +31,13 @@ export class PositionEvaluator {
         const phase = this.phaseDetector.detect(position);
         const weights = this.strategicAnalyzer.getDynamicWeights(this.profile, phase);
         return Object.freeze({ position, phase, weights, spatialScore: this.strategicAnalyzer.evaluateSpatial(position, this.profile) });
+    }
+
+    getAdvantageConversionFactor(game, perspective, bases) {
+        const threshold = this.profile.advantageConversionThreshold ?? 250;
+        const scale = Math.max(1, this.profile.advantageConversionScale ?? 1500);
+        const advantage = this.evaluateState(game, perspective, bases);
+        return Math.max(0, Math.min(1, (advantage - threshold) / scale));
     }
 
     scoreMove(game, move, side, bases, simulatedNext = null) {
@@ -50,13 +59,11 @@ export class PositionEvaluator {
         const strategic = this.getStrategicAnalysis(game, side, bases);
         const weights = strategic.weights;
         let score = progress * 95 * weights.progressWeight;
+        let exchange = null;
         if (move.attacks) {
-            const beforeEnemyNodes = game.getAliveNodesByOwner(enemy).length;
-            const afterEnemyNodes = next.getAliveNodesByOwner(enemy).length;
-            score += (beforeEnemyNodes - afterEnemyNodes) * 85 * weights.attackWeight;
-            const beforeRoots = game.getPlayerRootNodes(enemy).length;
-            const afterRoots = next.getPlayerRootNodes(enemy).length;
-            score += (beforeRoots - afterRoots) * 900 * weights.rootAttackWeight;
+            exchange = analyzeExchangeOutcome(game, side, move, next);
+            score += exchange.netNodeGain * 85 * weights.attackWeight;
+            score += exchange.netRootGain * 900 * weights.rootAttackWeight;
         }
 
         const ownAreaGain = next.getAliveNodesByOwner(side).length -
@@ -78,6 +85,17 @@ export class PositionEvaluator {
         }
         const nextStrategic = this.getStrategicAnalysis(next, side, bases);
         score += (nextStrategic.spatialScore - strategic.spatialScore) * 0.18;
+
+        // In an already favorable position, reward only concrete conversion:
+        // positive net exchanges, enemy-root damage, and progress toward the base.
+        // This multiplier never turns a losing exchange into a preferred attack.
+        const advantageFactor = this.getAdvantageConversionFactor(game, side, bases);
+        const conversionPotential =
+            Math.max(0, progress) * 95 * weights.progressWeight +
+            (exchange ? Math.max(0, exchange.netNodeGain) * 85 * weights.attackWeight +
+                Math.max(0, exchange.netRootGain) * 900 * weights.rootAttackWeight : 0);
+        score += conversionPotential * advantageFactor *
+            (this.profile.advantageConversionWeight ?? 0.3);
         return score;
     }
 
@@ -149,15 +167,26 @@ export class PositionEvaluator {
     }
 
     evaluateState(game, perspective, bases) {
+        let cache = this.evaluationCache.get(game);
+        if (!cache) {
+            cache = new Map();
+            this.evaluationCache.set(game, cache);
+        }
         const opponent = perspective === 'red' ? 'blue' : 'red';
+        const cacheKey = `${perspective}:${bases[perspective]}:${bases[opponent]}`;
+        if (cache.has(cacheKey)) return cache.get(cacheKey);
+        const finish = value => {
+            cache.set(cacheKey, value);
+            return value;
+        };
         const ownRoots = game.getPlayerRootNodes(perspective).length;
         const enemyRoots = game.getPlayerRootNodes(opponent).length;
-        if (ownRoots === 0) return -WIN_SCORE;
-        if (enemyRoots === 0) return WIN_SCORE;
+        if (ownRoots === 0) return finish(-WIN_SCORE);
+        if (enemyRoots === 0) return finish(WIN_SCORE);
         if (game.isGameOver) {
             // Base invasion ends the game before the adapter switches turns.
             // In that terminal state, currentTurn therefore identifies the winner.
-            return game.currentTurn === perspective ? WIN_SCORE : -WIN_SCORE;
+            return finish(game.currentTurn === perspective ? WIN_SCORE : -WIN_SCORE);
         }
 
         const ownDistance = this.distanceToBase(game, perspective, bases[opponent]);
@@ -194,12 +223,12 @@ export class PositionEvaluator {
             ownMetrics.siegePreFortressCount * ownWeights.siegePreparationWeight - enemyMetrics.siegePreFortressCount * enemyWeights.siegePreparationWeight +
             ownMetrics.siegeFortressCount * ownWeights.siegeFortressWeight - enemyMetrics.siegeFortressCount * enemyWeights.siegeFortressWeight;
 
-        return (ownDistanceScore - enemyDistanceScore) +
+        return finish((ownDistanceScore - enemyDistanceScore) +
             (ownNodes - enemyNodes) * 7 +
             (ownRoots - enemyRoots) * 220 +
             (ownStructure - enemyStructure) * ((ownStrategic.weights.structureWeight + enemyStrategic.weights.structureWeight) / 2) +
             structuralScore +
-            (ownStrategic.spatialScore - enemyStrategic.spatialScore);
+            (ownStrategic.spatialScore - enemyStrategic.spatialScore));
     }
 
     _structureValue(game, side) {
