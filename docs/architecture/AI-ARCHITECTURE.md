@@ -127,3 +127,14 @@ Strategic evaluation is a deterministic, position-derived layer above the existi
 The strategic layer does not claim a move is forced. Tactical proofs remain authoritative for forced wins and material gains; strategic evaluation only ranks non-terminal alternatives.
 
 Strategic transition signals also distinguish attack-oriented and defense-oriented states. They are derived continuously from tactical pressure and defensive pressure, allowing the evaluator to shift emphasis without switching between exclusive modes. Root safety is exposed as its own signal and independently adjusts root-preservation weights.
+
+
+## Offensive opportunity analysis (Issue #37, Phase A)
+
+`OffensiveStrategyAnalyzer` evaluates legal attack candidates from their already simulated authoritative successor states. It reports enemy node/root losses, cascade losses, own node losses, and immediate wins. It is observational: it does not duplicate combat rules, claim non-forced lines are proven, or add speculative fixed attack bonuses.
+
+`AIController` uses this analysis for per-decision telemetry. High-value attack candidates are identified separately from ordinary attacks so later phases can add exchange valuation and position-dependent risk without conflating those responsibilities.
+
+Mandatory defense filtering is now conditional on an actual immediate winning reply in the current position. When no such threat exists, all legal root candidates remain available to search. Root and cascade exposure are still evaluated through successor-state analysis and search; the tactical analyzer's broader `rankDefenses` behavior remains available for direct analysis and regression coverage, but it no longer acts as a blanket pre-search filter.
+
+Telemetry includes `offensiveCandidateCount`, `offensiveAttackCandidateCount`, `offensiveHighValueAttackCount`, `offensiveRootAttackCount`, `offensiveCascadeAttackCount`, `offensiveImmediateWinCount`, `offensiveMaxEnemyNodeLoss`, and `offensiveMaxEnemyRootLoss`.
