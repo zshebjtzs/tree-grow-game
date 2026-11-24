@@ -20,9 +20,13 @@ export class TacticalAnalyzer {
         const risk = {
             immediateWinningMoves: 0,
             rootLossReplies: 0,
+            structuralLossReplies: 0,
             maxRootLoss: 0,
+            totalRootLoss: 0,
             maxNodeLoss: 0,
-            maxCascadeLoss: 0
+            totalNodeLoss: 0,
+            maxCascadeLoss: 0,
+            totalCascadeLoss: 0
         };
         const beforeNodes = game.getAliveNodesByOwner(defenderSide);
         const beforeIds = new Set(beforeNodes.map(node => node.id));
@@ -59,9 +63,13 @@ export class TacticalAnalyzer {
                 ).length;
 
                 if (rootLoss > 0) risk.rootLossReplies++;
+                if (removedIds.length > 0) risk.structuralLossReplies++;
                 risk.maxRootLoss = Math.max(risk.maxRootLoss, rootLoss);
+                risk.totalRootLoss += rootLoss;
                 risk.maxNodeLoss = Math.max(risk.maxNodeLoss, removedIds.length);
+                risk.totalNodeLoss += removedIds.length;
                 risk.maxCascadeLoss = Math.max(risk.maxCascadeLoss, cascadeLoss);
+                risk.totalCascadeLoss += cascadeLoss;
             }
         } finally {
             game.currentTurn = originalTurn;
@@ -624,15 +632,15 @@ export class TacticalAnalyzer {
             const immediateWinningMoves = this.countImmediateWinningReplies(
                 game, side, bases, boundedGenerate, boundedSimulate
             );
-            if (!immediateWinningMoves) {
-                return { moves, hasImmediateThreat: false, immediateWinningMoves: 0,
-                    nodes, workUnits, complete: true };
-            }
+            // Structural safety matters even when the opponent has no
+            // immediate winning move. Preserve every legal candidate in that
+            // case, but order candidates by the opponent's strongest and
+            // aggregate root/cascade attack outcomes.
             const ranked = this.rankDefenses(
                 game, moves, side, bases, boundedSimulate, boundedGenerate, immediateWinningMoves
             );
-            return { moves: ranked, hasImmediateThreat: true, immediateWinningMoves,
-                nodes, workUnits, complete: true };
+            return { moves: ranked, hasImmediateThreat: immediateWinningMoves > 0,
+                immediateWinningMoves, nodes, workUnits, complete: true };
         } catch (error) {
             if (error !== TacticalAnalyzer.BUDGET_EXHAUSTED) throw error;
             // An incomplete threat scan must never narrow the legal candidate set.
@@ -676,33 +684,49 @@ export class TacticalAnalyzer {
                 .map(item => item.move);
         }
 
-        // Analyze each resulting position once. The same reply simulations
-        // provide immediate-win, root-loss, total-loss, and cascade metrics.
-        const rootRisk = moves.map(move => {
+        // Analyze each resulting position once. In a quiet position this is
+        // an ordering signal, not a hard filter: an attack that accepts some
+        // structural risk may still be the best minimax continuation.
+        const rootRisk = moves.map((move, index) => {
             const next = move._nextState || simulateMove(game, move, side, bases);
             if (!next || !next.getPlayerRootNodes(side).length) {
-                return { move, immediateWinningMoves: Infinity, maxRootLoss: Infinity,
-                    rootLossReplies: Infinity, maxCascadeLoss: Infinity };
+                return {
+                    move, index, immediateWinningMoves: Infinity, maxRootLoss: Infinity,
+                    rootLossReplies: Infinity, totalRootLoss: Infinity,
+                    structuralLossReplies: Infinity, maxCascadeLoss: Infinity,
+                    totalCascadeLoss: Infinity, maxNodeLoss: Infinity, totalNodeLoss: Infinity
+                };
             }
             if (next.isGameOver) {
-                return { move, immediateWinningMoves: 0, maxRootLoss: 0,
-                    rootLossReplies: 0, maxCascadeLoss: 0 };
+                return {
+                    move, index, immediateWinningMoves: 0, maxRootLoss: 0,
+                    rootLossReplies: 0, totalRootLoss: 0, structuralLossReplies: 0,
+                    maxCascadeLoss: 0, totalCascadeLoss: 0, maxNodeLoss: 0, totalNodeLoss: 0
+                };
             }
-            return { move, ...analyze(next) };
+            return { move, index, ...analyze(next) };
         });
-        const finiteRisk = rootRisk.filter(item => Number.isFinite(item.maxRootLoss));
-        if (!finiteRisk.length) return moves;
+        const compareRisk = (left, right) =>
+            (left.immediateWinningMoves - right.immediateWinningMoves) ||
+            (left.maxRootLoss - right.maxRootLoss) ||
+            (left.rootLossReplies - right.rootLossReplies) ||
+            (left.totalRootLoss - right.totalRootLoss) ||
+            (left.maxCascadeLoss - right.maxCascadeLoss) ||
+            (left.totalCascadeLoss - right.totalCascadeLoss) ||
+            (left.structuralLossReplies - right.structuralLossReplies) ||
+            (left.maxNodeLoss - right.maxNodeLoss) ||
+            (left.totalNodeLoss - right.totalNodeLoss) ||
+            (left.index - right.index);
 
-        const minimumImmediateWins = Math.min(...finiteRisk.map(item => item.immediateWinningMoves));
-        const immediateSafe = finiteRisk.filter(item => item.immediateWinningMoves === minimumImmediateWins);
-        const minimumRootLoss = Math.min(...immediateSafe.map(item => item.maxRootLoss));
-        const rootSafe = immediateSafe.filter(item => item.maxRootLoss === minimumRootLoss);
-        const minimumRootLossReplies = Math.min(...rootSafe.map(item => item.rootLossReplies));
-        const rootStable = rootSafe.filter(item => item.rootLossReplies === minimumRootLossReplies);
-        const minimumCascadeLoss = Math.min(...rootStable.map(item => item.maxCascadeLoss));
-        return rootStable
-            .filter(item => item.maxCascadeLoss === minimumCascadeLoss)
-            .map(item => item.move);
+        if (currentThreats) {
+            const minimumThreats = Math.min(...rootRisk.map(item => item.immediateWinningMoves));
+            return rootRisk
+                .filter(item => item.immediateWinningMoves === minimumThreats)
+                .sort(compareRisk)
+                .map(item => item.move);
+        }
+
+        return rootRisk.sort(compareRisk).map(item => item.move);
     }
 }
 
