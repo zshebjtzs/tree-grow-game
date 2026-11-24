@@ -586,3 +586,152 @@ test('forced material-gain ranking reports the weakest actual opponent reply, no
     assert.equal(result.guaranteedCascadeLoss, 2);
     assert.equal(result.guaranteedNodeLoss, 3);
 });
+
+
+test('three-action tactical proof validates counterattack after two attacking replies and nets a sacrifice', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = materialState({
+        turn: 'red',
+        redNodes: [
+            { id: 20, areaId: 20, isRoot: true },
+            { id: 21, areaId: 21, isRoot: false }
+        ],
+        blueNodes: [
+            { id: 1, areaId: 1, isRoot: true },
+            { id: 2, areaId: 2, isRoot: false },
+            { id: 3, areaId: 3, isRoot: false },
+            { id: 4, areaId: 4, isRoot: false },
+            { id: 5, areaId: 5, isRoot: false },
+            { id: 6, areaId: 6, isRoot: false }
+        ]
+    });
+    const afterCandidate = materialState({
+        turn: 'blue',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const afterFirstAttack = materialState({
+        turn: 'red',
+        redNodes: [{ id: 20, areaId: 20, isRoot: true }],
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const afterSetup = materialState({
+        turn: 'blue',
+        redNodes: [
+            { id: 20, areaId: 20, isRoot: true },
+            { id: 22, areaId: 22, isRoot: false }
+        ],
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const afterSecondAttack = materialState({
+        turn: 'red',
+        redNodes: [{ id: 20, areaId: 20, isRoot: true }],
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const afterCounterattack = materialState({
+        turn: 'blue',
+        redNodes: [{ id: 20, areaId: 20, isRoot: true }],
+        blueNodes: [
+            { id: 1, areaId: 1, isRoot: true },
+            { id: 6, areaId: 6, isRoot: false }
+        ]
+    });
+
+    const candidate = { targetAreaId: 30, nextState: afterCandidate };
+    const firstReply = { attacks: true, targetAreaId: 21, nextState: afterFirstAttack };
+    const setup = { targetAreaId: 31, nextState: afterSetup };
+    const secondReply = { attacks: true, targetAreaId: 22, nextState: afterSecondAttack };
+    const finalAttack = { attacks: true, targetAreaId: 2, nextState: afterCounterattack };
+
+    const result = analyzer.findForcedTacticalSequenceInThreeMoves(
+        root, [candidate], 'red', { red: 20, blue: 1 },
+        (_state, move) => move.nextState,
+        state => {
+            if (state === afterCandidate) return [firstReply];
+            if (state === afterFirstAttack) return [setup];
+            if (state === afterSetup) return [secondReply];
+            if (state === afterSecondAttack) return [finalAttack];
+            return [];
+        },
+        state => state
+    );
+
+    assert.deepEqual(result.moves, [candidate]);
+    assert.deepEqual(result.sequence, [candidate, setup, finalAttack]);
+    assert.equal(result.complete, true);
+    assert.equal(result.guaranteedRootLoss, 0);
+    assert.equal(result.guaranteedCascadeLoss, 3);
+    assert.equal(result.guaranteedNodeGain, 2);
+    assert.equal(result.guaranteedSelfLoss, 2);
+    assert.equal(result.opponentAttackReplies, 2);
+    assert.equal(result.sacrificeValidated, true);
+});
+
+test('three-action tactical proof rejects a sacrifice whose worst-case net gain is negative', () => {
+    const analyzer = new TacticalAnalyzer();
+    const root = materialState({
+        turn: 'red',
+        redNodes: [
+            { id: 20, areaId: 20, isRoot: true },
+            { id: 21, areaId: 21, isRoot: false },
+            { id: 22, areaId: 22, isRoot: false }
+        ],
+        blueNodes: [
+            { id: 1, areaId: 1, isRoot: true },
+            { id: 2, areaId: 2, isRoot: false },
+            { id: 3, areaId: 3, isRoot: false },
+            { id: 4, areaId: 4, isRoot: false }
+        ]
+    });
+    const afterCandidate = materialState({
+        turn: 'blue',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const afterFirstAttack = materialState({
+        turn: 'red',
+        redNodes: [{ id: 20, areaId: 20, isRoot: true }, { id: 22, areaId: 22, isRoot: false }],
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const afterSetup = materialState({
+        turn: 'blue',
+        redNodes: [
+            { id: 20, areaId: 20, isRoot: true },
+            { id: 22, areaId: 22, isRoot: false }
+        ],
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const afterSecondAttack = materialState({
+        turn: 'red',
+        redNodes: [{ id: 20, areaId: 20, isRoot: true }],
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const afterCounterattack = materialState({
+        turn: 'blue',
+        redNodes: [{ id: 20, areaId: 20, isRoot: true }],
+        blueNodes: [{ id: 1, areaId: 1, isRoot: true }]
+    });
+    const candidate = { targetAreaId: 30, nextState: afterCandidate };
+    const setup = { targetAreaId: 31, nextState: afterSetup };
+    const finalAttack = { attacks: true, targetAreaId: 2, nextState: afterCounterattack };
+
+    const result = analyzer.findForcedTacticalSequenceInThreeMoves(
+        root, [candidate], 'red', { red: 20, blue: 1 },
+        (_state, move) => move.nextState,
+        state => {
+            if (state === afterCandidate) return [
+                { attacks: true, targetAreaId: 21, nextState: afterFirstAttack }
+            ];
+            if (state === afterFirstAttack) return [setup];
+            if (state === afterSetup) return [
+                { attacks: true, targetAreaId: 22, nextState: afterSecondAttack }
+            ];
+            if (state === afterSecondAttack) return [finalAttack];
+            return [];
+        },
+        state => state
+    );
+
+    assert.deepEqual(result.moves, []);
+    assert.equal(result.complete, true);
+});
