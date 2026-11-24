@@ -622,6 +622,9 @@ test('AIController sends verified forced material gains into general search', ()
         guaranteedCascadeLoss: 2,
         guaranteedNodeLoss: 4
     });
+    ai.tacticalAnalyzer.findForcedTacticalSequenceInThreeMoves = () => ({
+        moves: [], nodes: 0, complete: true
+    });
     let searchedMoves;
     let searchedHints;
     ai._search = (_game, moves, _side, _bases, _deadline, _startedAt, _budget, hints) => {
