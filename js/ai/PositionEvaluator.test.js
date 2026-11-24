@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameState } from '../game/GameState.js';
 import { TreeGrowAIAdapter } from './TreeGrowAIAdapter.js';
+import { PositionEvaluator } from './PositionEvaluator.js';
 import { getDifficultyProfile } from './DifficultyProfiles.js';
 
 function createAdapter(adjacency, areaCount) {
@@ -282,4 +283,92 @@ test('first-root growth candidate generation is limited to reachable unoccupied 
     }).allowed);
     assert.deepEqual(legal.sort((a, b) => a - b), [2, 3, 4],
         'candidate pruning must preserve the exact legal root-growth targets');
+});
+
+
+test('exchange scoring subtracts own destroyed nodes instead of rewarding gross enemy losses', () => {
+    const evaluator = Object.create(PositionEvaluator.prototype);
+    evaluator.profile = { advantageConversionWeight: 0.3 };
+    evaluator.distanceToBase = () => 2;
+    evaluator.getStrategicAnalysis = () => ({
+        weights: {
+            progressWeight: 1, attackWeight: 1, rootAttackWeight: 1,
+            expansionWeight: 1, safetyWeight: 1, branchingWeight: 1,
+            structureWeight: 1
+        },
+        spatialScore: 0
+    });
+    evaluator.getAdvantageConversionFactor = () => 0;
+    const before = {
+        getAliveNodesByOwner: side => side === 'red'
+            ? [{ id: 1 }, { id: 5 }]
+            : [{ id: 2 }, { id: 3 }]
+    };
+    const after = {
+        getAliveNodesByOwner: side => side === 'red'
+            ? [{ id: 1 }, { id: 4 }]
+            : [{ id: 2 }],
+        getAliveNodes: () => [],
+        getNode: () => null
+    };
+    const score = evaluator.scoreMove(
+        before, { attacks: true, targetAreaId: 3 }, 'red',
+        { red: 1, blue: 6 }, after
+    );
+
+    assert.equal(score, 0,
+        'one enemy node lost and one own node lost must produce zero net exchange reward');
+});
+
+test('advantage conversion is gated by a positive position advantage', () => {
+    const evaluator = Object.create(PositionEvaluator.prototype);
+    evaluator.profile = {
+        advantageConversionThreshold: 250,
+        advantageConversionScale: 1500
+    };
+    evaluator.evaluateState = () => 250;
+    assert.equal(evaluator.getAdvantageConversionFactor({}, 'red', { red: 1, blue: 6 }), 0);
+
+    evaluator.evaluateState = () => 1000;
+    assert.equal(evaluator.getAdvantageConversionFactor({}, 'red', { red: 1, blue: 6 }), 0.5);
+
+    evaluator.evaluateState = () => 5000;
+    assert.equal(evaluator.getAdvantageConversionFactor({}, 'red', { red: 1, blue: 6 }), 1);
+});
+
+test('advantage conversion increases ordering value only when the position is favorable', () => {
+    const createEvaluator = factor => {
+        const evaluator = Object.create(PositionEvaluator.prototype);
+        evaluator.profile = { advantageConversionWeight: 0.3 };
+        evaluator.distanceToBase = (state, side) => state.isBefore
+            ? (side === 'red' ? 4 : Infinity)
+            : (side === 'red' ? 3 : Infinity);
+        evaluator.getStrategicAnalysis = () => ({
+            weights: {
+                progressWeight: 1, attackWeight: 1, rootAttackWeight: 1,
+                expansionWeight: 1, safetyWeight: 1, branchingWeight: 1,
+                structureWeight: 1
+            },
+            spatialScore: 0
+        });
+        evaluator.getAdvantageConversionFactor = () => factor;
+        return evaluator;
+    };
+    const before = {
+        isBefore: true,
+        getAliveNodesByOwner: side => side === 'red' ? [{ id: 1 }] : [{ id: 2 }]
+    };
+    const after = {
+        isBefore: false,
+        getAliveNodesByOwner: side => side === 'red' ? [{ id: 1 }, { id: 3 }] : [{ id: 2 }],
+        getAliveNodes: () => [],
+        getNode: () => null
+    };
+    const move = { attacks: false, targetAreaId: 3 };
+    const bases = { red: 1, blue: 6 };
+    const neutralScore = createEvaluator(0).scoreMove(before, move, 'red', bases, after);
+    const favorableScore = createEvaluator(1).scoreMove(before, move, 'red', bases, after);
+
+    assert.ok(favorableScore > neutralScore,
+        'a favorable position should value concrete progress toward converting the advantage');
 });
