@@ -65,6 +65,7 @@ If the two-action forced-win and material-gain proofs do not find a result, the 
 - Opponent attack replies are explicitly counted. Any losses to the AI during those replies are charged against the final material gain.
 - A sacrifice is accepted only if the same worst-case branch proves a positive tactical result; a material exchange must retain at least a two-node net gain unless it removes an enemy root. The AI's own last root may never be sacrificed.
 - Inducement is reported only when the candidate creates an immediate winning threat, an opponent reply removes that immediate threat, and the deeper combination remains proven after that defense.
+- A deeper line is not promoted as a forcing tactic merely because it is a quiet multi-step plan: it must contain an actual opponent attack reply, a neutralized immediate threat, or a net-positive sacrifice exposed to opponent attacks.
 - Counterattack and inducement telemetry are descriptive; they do not replace the all-replies proof.
 
 The proof shares the same per-decision 1,200-node tactical ceiling and absolute deadline with the shorter tactical analyzers. It returns no result if any branch is unexamined, any opponent reply can win immediately, or a transition is invalid. Its three attacker actions are a bounded tactical horizon, not an unrestricted multi-move solver.
