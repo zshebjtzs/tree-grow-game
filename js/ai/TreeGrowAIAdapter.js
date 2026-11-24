@@ -197,7 +197,8 @@ export class TreeGrowAIAdapter {
             offensiveBestNetNodeGain: searchStats.offensiveBestNetNodeGain ?? 0,
             offensiveBestNetRootGain: searchStats.offensiveBestNetRootGain ?? 0,
             offensiveNegativeExchangeCount: searchStats.offensiveNegativeExchangeCount ?? 0,
-            advantageConversionFactor: searchStats.advantageConversionFactor ?? 0
+            advantageConversionFactor: searchStats.advantageConversionFactor ?? 0,
+            disadvantageRiskFactor: searchStats.disadvantageRiskFactor ?? 0
         } : null;
         return { title: 'AI 行动分析', summary, details: details.slice(0, 4), search };
     }
