@@ -33,6 +33,7 @@ export class AIController {
             typeof this.adapter.tacticalAnalyzer?.rankDefenses !== 'function' ||
             typeof this.adapter.tacticalAnalyzer?.findMandatoryDefenses !== 'function' ||
             typeof this.adapter.tacticalAnalyzer?.findForcedWinInTwoMoves !== 'function' ||
+            typeof this.adapter.tacticalAnalyzer?.findForcedMaterialGainInTwoMoves !== 'function' ||
             typeof this.adapter.tacticalAnalyzer?.findForcedTacticalSequenceInThreeMoves !== 'function') {
             throw new TypeError('AI 适配器接口无效');
         }
