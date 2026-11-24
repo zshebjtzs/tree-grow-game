@@ -429,7 +429,7 @@ function materialState({ turn = 'red', tag = '', blueNodes = [], redNodes = [], 
     };
 }
 
-test('forced material-gain analysis requires a qualifying attack after every opponent reply', () => {
+test('forced material-gain analysis rejects a candidate if one opponent reply removes the tactical continuation', () => {
     const analyzer = new TacticalAnalyzer();
     const root = materialState({
         turn: 'red',
@@ -492,46 +492,7 @@ test('forced material-gain analysis requires a qualifying attack after every opp
     assert.equal(result.guaranteedNodeLoss, 3);
 });
 
-test('forced material-gain analysis rejects a candidate if one opponent reply removes the tactical continuation', () => {
-    const analyzer = new TacticalAnalyzer();
-    const root = materialState({ turn: 'red' });
-    const afterCandidate = materialState({ turn: 'blue' });
-    const threatenedPosition = materialState({
-        turn: 'red',
-        blueNodes: [{ id: 1, areaId: 1, isRoot: true }]
-    });
-    const safePosition = materialState({
-        turn: 'red',
-        blueNodes: [
-            { id: 1, areaId: 1, isRoot: true },
-            { id: 2, areaId: 2, isRoot: false },
-            { id: 3, areaId: 3, isRoot: false },
-            { id: 4, areaId: 4, isRoot: false }
-        ]
-    });
-    const afterAttack = materialState({
-        turn: 'blue',
-        blueNodes: [{ id: 1, areaId: 1, isRoot: true }]
-    });
-    const candidate = { parentNodeId: 20, targetAreaId: 5, _nextState: afterCandidate };
-
-    const result = analyzer.findForcedMaterialGainInTwoMoves(
-        root, [candidate], 'red', { red: 6, blue: 1 },
-        (_state, move) => move.nextState,
-        (state, side) => side === 'blue'
-            ? [
-                { targetAreaId: 7, nextState: safePosition },
-                { targetAreaId: 8, nextState: threatenedPosition }
-            ]
-            : [{ attacks: true, targetAreaId: 2, nextState: afterAttack }],
-        state => state
-    );
-
-    assert.deepEqual(result.moves, []);
-    assert.equal(result.complete, true);
-});
-
-test('material proof does not count direct targets from earlier attacks as cascade losses', () => {
+test('forced material-gain analysis requires a qualifying attack after every opponent reply', () => {
     const analyzer = new TacticalAnalyzer();
     const root = materialState({
         turn: 'red',
@@ -546,36 +507,42 @@ test('material proof does not count direct targets from earlier attacks as casca
     const afterCandidate = materialState({
         turn: 'blue',
         redNodes: root.getAliveNodesByOwner('red'),
-        blueNodes: [
-            { id: 1, areaId: 1, isRoot: true },
-            { id: 3, areaId: 3, isRoot: false },
-            { id: 4, areaId: 4, isRoot: false }
-        ]
+        blueNodes: root.getAliveNodesByOwner('blue')
     });
-    const afterReply = materialState({
+    const safePosition = materialState({
         turn: 'red',
         redNodes: root.getAliveNodesByOwner('red'),
-        blueNodes: afterCandidate.getAliveNodesByOwner('blue')
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
+    const unanswerablePosition = materialState({
+        turn: 'red',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: root.getAliveNodesByOwner('blue')
     });
     const afterAttack = materialState({
         turn: 'blue',
         redNodes: root.getAliveNodesByOwner('red'),
         blueNodes: [{ id: 1, areaId: 1, isRoot: true }]
     });
-    const candidate = { attacks: true, targetAreaId: 2, _nextState: afterCandidate };
-    const reply = { targetAreaId: 7, _nextState: afterReply };
-    const attack = { attacks: true, targetAreaId: 3, _nextState: afterAttack };
-    const moveMap = new Map([[afterCandidate, [reply]], [afterReply, [attack]]]);
-
+    const candidate = { parentNodeId: 20, targetAreaId: 5, _nextState: afterCandidate };
+    const replies = [
+        { targetAreaId: 7, nextState: safePosition },
+        { targetAreaId: 8, nextState: unanswerablePosition }
+    ];
+    const attack = { attacks: true, targetAreaId: 2, nextState: afterAttack };
     const result = analyzer.findForcedMaterialGainInTwoMoves(
         root, [candidate], 'red', { red: 6, blue: 1 },
-        (_state, move) => move._nextState,
-        state => moveMap.get(state) || [],
+        (_state, move) => move.nextState,
+        (state, side) => {
+            if (side === 'blue') return replies;
+            if (state === safePosition) return [attack];
+            return [];
+        },
         state => state
     );
 
-    // Two direct kills and one cascade kill do not satisfy the two-cascade rule.
     assert.deepEqual(result.moves, []);
+    assert.equal(result.complete, true);
 });
 
 test('forced material-gain analysis never promotes an unexamined reply after budget exhaustion', () => {

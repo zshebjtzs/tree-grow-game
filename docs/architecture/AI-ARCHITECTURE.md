@@ -49,7 +49,7 @@ If no forced win is proven, the controller performs a second bounded AND/OR pass
 4. Require every opponent reply to leave at least one continuation that destroys an enemy root or at least two non-root descendants. A single isolated leaf loss is deliberately insufficient.
 5. Rank qualifying candidates by their worst-case guaranteed root loss, then cascade loss, then total node loss.
 
-An opponent reply that wins immediately, a missing continuation, an invalid transition, or an exhausted node/deadline budget prevents the candidate from being reported as a proven gain. The tactical stages share a maximum node allowance of 12,000 per decision; each is bounded and later stages receive only the remainder.
+An opponent reply that wins immediately, a missing continuation, an invalid transition, or an exhausted node budget prevents the candidate from being reported as a proven gain. The tactical stages share a maximum node allowance of 12,000 per decision; each is bounded and later stages receive only the remainder.
 
 Telemetry is exposed as `forcedMaterialGainInTwoMoves`, `guaranteedTacticalRootLoss`, `guaranteedTacticalCascadeLoss`, and `guaranteedTacticalNodeLoss`. This remains a deliberately narrow two-turn tactical proof, not a general-purpose combination solver.
 
@@ -184,6 +184,6 @@ The order is:
 
 Mandatory defense narrows the candidate set only when an immediate opponent win is actually present. Without that condition, all legal root candidates remain available to tactical analysis and general search. If no defense fully removes an immediate threat, the tactical analyzer's best available defensive set is retained.
 
-The tactical analyzers share the existing per-decision node ceiling and absolute deadline. The forced-win stage retains its 600-node stage cap; later stages receive only the remaining shared allowance. Budget exhaustion is never treated as a proof. The coordinator returns the selected action, its reason, and a consolidated tactical summary for telemetry.
+The tactical analyzers share a maximum of 12,000 nodes per decision. The forced-win and material-gain stages each receive up to 4,000 nodes; the extended proof receives the remaining allowance. No wall-clock deadline aborts these checks, and node-budget exhaustion is never treated as a proof. The coordinator returns the selected action, its reason, and a consolidated tactical summary for telemetry.
 
 This layer coordinates priorities; it does not duplicate game rules, alter tactical proof semantics, or let strategic risk preference override an immediate win, mandatory defense, or verified forcing line.
