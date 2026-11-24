@@ -25,7 +25,17 @@ const SHARED_EVALUATION = {
     defensivePressureWeight: 45,
     advantageConversionThreshold: 250,
     advantageConversionScale: 1500,
-    advantageConversionWeight: 0.3
+    advantageConversionWeight: 0.3,
+    disadvantageRiskThreshold: 250,
+    disadvantageRiskScale: 1500,
+    disadvantageProgressWeight: 80,
+    disadvantageRootAttackWeight: 1200,
+    disadvantageCascadeWeight: 55,
+    disadvantageNetGainWeight: 45,
+    disadvantageSelfLossPenalty: 90,
+    disadvantageOwnRootLossPenalty: 2400,
+    disadvantageRiskBonusCap: 1800,
+    disadvantageRiskPenaltyCap: 900
 };
 
 const SEARCH_BUDGETS = {
