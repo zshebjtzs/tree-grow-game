@@ -135,7 +135,7 @@ Strategic transition signals also distinguish attack-oriented and defense-orient
 
 `AIController` uses this analysis for per-decision telemetry. High-value attack candidates are identified separately from ordinary attacks so later phases can add exchange valuation and position-dependent risk without conflating those responsibilities.
 
-Mandatory defense filtering is now conditional on an actual immediate winning reply in the current position. When no such threat exists, all legal root candidates remain available to search. Root and cascade exposure are still evaluated through successor-state analysis and search; the tactical analyzer's broader `rankDefenses` behavior remains available for direct analysis and regression coverage, but it no longer acts as a blanket pre-search filter.
+Mandatory-defense analysis now runs for every root position. If the opponent has an immediate winning reply, candidates are filtered to those minimizing the remaining immediate wins. If no immediate win exists, every legal candidate is retained and ordered by the opponent's simulated attack outcomes: immediate wins, worst and aggregate root losses, root-loss reply count, worst and aggregate cascade losses, structural-loss reply count, and total node losses. This quiet-position ordering is a search-order hint, not a hard filter; minimax may still select a tactically justified counterattack that accepts structural risk. If the bounded analysis is incomplete, the original full candidate order is preserved.
 
 Telemetry includes `offensiveCandidateCount`, `offensiveAttackCandidateCount`, `offensiveHighValueAttackCount`, `offensiveRootAttackCount`, `offensiveCascadeAttackCount`, `offensiveImmediateWinCount`, `offensiveMaxEnemyNodeLoss`, and `offensiveMaxEnemyRootLoss`.
 
