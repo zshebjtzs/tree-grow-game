@@ -119,6 +119,53 @@ function createFixtures(GameState) {
         side: 'red'
     });
 
+    const rootDefenseAdjacency = {
+        1: [2],
+        2: [1, 3, 4, 7, 8],
+        3: [2, 5, 6],
+        4: [2, 10, 11],
+        5: [3, 12],
+        6: [3, 13],
+        7: [2, 16],
+        8: [2, 9],
+        9: [8],
+        10: [4, 14],
+        11: [4, 15],
+        12: [5],
+        13: [6],
+        14: [10],
+        15: [11],
+        16: [7],
+        20: [21],
+        21: [20, 22],
+        22: [21]
+    };
+    const rootDefenseCenters = Array.from({ length: 22 }, (_, index) => [index * 10, 0]);
+    const rootDefenseGame = new GameState();
+    rootDefenseGame.currentTurn = 'red';
+    const exposedRoot = rootDefenseGame.addNode(null, 0, 0, 1, 'red');
+    const exposedBranch = rootDefenseGame.addNode(exposedRoot.id, 10, 0, 2, 'red');
+    const leftBranch = rootDefenseGame.addNode(exposedBranch.id, 20, 0, 3, 'red');
+    const rightBranch = rootDefenseGame.addNode(exposedBranch.id, 30, 0, 4, 'red');
+    rootDefenseGame.addNode(leftBranch.id, 40, 0, 5, 'red');
+    rootDefenseGame.addNode(leftBranch.id, 50, 0, 6, 'red');
+    rootDefenseGame.addNode(rightBranch.id, 60, 0, 10, 'red');
+    rootDefenseGame.addNode(rightBranch.id, 70, 0, 11, 'red');
+    rootDefenseGame.currentTurn = 'blue';
+    const attackingRoot = rootDefenseGame.addNode(null, 80, 0, 9, 'blue');
+    rootDefenseGame.addNode(attackingRoot.id, 90, 0, 8, 'blue');
+    const reserveRoot = rootDefenseGame.addNode(null, 200, 0, 20, 'blue');
+    const reserveBranch = rootDefenseGame.addNode(reserveRoot.id, 210, 0, 21, 'blue');
+    rootDefenseGame.addNode(reserveBranch.id, 220, 0, 22, 'blue');
+    rootDefenseGame.currentTurn = 'red';
+    fixtures.push({
+        name: 'root-chain-defense',
+        snapshot: { ...rootDefenseGame.toJSON(), redBaseId: 1, blueBaseId: 9 },
+        adjacency: rootDefenseAdjacency,
+        areaCenters: rootDefenseCenters,
+        side: 'red'
+    });
+
     return fixtures;
 }
 
@@ -238,7 +285,7 @@ try {
         schemaVersion: 1,
         baseSha,
         candidateSha: git(['rev-parse', 'HEAD']),
-        fixtures: ['sparse', 'branching', 'combat', 'base-defense'],
+        fixtures: ['sparse', 'branching', 'combat', 'base-defense', 'root-chain-defense'],
         difficulties: ['hard', 'expert'],
         interpretation: [
             'This is a deterministic decision comparison, not a strength verdict.',
