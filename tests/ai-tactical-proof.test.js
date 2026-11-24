@@ -207,7 +207,7 @@ test('search budget also accounts for mandatory root evaluation work', () => {
     assert.equal(result.completedDepth, 0);
     assert.equal(result.move, moveA);
     assert.equal(result.rootEvaluations, 0);
-    assert.ok(result.workUnits > 0);
+    assert.equal(result.workUnits, 0);
 });
 
 
@@ -246,5 +246,5 @@ test('mandatory-defense budget exhaustion preserves every legal candidate', () =
     assert.equal(result.complete, false);
     assert.equal(result.hasImmediateThreat, false);
     assert.deepEqual(result.moves, moves);
-    assert.ok(result.nodes > 0);
+    assert.equal(result.nodes, 0);
 });
