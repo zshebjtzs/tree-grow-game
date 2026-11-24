@@ -543,6 +543,15 @@ test('AIController rejects adapters that do not satisfy the game-mode contract',
     );
 });
 
+test('AIController validates the forced-material tactical adapter method', () => {
+    const adapter = new AIController('medium', line, centers).adapter;
+    adapter.tacticalAnalyzer.findForcedMaterialGainInTwoMoves = undefined;
+    assert.throws(
+        () => new AIController('medium', line, centers, adapter),
+        /AI 适配器接口无效/
+    );
+});
+
 
 test('AIController prioritizes a proven forcing sequence and exposes its tactical telemetry', () => {
     const game = new GameState();
