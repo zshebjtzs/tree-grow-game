@@ -58,7 +58,9 @@ export class AIController {
         this.lastSearchStats = null;
         this.lastOffensiveAnalysis = null;
         this.lastTacticalSequenceStats = {
-            nodes: 0, complete: true, forcedWin: false,
+            nodes: 0, workUnits: 0, totalNodes: 0, totalWorkUnits: 0,
+            mandatoryDefenseNodes: 0, mandatoryDefenseWorkUnits: 0,
+            complete: true, defenseComplete: true, forcedWin: false,
             forcedMaterialGain: false, forcedTacticalSequence: false,
             counterattackSequence: false, inducementValidated: false,
             inducedDefenseBranches: 0, sacrificeValidated: false,
@@ -67,7 +69,7 @@ export class AIController {
         };
         this.lastDecisionExplanation = null;
         this.lastDecisionReason = null;
-        // Quality is bounded by completed depth and node count, not elapsed time.
+        // Quality is bounded by completed depth and modeled work units, not elapsed time.
         // Search runs in a Worker, so deeper analysis does not block rendering.
         const decisionStartedAt = this.searchEngine.now();
         const decisionDeadline = Infinity;
@@ -380,7 +382,7 @@ export class AIController {
             ...result,
             preparationWorkUnits: this.lastPreparationWorkUnits ?? 0,
             totalWorkUnits: (this.lastPreparationWorkUnits ?? 0) + (result.workUnits ?? 0) +
-                (this.lastTacticalSequenceStats?.totalNodes ?? 0),
+                (this.lastTacticalSequenceStats?.totalWorkUnits ?? 0),
             preparationMs: Math.max(0, searchStartedAt - decisionStartedAt),
             totalMs: Math.max(0, completedAt - decisionStartedAt),
             configuredTargetMs: this.profile.searchBudgetMs,
