@@ -148,3 +148,45 @@ test('coordinator keeps tactical check counts separate from weighted work units'
     assert.equal(result.tacticalStats.mandatoryDefenseNodes, 2);
     assert.equal(result.tacticalStats.mandatoryDefenseWorkUnits, 10);
 });
+
+test('non-terminal tactical proofs become search hints instead of bypassing minimax', () => {
+    const coordinator = new StrategicDecisionCoordinator();
+    const ordinary = { id: 'ordinary' };
+    const material = { id: 'material' };
+    const extended = { id: 'extended' };
+    const legal = [ordinary, material, extended];
+    let searchedMoves;
+    let searchedHints;
+    let searchedBudget;
+
+    const result = coordinator.resolve(callbacks({
+        rankedMoves: legal,
+        findForcedMaterialGain: () => ({
+            moves: [material], nodes: 2, workUnits: 5, complete: true,
+            guaranteedNetNodeGain: 3
+        }),
+        findExtendedTactic: () => ({
+            moves: [extended, material], nodes: 3, workUnits: 7, complete: true,
+            opponentAttackReplies: 1
+        }),
+        search: (moves, budget, hints) => {
+            searchedMoves = moves;
+            searchedBudget = budget.maxNodes;
+            searchedHints = hints;
+            return ordinary;
+        }
+    }));
+
+    assert.deepEqual(searchedMoves, legal,
+        'all legal candidates must remain in the unified search');
+    assert.deepEqual(searchedHints, [material, extended],
+        'proven non-terminal tactics should guide ordering without forcing the move');
+    assert.equal(searchedBudget, 5978);
+    assert.equal(result.move, ordinary,
+        'the global search result, not the tactical hint, selects the action');
+    assert.equal(result.reason, 'search-with-tactical-hints');
+    assert.equal(result.tacticalStats.forcedMaterialGain, true);
+    assert.equal(result.tacticalStats.forcedTacticalSequence, true);
+    assert.equal(result.tacticalStats.counterattackSequence, true);
+    assert.equal(result.tacticalStats.tacticalHintCount, 2);
+});
