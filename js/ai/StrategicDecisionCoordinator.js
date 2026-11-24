@@ -125,7 +125,9 @@ export class StrategicDecisionCoordinator {
         }
 
         return {
-            move: search(candidates),
+            move: search(candidates, {
+                maxNodes: Math.max(0, maxNodes - usedNodes)
+            }),
             reason: defensePriority ? 'defense-priority' : 'search-selection',
             candidates,
             defense,
