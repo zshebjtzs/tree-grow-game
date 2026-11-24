@@ -514,7 +514,17 @@ export class TacticalAnalyzer {
                 rootCount(afterCandidate, attackerSide) === 0) continue;
 
             if (!visit()) break;
-            const initialAttackerMoves = generateMoves(afterCandidate, attackerSide, bases);
+            // This is a hypothetical threat check for the attacker's next
+            // turn. The real state currently belongs to the defender, so
+            // temporarily expose the attacker turn while generating legal moves.
+            const originalTurn = afterCandidate.currentTurn;
+            let initialAttackerMoves;
+            afterCandidate.currentTurn = attackerSide;
+            try {
+                initialAttackerMoves = generateMoves(afterCandidate, attackerSide, bases);
+            } finally {
+                afterCandidate.currentTurn = originalTurn;
+            }
             if (!visit(initialAttackerMoves.length)) break;
             const initialThreat = Boolean(this.findImmediateWinningMove(
                 initialAttackerMoves, attackerSide, bases
