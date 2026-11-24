@@ -175,8 +175,9 @@ export class AIController {
                         shouldStop: () => this.searchEngine.now() >= decisionDeadline
                     }
                 ),
-            search: (candidates, budget) => this._search(
-                game, candidates, playerSide, bases, decisionDeadline, decisionStartedAt, budget.maxNodes
+            search: (candidates, budget, tacticalHints) => this._search(
+                game, candidates, playerSide, bases, decisionDeadline,
+                decisionStartedAt, budget.maxNodes, tacticalHints
             )
         });
         const selectedMove = decision.move;
@@ -298,14 +299,25 @@ export class AIController {
         return this.positionEvaluator.evaluateState(game, perspective, bases);
     }
 
-    _search(game, rankedMoves, side, bases, deadline = null, decisionStartedAt = this.searchEngine.now(), maxNodes = this.profile.maxNodes) {
-        // Search every legal root candidate; static ordering must not permanently
-        // discard a move before the search can evaluate its consequences.
-        const rootMoves = rankedMoves;
+    _search(
+        game, rankedMoves, side, bases, deadline = null,
+        decisionStartedAt = this.searchEngine.now(),
+        maxNodes = this.profile.maxNodes,
+        tacticalHints = []
+    ) {
+        // Tactical proofs influence ordering only. Every legal candidate remains
+        // in the root search and must compete under the same position evaluator.
+        const moveKey = move => this.adapter.getMoveKey(move);
+        const preferredMoveKeys = new Set(tacticalHints.map(moveKey));
+        const rootMoves = preferredMoveKeys.size
+            ? [...rankedMoves].sort((left, right) =>
+                Number(preferredMoveKeys.has(moveKey(right))) -
+                Number(preferredMoveKeys.has(moveKey(left)))
+            )
+            : rankedMoves;
         const preparedChildren = new WeakMap();
         const preparedMoveOrder = new WeakMap();
         const positionKeyCache = new WeakMap();
-        const moveKey = move => this.adapter.getMoveKey(move);
 
         // Root candidates were already simulated while calculating their
         // heuristic scores. Reuse those detached states across every
@@ -387,6 +399,7 @@ export class AIController {
         this.lastSearchStats = {
             difficulty: this.difficulty,
             ...result,
+            tacticalHintCount: preferredMoveKeys.size,
             preparationWorkUnits: this.lastPreparationWorkUnits ?? 0,
             totalWorkUnits: (this.lastPreparationWorkUnits ?? 0) + (result.workUnits ?? 0) +
                 (this.lastTacticalSequenceStats?.totalWorkUnits ?? 0),
