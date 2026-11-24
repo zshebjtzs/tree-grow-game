@@ -69,6 +69,7 @@ test('without an immediate threat all legal candidates reach tactical analysis a
 test('tactical analyzers share one bounded node allowance in strict priority order', () => {
     const coordinator = new StrategicDecisionCoordinator();
     const budgets = [];
+    let searchBudget = null;
     const result = coordinator.resolve(callbacks({
         maxNodes: 9000,
         findForcedWin: (_moves, budget) => {
@@ -82,11 +83,13 @@ test('tactical analyzers share one bounded node allowance in strict priority ord
         findExtendedTactic: (_moves, budget) => {
             budgets.push(budget.maxNodes);
             return { moves: [], nodes: 0, complete: false };
-        }
+        },
+        search: (moves, budget) => { searchBudget = budget.maxNodes; return moves[0]; }
     }));
     assert.deepEqual(budgets, [4000, 4000, 7800]);
     assert.equal(result.tacticalStats.nodes, 1200);
     assert.equal(result.tacticalStats.complete, false);
+    assert.equal(searchBudget, 7800);
 });
 
 
