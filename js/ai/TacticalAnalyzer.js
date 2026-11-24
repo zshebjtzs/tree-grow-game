@@ -404,7 +404,7 @@ export class TacticalAnalyzer {
             (left.rootLoss === right.rootLoss && left.netNodeGain === right.netNodeGain &&
                 left.cascadeLoss > right.cascadeLoss);
 
-        const proveAfterFirstReply = (state, firstSelfLoss, firstWasAttack) => {
+        const proveAfterFirstReply = (state, firstSelfLoss) => {
             if (!visit()) return null;
             if (state.isGameOver || rootCount(state, attackerSide) === 0) return null;
             const setups = generateMoves(state, attackerSide, bases);
@@ -526,7 +526,7 @@ export class TacticalAnalyzer {
                 const selfLoss = lostNodes(afterCandidate, afterResponse, attackerSide);
                 if (response?.attacks) attackReplyCount++;
                 const proof = proveAfterFirstReply(
-                    afterResponse, selfLoss, Boolean(response?.attacks)
+                    afterResponse, selfLoss
                 );
                 if (!proof) {
                     survives = false;
