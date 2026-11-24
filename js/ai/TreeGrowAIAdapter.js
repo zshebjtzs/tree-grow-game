@@ -121,6 +121,10 @@ export class TreeGrowAIAdapter {
             }
         }
 
+        if (selectionReason === 'forced-sequence-win') {
+            details.unshift('有限深度战术验证确认：无论对手选择哪一种合法回应，下一回合仍存在立即获胜行动。');
+            summary = '识别到经过对手回应验证的连续攻击组合，优先执行该行动。';
+        }
         if (selectionReason === 'defense-priority') {
             details.unshift('战术筛选优先保留能最大限度减少对手立即获胜机会的行动。');
         }
@@ -132,7 +136,10 @@ export class TreeGrowAIAdapter {
             completedDepth: searchStats.completedDepth,
             nodes: searchStats.nodes,
             elapsedMs: searchStats.elapsedMs,
-            transpositionHits: searchStats.transpositionHits
+            transpositionHits: searchStats.transpositionHits,
+            tacticalSequenceNodes: searchStats.tacticalSequenceNodes ?? 0,
+            tacticalSequenceComplete: searchStats.tacticalSequenceComplete ?? true,
+            forcedWinInTwoMoves: searchStats.forcedWinInTwoMoves ?? false
         } : null;
         return { title: 'AI 行动分析', summary, details: details.slice(0, 4), search };
     }
