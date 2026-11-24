@@ -21,11 +21,23 @@ A mode adapter supplied to `AIController` must provide:
 - Match metadata: `getBases`.
 - Search identity: `getPositionKey`, `getMoveKey`.
 - Rules and transitions: `generateMoves`, `simulateMove`, `simulatePass`.
-- Evaluation and tactics: `positionEvaluator.scoreMove`, `positionEvaluator.evaluateState`, `tacticalAnalyzer.findImmediateWinningMove`, `tacticalAnalyzer.rankDefenses`.
+- Evaluation and tactics: `positionEvaluator.scoreMove`, `positionEvaluator.evaluateState`, `tacticalAnalyzer.findImmediateWinningMove`, `tacticalAnalyzer.rankDefenses`, `tacticalAnalyzer.findForcedWinInTwoMoves`.
 - Presentation boundary: `toPublicMove`, `createDecisionExplanation`, `createNoMoveExplanation`.
 - Topology/evaluation support: `distanceToBase`.
 
 The adapter owns domain-specific state transitions. It must use the authoritative game rules and combat resolver rather than maintaining a second rules implementation.
+
+## Tactical sequence analysis
+
+Before general search, the controller runs a bounded AND/OR proof for a two-turn forcing win on the tactically admissible root candidates:
+
+1. Apply one candidate action.
+2. Enumerate every legal opponent reply (or the authoritative pass transition when no reply exists).
+3. After each reply, check whether the AI still has an immediate winning action, including direct base entry or a simulated attack that destroys the opponent's final root.
+
+A candidate is accepted only when every opponent reply preserves an immediate win. This distinguishes a genuine forcing combination from simply counting multiple apparent threats. A node cap and the shared decision deadline bound the analysis; budget exhaustion is reported and never treated as proof. The analysis may discover cooperation between different roots because the continuation is generated from the complete side-to-move position rather than being restricted to the original parent node.
+
+The result is exposed through `lastSearchStats.tacticalSequenceNodes`, `tacticalSequenceComplete`, and `forcedWinInTwoMoves`. It is a bounded tactical capability, not a general multi-move mate solver.
 
 ## SearchEngine boundary
 
