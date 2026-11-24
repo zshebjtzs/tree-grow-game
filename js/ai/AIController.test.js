@@ -811,9 +811,9 @@ test('non-terminal tactical hints reorder the root search without dropping candi
 test('root preparation stops at the shared deadline without dropping legal candidates', () => {
     const game = new GameState();
     game.currentTurn = 'red';
-    addRoot(game, 6, 'red');
+    game.addNode(null, 0, 0, 6, 'red');
     game.currentTurn = 'blue';
-    addRoot(game, 1, 'blue');
+    game.addNode(null, 0, 0, 1, 'blue');
     const ai = new AIController('medium', line, centers);
     let now = 0;
     ai.searchEngine.now = () => now;
