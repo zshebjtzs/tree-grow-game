@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { OffensiveStrategyAnalyzer } from './OffensiveStrategyAnalyzer.js';
+import { OffensiveStrategyAnalyzer, analyzeExchangeOutcome } from './OffensiveStrategyAnalyzer.js';
 
 function state({ own = 2, enemy = 3, ownRoots = 1, enemyRoots = 1, isGameOver = false } = {}) {
     const ownNodes = Array.from({ length: own }, (_, id) => ({ id, areaId: id + 1 }));
@@ -94,4 +94,44 @@ test('offensive loss accounting uses node identity rather than net population ch
     assert.equal(result.opportunities[0].ownNodeLoss, 1,
         'one lost node remains visible even when a newly grown node keeps the population unchanged');
     assert.equal(result.opportunities[0].enemyNodeLoss, 1);
+});
+
+
+test('exchange analysis separates own losses, enemy losses, and root losses by identity', () => {
+    const before = {
+        getAliveNodesByOwner: side => side === 'red'
+            ? [{ id: 1 }, { id: 5 }]
+            : [{ id: 2 }, { id: 3 }],
+        getPlayerRootNodes: side => side === 'red' ? [{ id: 1 }] : [{ id: 2 }]
+    };
+    const after = {
+        getAliveNodesByOwner: side => side === 'red'
+            ? [{ id: 1 }, { id: 4 }]
+            : [{ id: 2 }],
+        getPlayerRootNodes: side => side === 'red' ? [{ id: 1 }] : [{ id: 2 }]
+    };
+    const outcome = analyzeExchangeOutcome(
+        before, 'red', { targetAreaId: 3 }, after
+    );
+
+    assert.equal(outcome.enemyNodeLoss, 1);
+    assert.equal(outcome.ownNodeLoss, 1);
+    assert.equal(outcome.netNodeGain, 0,
+        'a one-for-one exchange must not be misreported as a net material gain');
+    assert.equal(outcome.enemyRootLoss, 0);
+    assert.equal(outcome.ownRootLoss, 0);
+    assert.equal(outcome.cascadeLoss, 0);
+});
+
+test('exchange analysis prioritizes root damage and exposes unfavorable sacrifices', () => {
+    const before = state({ own: 3, enemy: 3, ownRoots: 1, enemyRoots: 2 });
+    const after = state({ own: 2, enemy: 1, ownRoots: 1, enemyRoots: 1 });
+    const outcome = analyzeExchangeOutcome(
+        before, 'red', { targetAreaId: 10 }, after
+    );
+
+    assert.equal(outcome.enemyRootLoss, 1);
+    assert.equal(outcome.ownNodeLoss, 1);
+    assert.equal(outcome.netNodeGain, 1);
+    assert.equal(outcome.netRootGain, 1);
 });
