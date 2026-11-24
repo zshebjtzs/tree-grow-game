@@ -201,13 +201,19 @@ export class PositionEvaluator {
                 .find(Boolean);
             if (!firstChild || firstChild.getDegree() <= 3) {
                 unsafeRoots++;
-                let cursor = firstChild;
+                // Destroying the vulnerable first child removes its entire
+                // descendant subtree, including every branch. Count the full
+                // exposure rather than stopping at the first fork.
+                const stack = firstChild ? [firstChild.id] : [];
                 const visited = new Set();
-                while (cursor && !visited.has(cursor.id)) {
-                    visited.add(cursor.id);
+                while (stack.length) {
+                    const nodeId = stack.pop();
+                    if (visited.has(nodeId)) continue;
+                    visited.add(nodeId);
+                    const node = game.getNode(nodeId);
+                    if (!node || node.isDestroyed || node.owner !== side) continue;
                     rootChainRisk++;
-                    if (cursor.childrenIds.length !== 1) break;
-                    cursor = game.getNode(cursor.childrenIds[0]);
+                    for (const childId of node.childrenIds) stack.push(childId);
                 }
             }
         }
