@@ -302,12 +302,14 @@ test('exchange scoring subtracts own destroyed nodes instead of rewarding gross 
     const before = {
         getAliveNodesByOwner: side => side === 'red'
             ? [{ id: 1 }, { id: 5 }]
-            : [{ id: 2 }, { id: 3 }]
+            : [{ id: 2 }, { id: 3 }],
+        getPlayerRootNodes: side => side === 'red' ? [{ id: 1 }] : [{ id: 2 }]
     };
     const after = {
         getAliveNodesByOwner: side => side === 'red'
             ? [{ id: 1 }, { id: 4 }]
             : [{ id: 2 }],
+        getPlayerRootNodes: side => side === 'red' ? [{ id: 1 }] : [{ id: 2 }],
         getAliveNodes: () => [],
         getNode: () => null
     };
