@@ -73,3 +73,25 @@ test('offensive analysis ignores non-attack moves and unavailable simulations', 
     assert.equal(result.highValueAttackCount, 0);
     assert.deepEqual(result.opportunities, []);
 });
+
+
+test('offensive loss accounting uses node identity rather than net population change', () => {
+    const analyzer = new OffensiveStrategyAnalyzer();
+    const before = state({ own: 3, enemy: 2 });
+    const next = {
+        getAliveNodesByOwner: side => side === 'red'
+            ? [{ id: 0 }, { id: 1 }, { id: 3 }]
+            : [{ id: 10 }],
+        getPlayerRootNodes: side => side === 'red' ? [{ id: 0 }] : []
+    };
+    const result = analyzer.analyze(before, 'red', [{
+        parentNodeId: 5,
+        targetAreaId: 10,
+        attacks: true,
+        _nextState: next
+    }]);
+
+    assert.equal(result.opportunities[0].ownNodeLoss, 1,
+        'one lost node remains visible even when a newly grown node keeps the population unchanged');
+    assert.equal(result.opportunities[0].enemyNodeLoss, 1);
+});
