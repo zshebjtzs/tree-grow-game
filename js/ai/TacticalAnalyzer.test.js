@@ -962,10 +962,10 @@ test('quiet defense ordering compares one coherent worst reply, not mixed attack
     const analyzer = new TacticalAnalyzer();
     const makeState = (id, blueIds, redIds = [90]) => {
         const blueNodes = blueIds.map((nodeId, index) => ({
-            id: nodeId, areaId: nodeId, isRoot: index === 0
+            id: nodeId, areaId: nodeId, isRoot: nodeId === 1
         }));
         const redNodes = redIds.map((nodeId, index) => ({
-            id: nodeId, areaId: nodeId, isRoot: index === 0
+            id: nodeId, areaId: nodeId, isRoot: nodeId === 90
         }));
         return {
             id,
