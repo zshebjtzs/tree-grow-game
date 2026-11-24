@@ -310,6 +310,6 @@ test('position evaluation is cached per immutable state and remains zero-sum', (
         're-evaluating the same immutable state and perspective must use the cache');
 
     const blueScore = adapter.positionEvaluator.evaluateState(game, 'blue', bases);
-    assert.equal(redScore, -blueScore,
+    assert.equal(redScore + blueScore, 0,
         'the shared fixed-weight evaluator must be symmetric between both sides');
 });
