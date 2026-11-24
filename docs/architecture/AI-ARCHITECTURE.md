@@ -125,3 +125,5 @@ Strategic evaluation is a deterministic, position-derived layer above the existi
 - Analysis is deterministic and cached per immutable game state and side. No historical state, player identity, or adaptive difficulty is used.
 
 The strategic layer does not claim a move is forced. Tactical proofs remain authoritative for forced wins and material gains; strategic evaluation only ranks non-terminal alternatives.
+
+Strategic transition signals also distinguish attack-oriented and defense-oriented states. They are derived continuously from tactical pressure and defensive pressure, allowing the evaluator to shift emphasis without switching between exclusive modes. Root safety is exposed as its own signal and independently adjusts root-preservation weights.
