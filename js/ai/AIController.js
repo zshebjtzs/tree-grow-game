@@ -98,8 +98,13 @@ export class AIController {
                 nextState = this._simulateMove(
                     game, move, playerSide, bases, { alreadyValidated: true }
                 );
-                score = this._scoreMove(game, move, playerSide, bases, nextState);
-                preparationWorkUnits += 2;
+                preparationWorkUnits += 1;
+                if (this.searchEngine.now() < decisionDeadline) {
+                    score = this._scoreMove(game, move, playerSide, bases, nextState);
+                    preparationWorkUnits += 1;
+                } else {
+                    preparationComplete = false;
+                }
             } else {
                 preparationComplete = false;
             }

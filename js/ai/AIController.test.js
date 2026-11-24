@@ -827,7 +827,11 @@ test('root preparation stops at the shared deadline without dropping legal candi
         now = 200;
         return game.clone();
     };
-    ai._scoreMove = () => 1;
+    let scoreCalls = 0;
+    ai._scoreMove = () => {
+        scoreCalls++;
+        return 1;
+    };
     let capturedCandidates;
     ai.decisionCoordinator.resolve = ({ rankedMoves }) => {
         capturedCandidates = rankedMoves;
@@ -843,6 +847,8 @@ test('root preparation stops at the shared deadline without dropping legal candi
     assert.ok(move);
     assert.equal(capturedCandidates.length, moves.length);
     assert.ok(capturedCandidates[0]._nextState);
+    assert.equal(capturedCandidates[0].score, Number.NEGATIVE_INFINITY);
+    assert.equal(scoreCalls, 0, 'do not start scoring after simulation has exhausted the deadline');
     assert.equal(capturedCandidates[1]._nextState, undefined);
     assert.equal(capturedCandidates[1].score, Number.NEGATIVE_INFINITY);
     assert.equal(ai.lastPreparationComplete, false);
