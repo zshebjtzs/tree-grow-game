@@ -299,6 +299,7 @@ test('exchange scoring subtracts own destroyed nodes instead of rewarding gross 
         spatialScore: 0
     });
     evaluator.getAdvantageConversionFactor = () => 0;
+    evaluator.getDisadvantageRiskFactor = () => 0;
     const before = {
         getAliveNodesByOwner: side => side === 'red'
             ? [{ id: 1 }, { id: 5 }]
@@ -354,6 +355,7 @@ test('advantage conversion increases ordering value only when the position is fa
             spatialScore: 0
         });
         evaluator.getAdvantageConversionFactor = () => factor;
+        evaluator.getDisadvantageRiskFactor = () => 0;
         return evaluator;
     };
     const before = {
