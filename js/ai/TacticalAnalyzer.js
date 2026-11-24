@@ -209,26 +209,30 @@ export class TacticalAnalyzer {
             const afterIds = new Set(after.getAliveNodesByOwner(side).map(node => node.id));
             return before.getAliveNodesByOwner(side).filter(node => !afterIds.has(node.id)).length;
         };
-        const lostRoots = (before, after, side) => {
-            const afterIds = new Set(after.getPlayerRootNodes(side).map(node => node.id));
-            return before.getPlayerRootNodes(side).filter(node => !afterIds.has(node.id)).length;
-        };
-        const measure = (after, finalMove) => {
-            if (!after) return null;
-            const beforeEnemy = rootState.getAliveNodesByOwner(defenderSide);
-            const afterIds = new Set(after.getAliveNodesByOwner(defenderSide).map(node => node.id));
-            const removed = beforeEnemy.filter(node => !afterIds.has(node.id));
-            const beforeRoots = new Set(rootState.getPlayerRootNodes(defenderSide).map(node => node.id));
-            const afterRoots = new Set(after.getPlayerRootNodes(defenderSide).map(node => node.id));
-            const rootLoss = [...beforeRoots].filter(id => !afterRoots.has(id)).length;
-            const direct = beforeEnemy.find(node => node.areaId === finalMove.targetAreaId);
-            const cascadeLoss = removed.filter(node =>
-                node.id !== direct?.id && !beforeRoots.has(node.id)).length;
-            const nodeLoss = removed.length;
-            const selfLoss = lostNodes(rootState, after, attackerSide);
-            const ownRootLoss = lostRoots(rootState, after, attackerSide);
-            return { rootLoss, cascadeLoss, nodeLoss, selfLoss, ownRootLoss,
-                netNodeGain: nodeLoss - selfLoss };
+        const rootLoss = (before, after, side) =>
+            before.getPlayerRootNodes(side).length - after.getPlayerRootNodes(side).length;
+        const measure = (afterCandidate, afterResponse, afterContinuation, finalMove) => {
+            if (!afterContinuation) return null;
+            const enemyLoss =
+                lostNodes(rootState, afterCandidate, defenderSide) +
+                lostNodes(afterCandidate, afterResponse, defenderSide) +
+                lostNodes(afterResponse, afterContinuation, defenderSide);
+            const selfLoss =
+                lostNodes(rootState, afterCandidate, attackerSide) +
+                lostNodes(afterCandidate, afterResponse, attackerSide) +
+                lostNodes(afterResponse, afterContinuation, attackerSide);
+            const enemyRootLoss = rootLoss(rootState, afterContinuation, defenderSide);
+            const ownRootLoss = rootLoss(rootState, afterContinuation, attackerSide);
+            const directTarget = afterResponse.getAliveNodesByOwner(defenderSide)
+                .find(node => node.areaId === finalMove.targetAreaId);
+            const afterEnemyIds = new Set(afterContinuation.getAliveNodesByOwner(defenderSide)
+                .map(node => node.id));
+            const directTargetLoss = directTarget && !afterEnemyIds.has(directTarget.id) ? 1 : 0;
+            const cascadeLoss = Math.max(0, enemyLoss - enemyRootLoss - directTargetLoss);
+            return {
+                rootLoss: enemyRootLoss, cascadeLoss, nodeLoss: enemyLoss,
+                selfLoss, ownRootLoss, netNodeGain: enemyLoss - selfLoss
+            };
         };
         const qualifies = gain => Boolean(gain && gain.ownRootLoss === 0 && (
             gain.rootLoss > 0 ||
@@ -266,7 +270,7 @@ export class TacticalAnalyzer {
                         simulateMove(afterResponse,continuation,attackerSide,bases);
                     if (!afterContinuation || afterContinuation.isGameOver ||
                         !afterContinuation.getPlayerRootNodes(attackerSide).length) continue;
-                    const gain = measure(afterContinuation,continuation);
+                    const gain = measure(afterCandidate,afterResponse,afterContinuation,continuation);
                     if (qualifies(gain) && better(gain,bestContinuation)) bestContinuation=gain;
                 }
                 if (!survives || !qualifies(bestContinuation)) { survives=false; break; }
@@ -327,23 +331,21 @@ export class TacticalAnalyzer {
             return alive(before, side).filter(node => !afterIds.has(node.id)).length;
         };
         const rootCount = (state, side) => state.getPlayerRootNodes(side).length;
-        const measureAttack = (before, after, move) => {
+        const measureAttack = (before, after, move, accumulatedSelfLoss, accumulatedEnemyLoss) => {
             if (!after) return null;
-            const beforeNodes = alive(rootState, defenderSide);
-            const afterIds = new Set(alive(after, defenderSide).map(node => node.id));
-            const removed = beforeNodes.filter(node => !afterIds.has(node.id));
-            const beforeRootIds = new Set(rootState.getPlayerRootNodes(defenderSide).map(node => node.id));
-            const afterRootIds = new Set(after.getPlayerRootNodes(defenderSide).map(node => node.id));
-            const rootLoss = [...beforeRootIds].filter(id => !afterRootIds.has(id)).length;
-            const directTarget = beforeNodes.find(node => node.areaId === move.targetAreaId);
-            const cascadeLoss = removed.filter(node =>
-                node.id !== directTarget?.id && !beforeRootIds.has(node.id)
-            ).length;
-            const nodeLoss = removed.length;
-            const selfLoss = lostNodes(rootState, after, attackerSide);
+            const enemyLoss = accumulatedEnemyLoss +
+                lostNodes(before, after, defenderSide);
+            const selfLoss = accumulatedSelfLoss +
+                lostNodes(before, after, attackerSide);
+            const rootLoss = rootCount(rootState, defenderSide) - rootCount(after, defenderSide);
             const ownRootLoss = rootCount(rootState, attackerSide) - rootCount(after, attackerSide);
-            return { rootLoss, cascadeLoss, nodeLoss, selfLoss, ownRootLoss,
-                netNodeGain: nodeLoss - selfLoss };
+            const directTarget = alive(before, defenderSide)
+                .find(node => node.areaId === move.targetAreaId);
+            const afterIds = new Set(alive(after, defenderSide).map(node => node.id));
+            const directTargetLoss = directTarget && !afterIds.has(directTarget.id) ? 1 : 0;
+            const cascadeLoss = Math.max(0, enemyLoss - rootLoss - directTargetLoss);
+            return { rootLoss, cascadeLoss, nodeLoss: enemyLoss, selfLoss, ownRootLoss,
+                netNodeGain: enemyLoss - selfLoss };
         };
         const qualifies = gain => gain && gain.ownRootLoss === 0 && (
             gain.rootLoss > 0 ||
@@ -355,7 +357,7 @@ export class TacticalAnalyzer {
         const better = (left,right) => !right || compareGain(left,right)>0;
         const worse = (left,right) => !right || compareGain(left,right)<0;
 
-        const proveAfterFirstReply = (state, initialThreat) => {
+        const proveAfterFirstReply = (state, initialThreat, firstSelfLoss, firstEnemyLoss) => {
             if (!visit()) return null;
             if (state.isGameOver || rootCount(state, attackerSide) === 0) return null;
             const setups = generateMoves(state, attackerSide, bases);
@@ -370,6 +372,10 @@ export class TacticalAnalyzer {
                     simulateMove(state, setup, attackerSide, bases);
                 if (!afterSetup || afterSetup.isGameOver ||
                     rootCount(afterSetup, attackerSide) === 0) continue;
+                const setupSelfLoss = firstSelfLoss +
+                    lostNodes(state, afterSetup, attackerSide);
+                const setupEnemyLoss = firstEnemyLoss +
+                    lostNodes(state, afterSetup, defenderSide);
 
                 if (!visit()) return null;
                 const replies = generateMoves(afterSetup, defenderSide, bases);
@@ -406,7 +412,11 @@ export class TacticalAnalyzer {
                         const afterAttack = attack._nextState ||
                             simulateMove(afterResponse, attack, attackerSide, bases);
                         if (!afterAttack || rootCount(afterAttack, attackerSide) === 0) continue;
-                        const gain = measureAttack(afterResponse, afterAttack, attack);
+                        const gain = measureAttack(
+                            afterResponse, afterAttack, attack,
+                            setupSelfLoss + lostNodes(afterSetup, afterResponse, attackerSide),
+                            setupEnemyLoss + lostNodes(afterSetup, afterResponse, defenderSide)
+                        );
                         if (qualifies(gain) && better(gain, bestAttack)) {
                             bestAttack = { ...gain, attack };
                         }
@@ -477,7 +487,13 @@ export class TacticalAnalyzer {
                     break;
                 }
                 if (response?.attacks) attackReplyCount++;
-                const proof = proveAfterFirstReply(afterResponse, initialThreat);
+                const firstSelfLoss = lostNodes(rootState, afterCandidate, attackerSide) +
+                    lostNodes(afterCandidate, afterResponse, attackerSide);
+                const firstEnemyLoss = lostNodes(rootState, afterCandidate, defenderSide) +
+                    lostNodes(afterCandidate, afterResponse, defenderSide);
+                const proof = proveAfterFirstReply(
+                    afterResponse, initialThreat, firstSelfLoss, firstEnemyLoss
+                );
                 if (!proof) {
                     survives = false;
                     break;

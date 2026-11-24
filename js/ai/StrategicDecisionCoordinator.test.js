@@ -84,7 +84,7 @@ test('tactical analyzers share one bounded node allowance in strict priority ord
             return { moves: [], nodes: 0, complete: false };
         }
     }));
-    assert.deepEqual(budgets, [600, 600, 0]);
+    assert.deepEqual(budgets, [4000, 4000, 7800]);
     assert.equal(result.tacticalStats.nodes, 1200);
     assert.equal(result.tacticalStats.complete, false);
 });

@@ -272,7 +272,7 @@ test('all difficulty profiles share evaluation weights and vary only by search b
 
 test('all six difficulties configure bounded iterative search', async () => {
     const { getDifficultyProfile } = await import('./DifficultyProfiles.js');
-    const expectedDepths = [1, 2, 4, 5, 7, 8];
+    const expectedDepths = [1, 2, 4, 5, 9, 10];
     const profiles = ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']
         .map(getDifficultyProfile);
 

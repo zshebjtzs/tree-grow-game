@@ -197,7 +197,7 @@ export class AIController {
             preparationMs: existing.preparationMs ?? Math.max(0, completedAt - decisionStartedAt),
             totalMs: Math.max(0, completedAt - decisionStartedAt),
             configuredTargetMs: this.profile.searchBudgetMs,
-            deadlineMs: null,
+            deadlineMs: this.profile.searchBudgetMs,
             deadlineExceeded: false,
             tacticalSequenceNodes: this.lastTacticalSequenceStats?.nodes ?? 0,
             tacticalSequenceComplete: this.lastTacticalSequenceStats?.complete ?? true,
@@ -360,7 +360,7 @@ export class AIController {
             preparationMs: Math.max(0, searchStartedAt - decisionStartedAt),
             totalMs: Math.max(0, completedAt - decisionStartedAt),
             configuredTargetMs: this.profile.searchBudgetMs,
-            deadlineMs: null,
+            deadlineMs: this.profile.searchBudgetMs,
             deadlineExceeded: false
         };
         return result.move || rootMoves[0];

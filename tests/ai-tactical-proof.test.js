@@ -129,7 +129,9 @@ test('three-action proof uses the worst defender branch and cumulative exchange'
     ]);
     const result = analyzer.findForcedTacticalSequenceInThreeMoves(
         root, [candidate], 'red', bases, simulate,
-        state => moveMap.get(state) || [], pass,
+        (state, side) => state === afterCandidate && side === 'blue'
+            ? [firstReplyA, firstReplyB]
+            : moveMap.get(state) || [], pass,
         { maxNodes: 200 }
     );
 
@@ -145,8 +147,8 @@ test('search completes beyond the old wall-clock budget when node budget allows'
     const engine = new SearchEngine({ now: () => (clock += 100) });
     const leafA = { key: 'leaf-a', side: 'blue', score: 4, moves: [] };
     const leafB = { key: 'leaf-b', side: 'blue', score: 9, moves: [] };
-    const childA = { key: 'child-a', side: 'blue', score: 0, moves: [] };
-    const childB = { key: 'child-b', side: 'blue', score: 0, moves: [] };
+    const childA = { key: 'child-a', side: 'blue', score: 0 };
+    const childB = { key: 'child-b', side: 'blue', score: 0 };
     const root = { key: 'root', side: 'red' };
     const moveA = { key: 'a', next: childA };
     const moveB = { key: 'b', next: childB };
@@ -194,6 +196,7 @@ test('search fallback evaluates all root children even if no deeper node is allo
         getMoveKey: move => move.key,
         applyMove: (_state, move) => move.next,
         generateMoves: () => [],
+        orderMoves: (_state, moves) => moves,
         passTurn: state => state,
         evaluate: state => state.score,
         maxDepth: 4,

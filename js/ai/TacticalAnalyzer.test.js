@@ -431,10 +431,24 @@ function materialState({ turn = 'red', tag = '', blueNodes = [], redNodes = [], 
 
 test('forced material-gain analysis requires a qualifying attack after every opponent reply', () => {
     const analyzer = new TacticalAnalyzer();
-    const root = materialState({ turn: 'red' });
-    const afterCandidate = materialState({ turn: 'blue' });
+    const root = materialState({
+        turn: 'red',
+        redNodes: [{ id: 20, areaId: 6, isRoot: true }],
+        blueNodes: [
+            { id: 1, areaId: 1, isRoot: true },
+            { id: 2, areaId: 2, isRoot: false },
+            { id: 3, areaId: 3, isRoot: false },
+            { id: 4, areaId: 4, isRoot: false }
+        ]
+    });
+    const afterCandidate = materialState({
+        turn: 'blue',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
     const afterReplyA = materialState({
         turn: 'red',
+        redNodes: root.getAliveNodesByOwner('red'),
         blueNodes: [
             { id: 1, areaId: 1, isRoot: true },
             { id: 2, areaId: 2, isRoot: false },
@@ -444,17 +458,18 @@ test('forced material-gain analysis requires a qualifying attack after every opp
     });
     const afterReplyB = materialState({
         turn: 'red',
+        redNodes: root.getAliveNodesByOwner('red'),
         blueNodes: [
-            { id: 11, areaId: 1, isRoot: true },
-            { id: 12, areaId: 2, isRoot: false },
-            { id: 13, areaId: 3, isRoot: false },
-            { id: 14, areaId: 4, isRoot: false }
+            { id: 1, areaId: 1, isRoot: true },
+            { id: 2, areaId: 2, isRoot: false },
+            { id: 3, areaId: 3, isRoot: false },
+            { id: 4, areaId: 4, isRoot: false }
         ]
     });
     const afterAttack = materialState({
         turn: 'blue',
         blueNodes: [{ id: 1, areaId: 1, isRoot: true }],
-        redNodes: [{ id: 20, areaId: 6, isRoot: true }]
+        redNodes: root.getAliveNodesByOwner('red')
     });
     const candidate = { parentNodeId: 20, targetAreaId: 5, _nextState: afterCandidate };
     const replies = [
@@ -518,8 +533,16 @@ test('forced material-gain analysis rejects a candidate if one opponent reply re
 
 test('forced material-gain analysis never promotes an unexamined reply after budget exhaustion', () => {
     const analyzer = new TacticalAnalyzer();
-    const root = materialState({ turn: 'red' });
-    const afterCandidate = materialState({ turn: 'blue' });
+    const root = materialState({
+        turn: 'red',
+        redNodes: [{ id: 20, areaId: 6, isRoot: true }],
+        blueNodes: [{ id: 1, areaId: 1, isRoot: true }]
+    });
+    const afterCandidate = materialState({
+        turn: 'blue',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
     const candidate = { parentNodeId: 20, targetAreaId: 5, _nextState: afterCandidate };
 
     const result = analyzer.findForcedMaterialGainInTwoMoves(
@@ -538,30 +561,45 @@ test('forced material-gain analysis never promotes an unexamined reply after bud
 
 test('forced material-gain ranking reports the weakest actual opponent reply, not independent metric minima', () => {
     const analyzer = new TacticalAnalyzer();
-    const root = materialState({ turn: 'red' });
-    const afterCandidate = materialState({ turn: 'blue' });
+    const root = materialState({
+        turn: 'red',
+        redNodes: [{ id: 20, areaId: 6, isRoot: true }],
+        blueNodes: [
+            { id: 1, areaId: 1, isRoot: true },
+            { id: 2, areaId: 2, isRoot: false },
+            { id: 3, areaId: 3, isRoot: false },
+            { id: 4, areaId: 4, isRoot: false }
+        ]
+    });
+    const afterCandidate = materialState({
+        turn: 'blue',
+        redNodes: root.getAliveNodesByOwner('red'),
+        blueNodes: root.getAliveNodesByOwner('blue')
+    });
     const afterRootReply = materialState({
         turn: 'red', tag: 'root-reply',
+        redNodes: root.getAliveNodesByOwner('red'),
         blueNodes: [{ id: 1, areaId: 1, isRoot: true }]
     });
     const afterCascadeReply = materialState({
         turn: 'red', tag: 'cascade-reply',
+        redNodes: root.getAliveNodesByOwner('red'),
         blueNodes: [
-            { id: 11, areaId: 1, isRoot: true },
-            { id: 12, areaId: 2, isRoot: false },
-            { id: 13, areaId: 3, isRoot: false },
-            { id: 14, areaId: 4, isRoot: false }
+            { id: 1, areaId: 1, isRoot: true },
+            { id: 2, areaId: 2, isRoot: false },
+            { id: 3, areaId: 3, isRoot: false },
+            { id: 4, areaId: 4, isRoot: false }
         ]
     });
     const rootDestroyed = materialState({
         turn: 'blue',
         blueNodes: [],
-        redNodes: [{ id: 20, areaId: 6, isRoot: true }]
+        redNodes: root.getAliveNodesByOwner('red')
     });
     const cascadeDestroyed = materialState({
         turn: 'blue',
-        blueNodes: [{ id: 11, areaId: 1, isRoot: true }],
-        redNodes: [{ id: 20, areaId: 6, isRoot: true }]
+        blueNodes: [{ id: 1, areaId: 1, isRoot: true }],
+        redNodes: root.getAliveNodesByOwner('red')
     });
     const candidate = { targetAreaId: 5, _nextState: afterCandidate };
 
