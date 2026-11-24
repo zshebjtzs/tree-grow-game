@@ -768,14 +768,16 @@ export class TacticalAnalyzer {
                     move, index, immediateWinningMoves: Infinity, maxRootLoss: Infinity,
                     rootLossReplies: Infinity, totalRootLoss: Infinity,
                     structuralLossReplies: Infinity, maxCascadeLoss: Infinity,
-                    totalCascadeLoss: Infinity, maxNodeLoss: Infinity, totalNodeLoss: Infinity
+                    totalCascadeLoss: Infinity, maxNodeLoss: Infinity, totalNodeLoss: Infinity,
+                    worstReply: { rootLoss: Infinity, cascadeLoss: Infinity, nodeLoss: Infinity }
                 };
             }
             if (next.isGameOver) {
                 return {
                     move, index, immediateWinningMoves: 0, maxRootLoss: 0,
                     rootLossReplies: 0, totalRootLoss: 0, structuralLossReplies: 0,
-                    maxCascadeLoss: 0, totalCascadeLoss: 0, maxNodeLoss: 0, totalNodeLoss: 0
+                    maxCascadeLoss: 0, totalCascadeLoss: 0, maxNodeLoss: 0, totalNodeLoss: 0,
+                    worstReply: { rootLoss: 0, cascadeLoss: 0, nodeLoss: 0 }
                 };
             }
             return { move, index, ...analyze(next) };
