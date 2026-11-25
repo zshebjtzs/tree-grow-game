@@ -387,3 +387,67 @@ test('move ordering penalizes exposing a previously unused root', () => {
     assert.ok(score < -2000,
         'static move ordering must account for the newly exposed first root branch');
 });
+
+
+test('a root-chain-safe attack outranks an equivalent attack that exposes an unused root', () => {
+    const adjacency = {
+        5: [31, 33],
+        31: [5, 8],
+        8: [31, 46],
+        33: [5, 14, 20, 46],
+        14: [33],
+        20: [33],
+        46: [33, 8],
+        35: [19],
+        19: [35, 8]
+    };
+    const adapter = createAdapter(adjacency, 50);
+    const game = new GameState();
+
+    game.currentTurn = 'red';
+    const exposedRedRoot = addRoot(game, 35, 'red');
+    const redBranch = game.addNode(exposedRedRoot.id, 190, 0, 19, 'red');
+    game.addNode(redBranch.id, 80, 0, 8, 'red');
+    addRoot(game, 36, 'red');
+    addRoot(game, 37, 'red');
+
+    game.currentTurn = 'blue';
+    const fortifiedRoot = addRoot(game, 5, 'blue');
+    const fortress = game.addNode(fortifiedRoot.id, 330, 0, 33, 'blue');
+    game.addNode(fortress.id, 140, 0, 14, 'blue');
+    game.addNode(fortress.id, 200, 0, 20, 'blue');
+    const safeAttacker = game.addNode(fortress.id, 460, 0, 46, 'blue');
+    const exposedRoot = addRoot(game, 5, 'blue');
+    addRoot(game, 5, 'blue');
+
+    const bases = { red: 35, blue: 5 };
+    const riskyMove = {
+        parentNodeId: exposedRoot.id,
+        targetAreaId: 8,
+        x: 80,
+        y: 0,
+        attacks: true
+    };
+    const safeMove = {
+        parentNodeId: safeAttacker.id,
+        targetAreaId: 8,
+        x: 80,
+        y: 0,
+        attacks: true
+    };
+
+    const riskyNext = adapter.simulateMove(game, riskyMove, 'blue', bases);
+    const safeNext = adapter.simulateMove(game, safeMove, 'blue', bases);
+    assert.ok(riskyNext && safeNext, 'both attack choices must be legal');
+    assert.equal(riskyNext.getPlayerRootNodes('red').length, 2);
+    assert.equal(safeNext.getPlayerRootNodes('red').length, 2);
+
+    const riskyScore = adapter.positionEvaluator.scoreMove(
+        game, riskyMove, 'blue', bases, riskyNext
+    );
+    const safeScore = adapter.positionEvaluator.scoreMove(
+        game, safeMove, 'blue', bases, safeNext
+    );
+    assert.ok(safeScore > riskyScore + 2000,
+        'the equivalent attack from an existing protected branch must outrank exposing a fresh root');
+});
