@@ -11,6 +11,9 @@ const SHARED_EVALUATION = {
     safetyWeight: 1,
     structureWeight: 1,
     branchingWeight: 1,
+    // Exceeds the maximum exposed-root penalty on the default 50-area map:
+    // root safety (2,500) plus the full descendant risk (49 * 80).
+    rootCountWeight: 7000,
     rootSafetyWeight: 2500,
     rootChainRiskWeight: 80,
     softDistanceWeight: 0.25,
