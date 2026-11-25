@@ -313,3 +313,77 @@ test('position evaluation is cached per immutable state and remains zero-sum', (
     assert.equal(redScore + blueScore, 0,
         'the shared fixed-weight evaluator must be symmetric between both sides');
 });
+
+
+test('unused roots are not counted as exposed root chains', () => {
+    const adjacency = { 1: [2], 2: [1, 3], 3: [2, 4], 4: [3] };
+    const adapter = createAdapter(adjacency, 4);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    addRoot(game, 1, 'red');
+    game.currentTurn = 'blue';
+    addRoot(game, 4, 'blue');
+
+    const metrics = adapter.positionEvaluator.getStructuralMetrics(
+        game, 'red', { red: 1, blue: 4 }
+    );
+    assert.equal(metrics.unsafeRoots, 0,
+        'a root without a first branch has no exposed subtree');
+    assert.equal(metrics.rootChainRisk, 0);
+});
+
+test('losing an exposed root cannot improve the position evaluation', () => {
+    const adjacency = {
+        1: [2], 2: [1, 3], 3: [2, 4], 4: [3],
+        5: [6], 6: [5]
+    };
+    const adapter = createAdapter(adjacency, 6);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const exposedRoot = addRoot(game, 1, 'red');
+    game.addNode(exposedRoot.id, 20, 0, 2, 'red');
+    addRoot(game, 5, 'red');
+    game.currentTurn = 'blue';
+    addRoot(game, 4, 'blue');
+
+    const bases = { red: 1, blue: 4 };
+    const before = adapter.positionEvaluator.evaluateState(game, 'red', bases);
+    const afterRootLoss = game.clone();
+    afterRootLoss.deleteNodes([exposedRoot.id]);
+    const after = adapter.positionEvaluator.evaluateState(afterRootLoss, 'red', bases);
+
+    assert.ok(after < before,
+        'destroying a vulnerable root must remain a net loss after its exposure penalty disappears');
+    assert.equal(
+        adapter.positionEvaluator.evaluateState(afterRootLoss, 'red', bases) +
+        adapter.positionEvaluator.evaluateState(afterRootLoss, 'blue', bases),
+        0,
+        'root survival scoring must remain zero-sum'
+    );
+});
+
+test('move ordering penalizes exposing a previously unused root', () => {
+    const adjacency = { 1: [2, 3], 2: [1, 3], 3: [1, 2, 4], 4: [3] };
+    const adapter = createAdapter(adjacency, 4);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const root = addRoot(game, 1, 'red');
+    game.currentTurn = 'blue';
+    addRoot(game, 4, 'blue');
+    game.currentTurn = 'red';
+
+    const move = {
+        parentNodeId: root.id,
+        targetAreaId: 2,
+        x: 20,
+        y: 0,
+        attacks: false
+    };
+    const next = adapter.simulateMove(game, move, 'red', { red: 1, blue: 4 });
+    assert.ok(next);
+    const score = adapter.positionEvaluator.scoreMove(
+        game, move, 'red', { red: 1, blue: 4 }, next
+    );
+    assert.ok(score < -2000,
+        'static move ordering must account for the newly exposed first root branch');
+});
