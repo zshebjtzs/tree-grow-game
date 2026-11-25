@@ -13,6 +13,7 @@ export class PositionEvaluator {
         this.softDistanceToBase = softDistanceToBase;
         this.getGrowthMetrics = getGrowthMetrics;
         this.metricsCache = new WeakMap();
+        this.rootSafetyCache = new WeakMap();
         this.evaluationCache = new WeakMap();
         this.simulateMove = simulateMove;
         this.profile = profile;
@@ -42,7 +43,7 @@ export class PositionEvaluator {
             score += (beforeEnemyNodes - afterEnemyNodes) * 85 * profile.attackWeight;
             const beforeRoots = game.getPlayerRootNodes(enemy).length;
             const afterRoots = next.getPlayerRootNodes(enemy).length;
-            score += (beforeRoots - afterRoots) * 900 * profile.rootAttackWeight;
+            score += (beforeRoots - afterRoots) * profile.rootCountWeight * profile.rootAttackWeight;
         }
 
         const ownAreaGain = next.getAliveNodesByOwner(side).length -
@@ -51,6 +52,17 @@ export class PositionEvaluator {
 
         const ownThreat = this.distanceToBase(next, enemy, bases[side]);
         if (Number.isFinite(ownThreat)) score -= Math.max(0, 5 - ownThreat) * 24 * profile.safetyWeight;
+
+        // Keep move ordering consistent with the full evaluator: creating an
+        // exposed root branch is costly, while removing an enemy root is valuable.
+        const beforeOwnSafety = this.getRootSafetyMetrics(game, side);
+        const afterOwnSafety = this.getRootSafetyMetrics(next, side);
+        const beforeEnemySafety = this.getRootSafetyMetrics(game, enemy);
+        const afterEnemySafety = this.getRootSafetyMetrics(next, enemy);
+        score += (beforeOwnSafety.unsafeRoots - afterOwnSafety.unsafeRoots +
+            afterEnemySafety.unsafeRoots - beforeEnemySafety.unsafeRoots) * profile.rootSafetyWeight;
+        score += (beforeOwnSafety.rootChainRisk - afterOwnSafety.rootChainRisk +
+            afterEnemySafety.rootChainRisk - beforeEnemySafety.rootChainRisk) * profile.rootChainRiskWeight;
 
         // Structural value: preserve branching flexibility and avoid leaving
         // the newly created frontier as an isolated, immediately vulnerable leaf.
@@ -65,6 +77,38 @@ export class PositionEvaluator {
         return score;
     }
 
+    getRootSafetyMetrics(game, side) {
+        let cache = this.rootSafetyCache.get(game);
+        if (!cache) {
+            cache = new Map();
+            this.rootSafetyCache.set(game, cache);
+        }
+        if (cache.has(side)) return cache.get(side);
+
+        let unsafeRoots = 0;
+        let rootChainRisk = 0;
+        for (const root of game.getPlayerRootNodes(side)) {
+            const firstChild = root.childrenIds.map(childId => game.getNode(childId)).find(Boolean);
+            // An unused root has no exposed branch and cannot be lost through branch combat.
+            if (!firstChild || firstChild.getDegree() > 3) continue;
+            unsafeRoots++;
+            const stack = [firstChild.id];
+            const visited = new Set();
+            while (stack.length) {
+                const nodeId = stack.pop();
+                if (visited.has(nodeId)) continue;
+                visited.add(nodeId);
+                const node = game.getNode(nodeId);
+                if (!node || node.isDestroyed || node.owner !== side) continue;
+                rootChainRisk++;
+                for (const childId of node.childrenIds) stack.push(childId);
+            }
+        }
+        const metrics = Object.freeze({ unsafeRoots, rootChainRisk });
+        cache.set(side, metrics);
+        return metrics;
+    }
+
     getStructuralMetrics(game, side, bases) {
         const enemy = side === 'red' ? 'blue' : 'red';
         let cache = this.metricsCache.get(game);
@@ -75,28 +119,7 @@ export class PositionEvaluator {
         const cacheKey = `${side}:${bases[side]}:${bases[enemy]}`;
         if (cache.has(cacheKey)) return cache.get(cacheKey);
 
-        let unsafeRoots = 0;
-        let rootChainRisk = 0;
-        for (const root of game.getPlayerRootNodes(side)) {
-            const firstChild = root.childrenIds
-                .map(childId => game.getNode(childId))
-                .find(Boolean);
-            if (!firstChild || firstChild.getDegree() <= 3) {
-                unsafeRoots++;
-                const stack = firstChild ? [firstChild.id] : [];
-                const visited = new Set();
-                while (stack.length) {
-                    const nodeId = stack.pop();
-                    if (visited.has(nodeId)) continue;
-                    visited.add(nodeId);
-                    const node = game.getNode(nodeId);
-                    if (!node || node.isDestroyed || node.owner !== side) continue;
-                    rootChainRisk++;
-                    for (const childId of node.childrenIds) stack.push(childId);
-                }
-            }
-        }
-
+        const { unsafeRoots, rootChainRisk } = this.getRootSafetyMetrics(game, side);
         const growth = this.getGrowthMetrics(game, side, bases);
         let siegePreFortressCount = 0;
         let siegeFortressCount = 0;
@@ -190,7 +213,7 @@ export class PositionEvaluator {
         return finish(
             (ownDistanceScore - enemyDistanceScore) +
             (ownNodes - enemyNodes) * 7 +
-            (ownRoots - enemyRoots) * 220 +
+            (ownRoots - enemyRoots) * this.profile.rootCountWeight +
             (ownStructure - enemyStructure) * this.profile.structureWeight +
             structuralScore
         );
