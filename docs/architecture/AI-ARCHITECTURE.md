@@ -32,9 +32,9 @@ This separates hard tactical facts from non-terminal strategic preferences. A gu
 `PositionEvaluator` is the sole owner of strategic scoring. It retains the fixed-weight model from the base branch and evaluates both sides symmetrically:
 
 - Base race: legal distance to the opposing base, with soft distance used only when the legal route is blocked.
-- Material and roots: surviving node count and surviving root count.
+- Material and roots: surviving node count and surviving root count. A surviving root has a fixed value of 7,000, deliberately greater than the maximum exposed-root penalty on the default 50-area map. Destroying a root therefore cannot look like an evaluation improvement merely because its exposed branch and descendants disappear from the current state.
 - Structural value: branching flexibility, fortified branches, frozen nodes, and frontier leaves.
-- Root safety: number of roots whose first branch is not protected.
+- Root safety: only roots with an existing, attackable first branch are counted as exposed; an unused root has no branch subtree to lose. The same root-safety delta is included in static move ordering so deadline-limited fallback ordering does not ignore it.
 - Cascade exposure: the complete descendant subtree below each vulnerable first branch. Every reachable descendant is counted once; forks are not truncated to a single chain.
 - Growth and siege: RuleEngine-derived growth headroom, immediate base threats, siege preparation and established siege fortresses.
 
