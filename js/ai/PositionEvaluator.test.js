@@ -415,8 +415,8 @@ test('move ordering penalizes exposing a previously unused root', () => {
     const score = adapter.positionEvaluator.scoreMove(
         game, move, 'red', { red: 1, blue: 4 }, next
     );
-    assert.equal(aliveNodeScans, 1,
-        'only the distance calculation should scan all alive nodes; new-child lookup must use the appended entry');
+    assert.equal(aliveNodeScans, 2,
+        'the two distance calculations may scan alive nodes, but new-child lookup must not add a third scan');
     assert.ok(score < -2000,
         'static move ordering must account for the newly exposed first root branch');
 });
