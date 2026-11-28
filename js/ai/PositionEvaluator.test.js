@@ -36,6 +36,7 @@ test('unsafe root and full descendant metrics follow the authoritative combat an
     );
     assert.equal(metrics.unsafeRoots, 1);
     assert.equal(metrics.rootChainRisk, 3);
+    assert.deepEqual(metrics.exposedNodeIds, new Set([first.id, second.id, game.getAliveNodesByOwner('red')[3].id]));
 
     const safeGame = new GameState();
     safeGame.currentTurn = 'red';
@@ -52,6 +53,7 @@ test('unsafe root and full descendant metrics follow the authoritative combat an
     );
     assert.equal(safeMetrics.unsafeRoots, 0);
     assert.equal(safeMetrics.rootChainRisk, 0);
+    assert.equal(safeMetrics.exposedNodeIds.size, 0);
 
     const forkedGame = new GameState();
     forkedGame.currentTurn = 'red';
@@ -386,6 +388,49 @@ test('losing an exposed root cannot improve the position evaluation', () => {
         'root survival scoring must remain zero-sum'
     );
 });
+
+test('quiet growth derives own root-chain risk without rescanning the child state', () => {
+    const adjacency = {
+        1: [2], 2: [1, 3], 3: [2, 4], 4: [3]
+    };
+    const adapter = createAdapter(adjacency, 4);
+    const game = new GameState();
+
+    game.currentTurn = 'red';
+    const root = addRoot(game, 1, 'red');
+    const firstBranch = game.addNode(root.id, 20, 0, 2, 'red');
+    game.currentTurn = 'blue';
+    addRoot(game, 4, 'blue');
+
+    const bases = { red: 1, blue: 4 };
+    const move = {
+        parentNodeId: firstBranch.id,
+        targetAreaId: 3,
+        x: 30,
+        y: 0,
+        attacks: false
+    };
+    const next = adapter.simulateMove(game, move, 'red', bases);
+    assert.ok(next);
+    assert.ok(adapter.positionEvaluator.getRootSafetyMetrics(game, 'red')
+        .exposedNodeIds.has(firstBranch.id));
+
+    next.getPlayerRootNodes = () => {
+        throw new Error('quiet growth must not rebuild root metrics for the child state');
+    };
+    const fullProfile = adapter.positionEvaluator.profile;
+    const withSafety = adapter.positionEvaluator.scoreMove(game, move, 'red', bases, next);
+    adapter.positionEvaluator.profile = {
+        ...fullProfile,
+        rootSafetyWeight: 0,
+        rootChainRiskWeight: 0
+    };
+    const withoutSafety = adapter.positionEvaluator.scoreMove(game, move, 'red', bases, next);
+
+    assert.equal(withSafety - withoutSafety, -fullProfile.rootChainRiskWeight,
+        'adding a child below an exposed first branch must add exactly one unit of cascade risk');
+});
+
 
 test('move ordering penalizes exposing a previously unused root', () => {
     const adjacency = { 1: [2, 3], 2: [1, 3], 3: [1, 2, 4], 4: [3] };
