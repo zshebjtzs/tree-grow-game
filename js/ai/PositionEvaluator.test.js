@@ -406,12 +406,17 @@ test('move ordering penalizes exposing a previously unused root', () => {
     };
     const next = adapter.simulateMove(game, move, 'red', { red: 1, blue: 4 });
     assert.ok(next);
+    const getAliveNodes = next.getAliveNodes.bind(next);
+    let aliveNodeScans = 0;
     next.getAliveNodes = () => {
-        throw new Error('move ordering must not scan the full alive-node list to find its new child');
+        aliveNodeScans++;
+        return getAliveNodes();
     };
     const score = adapter.positionEvaluator.scoreMove(
         game, move, 'red', { red: 1, blue: 4 }, next
     );
+    assert.equal(aliveNodeScans, 1,
+        'only the distance calculation should scan all alive nodes; new-child lookup must use the appended entry');
     assert.ok(score < -2000,
         'static move ordering must account for the newly exposed first root branch');
 });
