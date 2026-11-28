@@ -42,6 +42,8 @@ The evaluator does not apply dynamic phase multipliers, spatial bonuses, comebac
 
 `scoreMove` is used for candidate ordering. `evaluateState` supplies the position value at search leaves. A move-ordering score is not a substitute for a completed minimax comparison.
 
+Material and root counts are aggregated in one pass and cached per immutable state; candidate scoring reuses the pre-move counts across every legal action. The newly grown node is identified from the appended child entry rather than scanning the full node list.
+
 Evaluation results and structural metrics are cached per immutable state and side. Search transitions produce detached states through the adapter, so a cached value is never reused after mutating the state it describes.
 
 ## Tactical analysis and search

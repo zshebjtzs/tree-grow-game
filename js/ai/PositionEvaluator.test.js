@@ -148,6 +148,31 @@ test('growth headroom, base threats, and siege metrics use legal RuleEngine acti
     assert.equal(fortressMetrics.siegeFortressCount, 1);
 });
 
+test('material counts and root counts are aggregated and cached per immutable state', () => {
+    const adjacency = { 1: [2], 2: [1], 3: [4], 4: [3] };
+    const adapter = createAdapter(adjacency, 4);
+    const game = new GameState();
+
+    game.currentTurn = 'red';
+    const redRoot = addRoot(game, 1, 'red');
+    game.addNode(redRoot.id, 20, 0, 2, 'red');
+    game.currentTurn = 'blue';
+    const blueRoot = addRoot(game, 3, 'blue');
+    game.addNode(blueRoot.id, 40, 0, 4, 'blue');
+
+    const first = adapter.positionEvaluator.getMaterialMetrics(game);
+    const second = adapter.positionEvaluator.getMaterialMetrics(game);
+    assert.deepEqual(first, {
+        redNodes: 2,
+        blueNodes: 2,
+        redRoots: 1,
+        blueRoots: 1
+    });
+    assert.strictEqual(second, first,
+        'all candidate evaluations on the same immutable state must reuse material counts');
+});
+
+
 test('structural metrics are cached per immutable state and side', () => {
     const adjacency = { 1: [2], 2: [1, 3], 3: [2] };
     const adapter = createAdapter(adjacency, 3);
@@ -381,6 +406,9 @@ test('move ordering penalizes exposing a previously unused root', () => {
     };
     const next = adapter.simulateMove(game, move, 'red', { red: 1, blue: 4 });
     assert.ok(next);
+    next.getAliveNodes = () => {
+        throw new Error('move ordering must not scan the full alive-node list to find its new child');
+    };
     const score = adapter.positionEvaluator.scoreMove(
         game, move, 'red', { red: 1, blue: 4 }, next
     );
