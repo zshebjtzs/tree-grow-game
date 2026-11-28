@@ -16,7 +16,7 @@ function addRoot(game, areaId, side) {
     return game.addNode(null, areaId * 10, 0, areaId, side);
 }
 
-test('unsafe root and single-chain metrics follow the authoritative combat ancestor rule', () => {
+test('unsafe root and full descendant metrics follow the authoritative combat ancestor rule', () => {
     const adjacency = {
         1: [2], 2: [1, 3], 3: [2, 4], 4: [3, 5], 5: [4],
         6: [7], 7: [6, 8, 9, 10], 8: [7], 9: [7], 10: [7]
@@ -36,6 +36,9 @@ test('unsafe root and single-chain metrics follow the authoritative combat ances
     );
     assert.equal(metrics.unsafeRoots, 1);
     assert.equal(metrics.rootChainRisk, 3);
+    const rootSafety = adapter.positionEvaluator.getRootSafetyMetrics(game, 'red');
+    assert.deepEqual(rootSafety.exposedNodeIds,
+        new Set([first.id, second.id, game.getAliveNodesByOwner('red')[3].id]));
 
     const safeGame = new GameState();
     safeGame.currentTurn = 'red';
@@ -52,6 +55,8 @@ test('unsafe root and single-chain metrics follow the authoritative combat ances
     );
     assert.equal(safeMetrics.unsafeRoots, 0);
     assert.equal(safeMetrics.rootChainRisk, 0);
+    assert.equal(adapter.positionEvaluator.getRootSafetyMetrics(safeGame, 'red')
+        .exposedNodeIds.size, 0);
 
     const forkedGame = new GameState();
     forkedGame.currentTurn = 'red';
@@ -66,7 +71,8 @@ test('unsafe root and single-chain metrics follow the authoritative combat ances
     );
     assert.equal(forkedMetrics.unsafeRoots, 1,
         'a degree-3 first child is still attackable and does not protect its root');
-    assert.equal(forkedMetrics.rootChainRisk, 1);
+    assert.equal(forkedMetrics.rootChainRisk, 3,
+        'all descendants below a vulnerable fork are exposed, not only one chain');
 });
 
 test('terminal base invasion is scored as a win for the side that moved', () => {
@@ -146,6 +152,31 @@ test('growth headroom, base threats, and siege metrics use legal RuleEngine acti
     assert.equal(fortressMetrics.siegePreFortressCount, 0);
     assert.equal(fortressMetrics.siegeFortressCount, 1);
 });
+
+test('material counts and root counts are aggregated and cached per immutable state', () => {
+    const adjacency = { 1: [2], 2: [1], 3: [4], 4: [3] };
+    const adapter = createAdapter(adjacency, 4);
+    const game = new GameState();
+
+    game.currentTurn = 'red';
+    const redRoot = addRoot(game, 1, 'red');
+    game.addNode(redRoot.id, 20, 0, 2, 'red');
+    game.currentTurn = 'blue';
+    const blueRoot = addRoot(game, 3, 'blue');
+    game.addNode(blueRoot.id, 40, 0, 4, 'blue');
+
+    const first = adapter.positionEvaluator.getMaterialMetrics(game);
+    const second = adapter.positionEvaluator.getMaterialMetrics(game);
+    assert.deepEqual(first, {
+        redNodes: 2,
+        blueNodes: 2,
+        redRoots: 1,
+        blueRoots: 1
+    });
+    assert.strictEqual(second, first,
+        'all candidate evaluations on the same immutable state must reuse material counts');
+});
+
 
 test('structural metrics are cached per immutable state and side', () => {
     const adjacency = { 1: [2], 2: [1, 3], 3: [2] };
@@ -282,4 +313,222 @@ test('first-root growth candidate generation is limited to reachable unoccupied 
     }).allowed);
     assert.deepEqual(legal.sort((a, b) => a - b), [2, 3, 4],
         'candidate pruning must preserve the exact legal root-growth targets');
+});
+
+
+test('position evaluation is cached per immutable state and remains zero-sum', () => {
+    const adjacency = { 1: [2], 2: [1, 3], 3: [2] };
+    const adapter = createAdapter(adjacency, 3);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    addRoot(game, 1, 'red');
+    game.currentTurn = 'blue';
+    addRoot(game, 3, 'blue');
+    const bases = { red: 1, blue: 3 };
+
+    const originalDistance = adapter.distanceToBase.bind(adapter);
+    let distanceCalls = 0;
+    adapter.distanceToBase = (...args) => {
+        distanceCalls++;
+        return originalDistance(...args);
+    };
+
+    const redScore = adapter.positionEvaluator.evaluateState(game, 'red', bases);
+    const callsAfterFirstEvaluation = distanceCalls;
+    assert.equal(adapter.positionEvaluator.evaluateState(game, 'red', bases), redScore);
+    assert.equal(distanceCalls, callsAfterFirstEvaluation,
+        're-evaluating the same immutable state and perspective must use the cache');
+
+    const blueScore = adapter.positionEvaluator.evaluateState(game, 'blue', bases);
+    assert.equal(redScore + blueScore, 0,
+        'the shared fixed-weight evaluator must be symmetric between both sides');
+});
+
+
+test('unused roots are not counted as exposed root chains', () => {
+    const adjacency = { 1: [2], 2: [1, 3], 3: [2, 4], 4: [3] };
+    const adapter = createAdapter(adjacency, 4);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    addRoot(game, 1, 'red');
+    game.currentTurn = 'blue';
+    addRoot(game, 4, 'blue');
+
+    const metrics = adapter.positionEvaluator.getStructuralMetrics(
+        game, 'red', { red: 1, blue: 4 }
+    );
+    assert.equal(metrics.unsafeRoots, 0,
+        'a root without a first branch has no exposed subtree');
+    assert.equal(metrics.rootChainRisk, 0);
+});
+
+test('losing an exposed root cannot improve the position evaluation', () => {
+    const adjacency = {
+        1: [2], 2: [1, 3], 3: [2, 4], 4: [3],
+        5: [6], 6: [5]
+    };
+    const adapter = createAdapter(adjacency, 6);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const exposedRoot = addRoot(game, 1, 'red');
+    game.addNode(exposedRoot.id, 20, 0, 2, 'red');
+    addRoot(game, 5, 'red');
+    game.currentTurn = 'blue';
+    addRoot(game, 4, 'blue');
+
+    const bases = { red: 1, blue: 4 };
+    const before = adapter.positionEvaluator.evaluateState(game, 'red', bases);
+    const afterRootLoss = game.clone();
+    afterRootLoss.deleteNodes([exposedRoot.id]);
+    const after = adapter.positionEvaluator.evaluateState(afterRootLoss, 'red', bases);
+
+    assert.ok(after < before,
+        'destroying a vulnerable root must remain a net loss after its exposure penalty disappears');
+    assert.equal(
+        adapter.positionEvaluator.evaluateState(afterRootLoss, 'red', bases) +
+        adapter.positionEvaluator.evaluateState(afterRootLoss, 'blue', bases),
+        0,
+        'root survival scoring must remain zero-sum'
+    );
+});
+
+test('quiet growth derives own root-chain risk without rescanning the child state', () => {
+    const adjacency = {
+        1: [2], 2: [1, 3], 3: [2, 4], 4: [3]
+    };
+    const adapter = createAdapter(adjacency, 4);
+    const game = new GameState();
+
+    game.currentTurn = 'red';
+    const root = addRoot(game, 1, 'red');
+    const firstBranch = game.addNode(root.id, 20, 0, 2, 'red');
+    game.currentTurn = 'blue';
+    addRoot(game, 4, 'blue');
+
+    const bases = { red: 1, blue: 4 };
+    const move = {
+        parentNodeId: firstBranch.id,
+        targetAreaId: 3,
+        x: 30,
+        y: 0,
+        attacks: false
+    };
+    const next = adapter.simulateMove(game, move, 'red', bases);
+    assert.ok(next);
+    assert.ok(adapter.positionEvaluator.getRootSafetyMetrics(game, 'red')
+        .exposedNodeIds.has(firstBranch.id));
+
+    next.getPlayerRootNodes = () => {
+        throw new Error('quiet growth must not rebuild root metrics for the child state');
+    };
+    const fullProfile = adapter.positionEvaluator.profile;
+    const withSafety = adapter.positionEvaluator.scoreMove(game, move, 'red', bases, next);
+    adapter.positionEvaluator.profile = {
+        ...fullProfile,
+        rootSafetyWeight: 0,
+        rootChainRiskWeight: 0
+    };
+    const withoutSafety = adapter.positionEvaluator.scoreMove(game, move, 'red', bases, next);
+
+    assert.equal(withSafety - withoutSafety, -fullProfile.rootChainRiskWeight,
+        'adding a child below an exposed first branch must add exactly one unit of cascade risk');
+});
+
+
+test('move ordering penalizes exposing a previously unused root', () => {
+    const adjacency = { 1: [2, 3], 2: [1, 3], 3: [1, 2, 4], 4: [3] };
+    const adapter = createAdapter(adjacency, 4);
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const root = addRoot(game, 1, 'red');
+    game.currentTurn = 'blue';
+    addRoot(game, 4, 'blue');
+    game.currentTurn = 'red';
+
+    const move = {
+        parentNodeId: root.id,
+        targetAreaId: 2,
+        x: 20,
+        y: 0,
+        attacks: false
+    };
+    const next = adapter.simulateMove(game, move, 'red', { red: 1, blue: 4 });
+    assert.ok(next);
+    const getAliveNodes = next.getAliveNodes.bind(next);
+    let aliveNodeScans = 0;
+    next.getAliveNodes = () => {
+        aliveNodeScans++;
+        return getAliveNodes();
+    };
+    const score = adapter.positionEvaluator.scoreMove(
+        game, move, 'red', { red: 1, blue: 4 }, next
+    );
+    assert.equal(aliveNodeScans, 2,
+        'the two distance calculations may scan alive nodes, but new-child lookup must not add a third scan');
+    assert.ok(score < -2000,
+        'static move ordering must account for the newly exposed first root branch');
+});
+
+
+test('a root-chain-safe attack outranks an equivalent attack that exposes an unused root', () => {
+    const adjacency = {
+        5: [31, 33],
+        31: [5, 8],
+        8: [31, 46],
+        33: [5, 14, 20, 46],
+        14: [33],
+        20: [33],
+        46: [33, 8],
+        35: [19],
+        19: [35, 8]
+    };
+    const adapter = createAdapter(adjacency, 50);
+    const game = new GameState();
+
+    game.currentTurn = 'red';
+    const exposedRedRoot = addRoot(game, 35, 'red');
+    const redBranch = game.addNode(exposedRedRoot.id, 190, 0, 19, 'red');
+    game.addNode(redBranch.id, 80, 0, 8, 'red');
+    addRoot(game, 36, 'red');
+    addRoot(game, 37, 'red');
+
+    game.currentTurn = 'blue';
+    const fortifiedRoot = addRoot(game, 5, 'blue');
+    const fortress = game.addNode(fortifiedRoot.id, 330, 0, 33, 'blue');
+    game.addNode(fortress.id, 140, 0, 14, 'blue');
+    game.addNode(fortress.id, 200, 0, 20, 'blue');
+    const safeAttacker = game.addNode(fortress.id, 460, 0, 46, 'blue');
+    const exposedRoot = addRoot(game, 5, 'blue');
+    addRoot(game, 5, 'blue');
+
+    const bases = { red: 35, blue: 5 };
+    const riskyMove = {
+        parentNodeId: exposedRoot.id,
+        targetAreaId: 8,
+        x: 80,
+        y: 0,
+        attacks: true
+    };
+    const safeMove = {
+        parentNodeId: safeAttacker.id,
+        targetAreaId: 8,
+        x: 80,
+        y: 0,
+        attacks: true
+    };
+
+    const riskyNext = adapter.simulateMove(game, riskyMove, 'blue', bases);
+    const safeNext = adapter.simulateMove(game, safeMove, 'blue', bases);
+    assert.ok(riskyNext && safeNext, 'both attack choices must be legal');
+    assert.equal(riskyNext.getPlayerRootNodes('red').length, 2);
+    assert.equal(safeNext.getPlayerRootNodes('red').length, 2);
+
+    const riskyScore = adapter.positionEvaluator.scoreMove(
+        game, riskyMove, 'blue', bases, riskyNext
+    );
+    const safeScore = adapter.positionEvaluator.scoreMove(
+        game, safeMove, 'blue', bases, safeNext
+    );
+    assert.ok(safeScore > riskyScore + 2000,
+        'the equivalent attack from an existing protected branch must outrank exposing a fresh root');
 });

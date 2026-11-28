@@ -93,3 +93,122 @@ test('AI simulation preserves a sibling branch and freezes the actual combat sto
     assert.equal(simulated.getNode(attackedLeaf.id), undefined);
     assert.equal(simulated.currentTurn, 'red');
 });
+
+
+test('forced material-gain analysis proves a real frozen-branch cascade using authoritative rules', () => {
+    const adjacency = {
+        1: [2], 2: [1, 5], 5: [2, 8],
+        6: [7], 7: [6, 8, 11], 8: [5, 7, 9, 10],
+        9: [8], 10: [8], 11: [7], 12: []
+    };
+    const adapter = new TreeGrowAIAdapter({
+        adjacency,
+        areaCenters: Array.from({ length: 10 }, (_, index) => [index * 10, 0]),
+        profile: getDifficultyProfile('medium')
+    });
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    const blueRoot = addNode(game, null, 1, 'blue');
+    const blueBranch = addNode(game, blueRoot.id, 2, 'blue');
+
+    game.currentTurn = 'red';
+    const redRoot = addNode(game, null, 6, 'red');
+    const redTrunk = addNode(game, redRoot.id, 7, 'red');
+    const redBranch = addNode(game, redTrunk.id, 8, 'red');
+    addNode(game, redBranch.id, 9, 'red');
+    addNode(game, redBranch.id, 10, 'red');
+    addNode(game, redTrunk.id, 11, 'red');
+    // This branch is frozen by an earlier combat interaction. Its descendants
+    // have no other legal growth targets, so the opponent's only response is pass.
+    redBranch.isFrozen = true;
+    game.currentTurn = 'blue';
+
+    const bases = { blue: 1, red: 12 };
+    const candidate = adapter.generateMoves(game, 'blue', bases)
+        .find(move => move.targetAreaId === 5);
+    assert.ok(candidate, 'the blue branch must be able to grow into area 5');
+    candidate._nextState = adapter.simulateMove(
+        game, candidate, 'blue', bases, { alreadyValidated: true }
+    );
+
+    const result = adapter.tacticalAnalyzer.findForcedMaterialGainInTwoMoves(
+        game,
+        [candidate],
+        'blue',
+        bases,
+        (state, move, side, matchBases) => adapter.simulateMove(
+            state, move, side, matchBases, { alreadyValidated: true }
+        ),
+        (state, side, matchBases) => adapter.generateMoves(state, side, matchBases),
+        (state, side) => adapter.simulatePass(state, side)
+    );
+
+    assert.deepEqual(result.moves, [candidate]);
+    assert.equal(result.complete, true);
+    assert.equal(result.guaranteedRootLoss, 0);
+    assert.equal(result.guaranteedCascadeLoss, 2);
+    assert.equal(result.guaranteedNodeLoss, 3);
+
+    const afterPass = adapter.simulatePass(candidate._nextState, 'red');
+    const attack = adapter.generateMoves(afterPass, 'blue', bases)
+        .find(move => move.targetAreaId === 8);
+    assert.ok(attack, 'the blue branch must be able to attack the frozen branch after the pass');
+    const afterAttack = adapter.simulateMove(
+        afterPass, attack, 'blue', bases, { alreadyValidated: true }
+    );
+    assert.equal(afterAttack.getPlayerRootNodes('red').length, 1);
+    assert.equal(afterAttack.getAliveNodesByOwner('red').length, 3);
+    assert.ok(afterAttack.getAliveNodesByOwner('red').some(node => node.areaId === 11),
+        'the sibling branch must survive the cascade');
+});
+
+
+test('three-action analyzer does not misclassify a quiet setup line as a forcing tactic', () => {
+    const adjacency = {
+        1: [2], 2: [1, 4], 4: [2, 5], 5: [4, 8],
+        6: [7], 7: [6, 8, 11], 8: [5, 7, 9, 10],
+        9: [8], 10: [8], 11: [7], 12: []
+    };
+    const adapter = new TreeGrowAIAdapter({
+        adjacency,
+        areaCenters: Array.from({ length: 12 }, (_, index) => [index * 10, 0]),
+        profile: getDifficultyProfile('medium')
+    });
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    const blueRoot = addNode(game, null, 1, 'blue');
+    const blueBranch = addNode(game, blueRoot.id, 2, 'blue');
+
+    game.currentTurn = 'red';
+    const redRoot = addNode(game, null, 6, 'red');
+    const redTrunk = addNode(game, redRoot.id, 7, 'red');
+    const redBranch = addNode(game, redTrunk.id, 8, 'red');
+    addNode(game, redBranch.id, 9, 'red');
+    addNode(game, redBranch.id, 10, 'red');
+    addNode(game, redTrunk.id, 11, 'red');
+    for (const node of game.getAliveNodesByOwner('red')) node.isFrozen = true;
+    game.currentTurn = 'blue';
+
+    const bases = { blue: 1, red: 12 };
+    const candidate = adapter.generateMoves(game, 'blue', bases)
+        .find(move => move.targetAreaId === 4);
+    assert.ok(candidate, 'the first blue move must reach area 4');
+    candidate._nextState = adapter.simulateMove(
+        game, candidate, 'blue', bases, { alreadyValidated: true }
+    );
+
+    const result = adapter.tacticalAnalyzer.findForcedTacticalSequenceInThreeMoves(
+        game,
+        [candidate],
+        'blue',
+        bases,
+        (state, move, side, matchBases) => adapter.simulateMove(
+            state, move, side, matchBases, { alreadyValidated: true }
+        ),
+        (state, side, matchBases) => adapter.generateMoves(state, side, matchBases),
+        (state, side) => adapter.simulatePass(state, side)
+    );
+
+    assert.deepEqual(result.moves, []);
+    assert.equal(result.complete, true);
+});

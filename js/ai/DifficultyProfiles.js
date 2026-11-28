@@ -11,6 +11,9 @@ const SHARED_EVALUATION = {
     safetyWeight: 1,
     structureWeight: 1,
     branchingWeight: 1,
+    // Exceeds the maximum exposed-root penalty on the default 50-area map:
+    // root safety (2,500) plus the full descendant risk (49 * 80).
+    rootCountWeight: 7000,
     rootSafetyWeight: 2500,
     rootChainRiskWeight: 80,
     softDistanceWeight: 0.25,
@@ -25,8 +28,8 @@ const SEARCH_BUDGETS = {
     easy:     { maxDepth: 2, searchBudgetMs: 50,   maxNodes: 1500 },
     medium:   { maxDepth: 4, searchBudgetMs: 150,  maxNodes: 6000 },
     advanced: { maxDepth: 5, searchBudgetMs: 300,  maxNodes: 12000 },
-    hard:     { maxDepth: 7, searchBudgetMs: 700,  maxNodes: 30000 },
-    expert:   { maxDepth: 8, searchBudgetMs: 1200, maxNodes: 60000 }
+    hard:     { maxDepth: 9, searchBudgetMs: 1800, maxNodes: 120000 },
+    expert:   { maxDepth: 10, searchBudgetMs: 3000, maxNodes: 250000 }
 };
 
 const LABELS = {

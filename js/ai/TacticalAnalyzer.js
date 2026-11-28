@@ -6,17 +6,34 @@
  */
 export class TacticalAnalyzer {
     findImmediateWinningMove(moves, side, bases) {
-        const enemyBaseId = bases[side === 'red' ? 'blue' : 'red'];
-        return moves.find(move => move.targetAreaId === enemyBaseId) || null;
+        const enemy = side === 'red' ? 'blue' : 'red';
+        const enemyBaseId = bases[enemy];
+        return moves.find(move =>
+            move.targetAreaId === enemyBaseId ||
+            (move._nextState?.isGameOver &&
+                move._nextState.getPlayerRootNodes(enemy).length === 0 &&
+                move._nextState.getPlayerRootNodes(side).length > 0)
+        ) || null;
     }
 
     analyzeOpponentReplies(game, defenderSide, attackerSide, bases, generateMoves, simulateMove) {
         const risk = {
             immediateWinningMoves: 0,
             rootLossReplies: 0,
+            structuralLossReplies: 0,
             maxRootLoss: 0,
+            totalRootLoss: 0,
             maxNodeLoss: 0,
-            maxCascadeLoss: 0
+            totalNodeLoss: 0,
+            maxCascadeLoss: 0,
+            totalCascadeLoss: 0,
+            // Metrics from one coherent opponent reply. Never synthesize a
+            // worst case by combining losses from mutually exclusive moves.
+            worstReply: {
+                rootLoss: 0,
+                cascadeLoss: 0,
+                nodeLoss: 0
+            }
         };
         const beforeNodes = game.getAliveNodesByOwner(defenderSide);
         const beforeIds = new Set(beforeNodes.map(node => node.id));
@@ -53,9 +70,23 @@ export class TacticalAnalyzer {
                 ).length;
 
                 if (rootLoss > 0) risk.rootLossReplies++;
+                if (removedIds.length > 0) risk.structuralLossReplies++;
                 risk.maxRootLoss = Math.max(risk.maxRootLoss, rootLoss);
+                risk.totalRootLoss += rootLoss;
                 risk.maxNodeLoss = Math.max(risk.maxNodeLoss, removedIds.length);
+                risk.totalNodeLoss += removedIds.length;
                 risk.maxCascadeLoss = Math.max(risk.maxCascadeLoss, cascadeLoss);
+                risk.totalCascadeLoss += cascadeLoss;
+
+                const replyRisk = { rootLoss, cascadeLoss, nodeLoss: removedIds.length };
+                const currentWorst = risk.worstReply;
+                const isWorse = replyRisk.rootLoss > currentWorst.rootLoss ||
+                    (replyRisk.rootLoss === currentWorst.rootLoss &&
+                        replyRisk.cascadeLoss > currentWorst.cascadeLoss) ||
+                    (replyRisk.rootLoss === currentWorst.rootLoss &&
+                        replyRisk.cascadeLoss === currentWorst.cascadeLoss &&
+                        replyRisk.nodeLoss > currentWorst.nodeLoss);
+                if (isWorse) risk.worstReply = replyRisk;
             }
         } finally {
             game.currentTurn = originalTurn;
@@ -77,9 +108,591 @@ export class TacticalAnalyzer {
         return risk;
     }
 
-    rankDefenses(game, moves, side, bases, simulateMove, generateMoves) {
+    /**
+     * Proves a bounded two-turn forcing win:
+     * after a candidate move, every legal opponent reply must still leave at
+     * least one immediate winning move for the attacker. This is an AND/OR
+     * check, not a count of merely available threats.
+     *
+     * The result is conservative: an exhausted budget never turns an
+     * unexamined branch into a proven win.
+     */
+    findForcedWinInTwoMoves(
+        rootState, moves, attackerSide, bases, simulateMove, generateMoves, simulatePass,
+        { maxNodes = 1200, shouldStop = () => false } = {}
+    ) {
+        const defenderSide = attackerSide === 'red' ? 'blue' : 'red';
+        const result = { moves: [], nodes: 0, workUnits: 0, complete: true };
+
+        const visit = (units = 1) => {
+            const cost = Math.max(1, units);
+            if (result.workUnits + cost > maxNodes || shouldStop()) {
+                result.complete = false;
+                return false;
+            }
+            result.nodes++;
+            result.workUnits += cost;
+            return true;
+        };
+
+        const isWinningState = state => Boolean(
+            state?.isGameOver &&
+            state.getPlayerRootNodes(defenderSide).length === 0 &&
+            state.getPlayerRootNodes(attackerSide).length > 0
+        );
+
+        const hasImmediateWin = state => {
+            if (!visit()) return null;
+            const winningMoves = generateMoves(state, attackerSide, bases);
+            if (!visit(winningMoves.length)) return null;
+            for (const move of winningMoves) {
+                if (move.targetAreaId === bases[defenderSide]) return true;
+                if (!visit()) return null;
+                const next = move._nextState || simulateMove(state, move, attackerSide, bases);
+                if (isWinningState(next)) return true;
+            }
+            return false;
+        };
+
+        for (const candidate of moves) {
+            if (!visit()) break;
+            const afterCandidate = candidate._nextState ||
+                simulateMove(rootState, candidate, attackerSide, bases);
+            if (!afterCandidate) continue;
+
+            // An attack that already destroys the final enemy root is a
+            // proven win even when it is not a direct base-entry move.
+            if (isWinningState(afterCandidate)) {
+                result.moves.push(candidate);
+                break;
+            }
+            if (afterCandidate.isGameOver) continue;
+
+            if (!visit()) break;
+            const opponentMoves = generateMoves(afterCandidate, defenderSide, bases);
+            if (!visit(opponentMoves.length)) break;
+            const responses = opponentMoves.length ? opponentMoves : [null];
+            let forcesWin = true;
+
+            for (const response of responses) {
+                if (!visit()) {
+                    forcesWin = false;
+                    break;
+                }
+
+                let afterResponse;
+                if (response) {
+                    if (response.targetAreaId === bases[attackerSide]) {
+                        forcesWin = false;
+                        break;
+                    }
+                    afterResponse = response._nextState ||
+                        simulateMove(afterCandidate, response, defenderSide, bases);
+                } else {
+                    afterResponse = simulatePass(afterCandidate, defenderSide);
+                }
+
+                if (!afterResponse || afterResponse.isGameOver) {
+                    if (!isWinningState(afterResponse)) forcesWin = false;
+                } else {
+                    const winningReply = hasImmediateWin(afterResponse);
+                    if (winningReply !== true) forcesWin = false;
+                }
+
+                if (!forcesWin || !result.complete) break;
+            }
+
+            if (forcesWin && result.complete) {
+                result.moves.push(candidate);
+                // Candidates arrive in static-score order. One fully proven
+                // win is sufficient; do not spend the remaining turn budget.
+                if (result.moves.length) {
+                    break;
+                }
+            }
+            if (!result.complete) break;
+        }
+
+        return result;
+    }
+
+    /**
+     * Finds a two-turn tactical gain that survives every legal opponent reply.
+     * A qualifying continuation must remove an enemy root or at least two
+     * non-root nodes (including cascade losses). This avoids treating a lone
+     * expendable leaf as a meaningful forcing combination.
+     */
+    findForcedMaterialGainInTwoMoves(
+        rootState, moves, attackerSide, bases, simulateMove, generateMoves, simulatePass,
+        { maxNodes = 4000, shouldStop = () => false, minCascadeLoss = 2, minNetNodeGain = 2 } = {}
+    ) {
+        const defenderSide = attackerSide === 'red' ? 'blue' : 'red';
+        const result = { moves: [], nodes: 0, workUnits: 0, complete: true, guaranteedRootLoss: 0,
+            guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0, guaranteedSelfLoss: 0,
+            guaranteedNetNodeGain: 0 };
+        const visit = (units = 1) => {
+            const cost = Math.max(1, units);
+            if (result.workUnits + cost > maxNodes || shouldStop()) { result.complete = false; return false; }
+            result.nodes++;
+            result.workUnits += cost;
+            return true;
+        };
+        const lostNodes = (before, after, side) => {
+            const afterIds = new Set(after.getAliveNodesByOwner(side).map(node => node.id));
+            return before.getAliveNodesByOwner(side).filter(node => !afterIds.has(node.id)).length;
+        };
+        const rootLoss = (before, after, side) =>
+            before.getPlayerRootNodes(side).length - after.getPlayerRootNodes(side).length;
+        const directTargetLoss = (before, after, move, side) => {
+            if (!move?.attacks) return 0;
+            const target = before.getAliveNodesByOwner(side)
+                .find(node => node.areaId === move.targetAreaId);
+            // Root losses are already counted separately; do not subtract
+            // a directly attacked root a second time from cascade losses.
+            if (!target || target.isRoot) return 0;
+            return after.getAliveNodesByOwner(side).some(node => node.id === target.id) ? 0 : 1;
+        };
+        const measure = (candidate, afterCandidate, afterResponse, continuation, afterContinuation) => {
+            if (!afterContinuation) return null;
+            const enemyLoss =
+                lostNodes(rootState, afterCandidate, defenderSide) +
+                lostNodes(afterCandidate, afterResponse, defenderSide) +
+                lostNodes(afterResponse, afterContinuation, defenderSide);
+            const selfLoss =
+                lostNodes(rootState, afterCandidate, attackerSide) +
+                lostNodes(afterCandidate, afterResponse, attackerSide) +
+                lostNodes(afterResponse, afterContinuation, attackerSide);
+            const enemyRootLoss = rootLoss(rootState, afterContinuation, defenderSide);
+            const ownRootLoss = rootLoss(rootState, afterContinuation, attackerSide);
+            const directLoss =
+                directTargetLoss(rootState, afterCandidate, candidate, defenderSide) +
+                directTargetLoss(afterResponse, afterContinuation, continuation, defenderSide);
+            const cascadeLoss = Math.max(0, enemyLoss - enemyRootLoss - directLoss);
+            return {
+                rootLoss: enemyRootLoss, cascadeLoss, nodeLoss: enemyLoss,
+                selfLoss, ownRootLoss, netNodeGain: enemyLoss - selfLoss
+            };
+        };
+        const qualifies = gain => Boolean(gain && gain.ownRootLoss === 0 && (
+            gain.netNodeGain >= minNetNodeGain &&
+            (gain.rootLoss > 0 || gain.cascadeLoss >= minCascadeLoss)
+        ));
+        const compare = (x,y) => (x.rootLoss-y.rootLoss) ||
+            (x.netNodeGain-y.netNodeGain) || (x.cascadeLoss-y.cascadeLoss) ||
+            (x.nodeLoss-y.nodeLoss);
+        const better = (x,y) => !y || compare(x,y)>0;
+        const worse = (x,y) => !y || compare(x,y)<0;
+        let bestCandidate = null;
+        for (const candidate of moves) {
+            if (!visit()) break;
+            const afterCandidate = candidate._nextState || simulateMove(rootState,candidate,attackerSide,bases);
+            if (!afterCandidate || afterCandidate.isGameOver ||
+                !afterCandidate.getPlayerRootNodes(attackerSide).length) continue;
+            if (!visit()) break;
+            const replies = generateMoves(afterCandidate,defenderSide,bases);
+            if (!visit(replies.length)) break;
+            const responses = replies.length ? replies : [null];
+            let survives = true, worstCaseGain = null;
+            for (const response of responses) {
+                if (!visit()) { survives=false; break; }
+                if (response?.targetAreaId === bases[attackerSide]) { survives=false; break; }
+                const afterResponse = response
+                    ? response._nextState || simulateMove(afterCandidate,response,defenderSide,bases)
+                    : simulatePass(afterCandidate,defenderSide);
+                if (!afterResponse || afterResponse.isGameOver ||
+                    !afterResponse.getPlayerRootNodes(attackerSide).length) { survives=false; break; }
+                const continuations = generateMoves(afterResponse,attackerSide,bases);
+                if (!visit(continuations.length)) { survives = false; break; }
+                let bestContinuation = null;
+                for (const continuation of continuations) {
+                    if (!continuation.attacks) continue;
+                    if (!visit()) { survives=false; break; }
+                    const afterContinuation = continuation._nextState ||
+                        simulateMove(afterResponse,continuation,attackerSide,bases);
+                    if (!afterContinuation || afterContinuation.isGameOver ||
+                        !afterContinuation.getPlayerRootNodes(attackerSide).length) continue;
+                    const gain = measure(candidate,afterCandidate,afterResponse,continuation,afterContinuation);
+                    if (qualifies(gain) && better(gain,bestContinuation)) bestContinuation=gain;
+                }
+                if (!survives || !qualifies(bestContinuation)) { survives=false; break; }
+                if (worse(bestContinuation,worstCaseGain)) worstCaseGain=bestContinuation;
+                if (!result.complete) { survives=false; break; }
+            }
+            if (survives && result.complete && worstCaseGain) {
+                const proof={move:candidate,...worstCaseGain};
+                if (!bestCandidate || better(proof,bestCandidate)) bestCandidate=proof;
+            }
+            if (!result.complete) break;
+        }
+        if (bestCandidate && result.complete) {
+            result.moves=[bestCandidate.move];
+            result.guaranteedRootLoss=bestCandidate.rootLoss;
+            result.guaranteedCascadeLoss=bestCandidate.cascadeLoss;
+            result.guaranteedNodeLoss=bestCandidate.nodeLoss;
+            result.guaranteedSelfLoss=bestCandidate.selfLoss;
+            result.guaranteedNetNodeGain=bestCandidate.netNodeGain;
+        }
+        return result;
+    }
+
+    /**
+     * Proves a three-action forcing combination:
+     * candidate -> defender reply -> attacker counterattack.
+     *
+     * Every defender reply is an AND branch; the attacker may choose a
+     * qualifying counterattack (OR branch). Opponent attacks are allowed, but
+     * their actual losses are charged against the resulting material gain.
+     */
+    findForcedTacticalSequenceInThreeMoves(
+        rootState, moves, attackerSide, bases, simulateMove, generateMoves, simulatePass,
+        { maxNodes = 600, shouldStop = () => false, minNetNodeGain = 2, minCascadeLoss = 2 } = {}
+    ) {
+        const defenderSide = attackerSide === 'red' ? 'blue' : 'red';
+        const result = {
+            moves: [], nodes: 0, workUnits: 0, complete: true, sequence: [],
+            guaranteedRootLoss: 0, guaranteedCascadeLoss: 0,
+            guaranteedNodeGain: 0, guaranteedSelfLoss: 0,
+            opponentAttackReplies: 0, inducedDefenseBranches: 0,
+            inducementValidated: false, sacrificeValidated: false
+        };
+
+        const visit = (units = 1) => {
+            const cost = Math.max(1, units);
+            if (result.workUnits + cost > maxNodes || shouldStop()) {
+                result.complete = false;
+                return false;
+            }
+            result.nodes++;
+            result.workUnits += cost;
+            return true;
+        };
+        const alive = (state, side) => state.getAliveNodesByOwner(side);
+        const lostNodes = (before, after, side) => {
+            const afterIds = new Set(alive(after, side).map(node => node.id));
+            return alive(before, side).filter(node => !afterIds.has(node.id)).length;
+        };
+        const directTargetLoss = (before, after, move, side) => {
+            if (!move?.attacks) return 0;
+            const target = alive(before, side).find(node => node.areaId === move.targetAreaId);
+            // Root losses are already counted separately; do not subtract
+            // a directly attacked root a second time from cascade losses.
+            if (!target || target.isRoot) return 0;
+            return alive(after, side).some(node => node.id === target.id) ? 0 : 1;
+        };
+        const rootCount = (state, side) => state.getPlayerRootNodes(side).length;
+        const measureAttack = (
+            before, after, move, accumulatedSelfLoss, accumulatedEnemyLoss, accumulatedDirectLoss
+        ) => {
+            if (!after) return null;
+            const enemyLoss = accumulatedEnemyLoss +
+                lostNodes(before, after, defenderSide);
+            const selfLoss = accumulatedSelfLoss +
+                lostNodes(before, after, attackerSide);
+            const rootLoss = rootCount(rootState, defenderSide) - rootCount(after, defenderSide);
+            const ownRootLoss = rootCount(rootState, attackerSide) - rootCount(after, attackerSide);
+            const directLoss = accumulatedDirectLoss +
+                directTargetLoss(before, after, move, defenderSide);
+            const cascadeLoss = Math.max(0, enemyLoss - rootLoss - directLoss);
+            return { rootLoss, cascadeLoss, nodeLoss: enemyLoss, selfLoss, ownRootLoss,
+                netNodeGain: enemyLoss - selfLoss };
+        };
+        const qualifies = gain => gain && gain.ownRootLoss === 0 &&
+            gain.netNodeGain >= minNetNodeGain &&
+            (gain.rootLoss > 0 || gain.cascadeLoss >= minCascadeLoss);
+        const compareGain = (left,right) => (left.rootLoss-right.rootLoss) ||
+            (left.netNodeGain-right.netNodeGain) || (left.cascadeLoss-right.cascadeLoss) ||
+            (left.nodeLoss-right.nodeLoss);
+        const better = (left,right) => !right || compareGain(left,right)>0;
+        const worse = (left,right) => !right || compareGain(left,right)<0;
+        const hasImmediateWinningAction = (state, actions, side) => {
+            const opponent = side === 'red' ? 'blue' : 'red';
+            for (const move of actions) {
+                if (move.targetAreaId === bases[opponent]) return true;
+                if (!visit()) return null;
+                const next = move._nextState || simulateMove(state, move, side, bases);
+                if (next?.isGameOver && rootCount(next, opponent) === 0 &&
+                    rootCount(next, side) > 0) return true;
+            }
+            return false;
+        };
+
+        const proveAfterFirstReply = (
+            state, initialThreat, firstSelfLoss, firstEnemyLoss, firstDirectLoss
+        ) => {
+            if (!visit()) return null;
+            if (state.isGameOver || rootCount(state, attackerSide) === 0) return null;
+            const setups = generateMoves(state, attackerSide, bases);
+            if (!visit(setups.length)) return null;
+            const remainingThreat = hasImmediateWinningAction(state, setups, attackerSide);
+            if (remainingThreat === null) return null;
+            const inducedDefense = initialThreat && !remainingThreat;
+            let bestSetup = null;
+
+            for (const setup of setups) {
+                if (!visit()) return null;
+                const afterSetup = setup._nextState ||
+                    simulateMove(state, setup, attackerSide, bases);
+                if (!afterSetup || afterSetup.isGameOver ||
+                    rootCount(afterSetup, attackerSide) === 0) continue;
+                const setupSelfLoss = firstSelfLoss +
+                    lostNodes(state, afterSetup, attackerSide);
+                const setupEnemyLoss = firstEnemyLoss +
+                    lostNodes(state, afterSetup, defenderSide);
+                const setupDirectLoss = firstDirectLoss +
+                    directTargetLoss(state, afterSetup, setup, defenderSide);
+
+                if (!visit()) return null;
+                const replies = generateMoves(afterSetup, defenderSide, bases);
+                if (!visit(replies.length)) return null;
+                const responses = replies.length ? replies : [null];
+                let survives = true;
+                let worstGain = null;
+                let attackReplyCount = 0;
+
+                for (const response of responses) {
+                    if (!visit()) return null;
+                    if (response?.targetAreaId === bases[attackerSide]) {
+                        survives = false;
+                        break;
+                    }
+                    const afterResponse = response
+                        ? response._nextState || simulateMove(
+                            afterSetup, response, defenderSide, bases
+                        )
+                        : simulatePass(afterSetup, defenderSide);
+                    if (!afterResponse || afterResponse.isGameOver ||
+                        rootCount(afterResponse, attackerSide) === 0) {
+                        survives = false;
+                        break;
+                    }
+
+                    if (response?.attacks) attackReplyCount++;
+
+                    if (!visit()) return null;
+                    const generatedFinalAttacks = generateMoves(afterResponse, attackerSide, bases);
+                    if (!visit(generatedFinalAttacks.length)) return null;
+                    const finalAttacks = generatedFinalAttacks.filter(move => move.attacks);
+                    let bestAttack = null;
+                    for (const attack of finalAttacks) {
+                        if (!visit()) return null;
+                        const afterAttack = attack._nextState ||
+                            simulateMove(afterResponse, attack, attackerSide, bases);
+                        if (!afterAttack || rootCount(afterAttack, attackerSide) === 0) continue;
+                        const gain = measureAttack(
+                            afterResponse, afterAttack, attack,
+                            setupSelfLoss + lostNodes(afterSetup, afterResponse, attackerSide),
+                            setupEnemyLoss + lostNodes(afterSetup, afterResponse, defenderSide),
+                            setupDirectLoss
+                        );
+                        if (qualifies(gain) && better(gain, bestAttack)) {
+                            bestAttack = { ...gain, attack };
+                        }
+                    }
+
+                    if (!bestAttack) {
+                        survives = false;
+                        break;
+                    }
+                    if (worse(bestAttack, worstGain)) {
+                        worstGain = bestAttack;
+                    }
+                    if (!result.complete) return null;
+                }
+
+                if (survives && result.complete && worstGain) {
+                    const proof = {
+                        setup, attack: worstGain.attack,
+                        ...worstGain,
+                        opponentAttackReplies: attackReplyCount,
+                        inducedDefenseBranches: inducedDefense ? 1 : 0,
+                        selfLoss: worstGain.selfLoss
+                    };
+                    if (!bestSetup || better(proof, bestSetup)) bestSetup = proof;
+                }
+                if (!result.complete) return null;
+            }
+            return bestSetup;
+        };
+
+        let bestCandidate = null;
+        for (const candidate of moves) {
+            if (!visit()) break;
+            const afterCandidate = candidate._nextState ||
+                simulateMove(rootState, candidate, attackerSide, bases);
+            if (!afterCandidate || afterCandidate.isGameOver ||
+                rootCount(afterCandidate, attackerSide) === 0) continue;
+
+            if (!visit()) break;
+            // This is a hypothetical threat check for the attacker's next
+            // turn. The real state currently belongs to the defender, so
+            // temporarily expose the attacker turn while generating legal moves.
+            const originalTurn = afterCandidate.currentTurn;
+            let initialAttackerMoves;
+            afterCandidate.currentTurn = attackerSide;
+            try {
+                initialAttackerMoves = generateMoves(afterCandidate, attackerSide, bases);
+            } finally {
+                afterCandidate.currentTurn = originalTurn;
+            }
+            if (!visit(initialAttackerMoves.length)) break;
+            const initialThreatResult = hasImmediateWinningAction(
+                afterCandidate, initialAttackerMoves, attackerSide
+            );
+            if (initialThreatResult === null) break;
+            const initialThreat = initialThreatResult;
+            const firstReplies = generateMoves(afterCandidate, defenderSide, bases);
+            if (!visit(firstReplies.length)) break;
+            const responses = firstReplies.length ? firstReplies : [null];
+            let survives = true;
+            let worstProof = null;
+            let attackReplyCount = 0;
+            let inducedDefenseCount = 0;
+
+            for (const response of responses) {
+                if (!visit()) {
+                    survives = false;
+                    break;
+                }
+                if (response?.targetAreaId === bases[attackerSide]) {
+                    survives = false;
+                    break;
+                }
+                const afterResponse = response
+                    ? response._nextState || simulateMove(
+                        afterCandidate, response, defenderSide, bases
+                    )
+                    : simulatePass(afterCandidate, defenderSide);
+                if (!afterResponse || afterResponse.isGameOver ||
+                    rootCount(afterResponse, attackerSide) === 0) {
+                    survives = false;
+                    break;
+                }
+                if (response?.attacks) attackReplyCount++;
+                const firstSelfLoss = lostNodes(rootState, afterCandidate, attackerSide) +
+                    lostNodes(afterCandidate, afterResponse, attackerSide);
+                const firstEnemyLoss = lostNodes(rootState, afterCandidate, defenderSide) +
+                    lostNodes(afterCandidate, afterResponse, defenderSide);
+                const firstDirectLoss = directTargetLoss(
+                    rootState, afterCandidate, candidate, defenderSide
+                );
+                const proof = proveAfterFirstReply(
+                    afterResponse, initialThreat, firstSelfLoss, firstEnemyLoss, firstDirectLoss
+                );
+                if (!proof) {
+                    survives = false;
+                    break;
+                }
+                attackReplyCount += proof.opponentAttackReplies;
+                inducedDefenseCount += proof.inducedDefenseBranches;
+                if (worse(proof, worstProof)) worstProof = proof;
+                if (!result.complete) {
+                    survives = false;
+                    break;
+                }
+            }
+
+            // Do not elevate an otherwise quiet positional plan into a
+            // forcing tactic. The extended layer is reserved for genuine
+            // counterplay, a neutralized immediate threat, or a net-positive
+            // sacrifice that was exposed to opponent attacks.
+            const hasTacticalForcingFeature = attackReplyCount > 0 ||
+                inducedDefenseCount > 0 || worstProof?.selfLoss > 0;
+            if (survives && result.complete && worstProof && hasTacticalForcingFeature) {
+                const candidateProof = {
+                    move: candidate, setup: worstProof.setup, attack: worstProof.attack,
+                    rootLoss: worstProof.rootLoss,
+                    cascadeLoss: worstProof.cascadeLoss,
+                    nodeLoss: worstProof.nodeLoss,
+                    netNodeGain: worstProof.netNodeGain,
+                    selfLoss: worstProof.selfLoss,
+                    opponentAttackReplies: attackReplyCount,
+                    inducedDefenseBranches: inducedDefenseCount
+                };
+                if (!bestCandidate || better(candidateProof, bestCandidate)) {
+                    bestCandidate = candidateProof;
+                }
+            }
+            if (!result.complete) break;
+        }
+
+        if (bestCandidate && result.complete) {
+            result.moves = [bestCandidate.move];
+            result.sequence = [bestCandidate.move, bestCandidate.setup, bestCandidate.attack];
+            result.guaranteedRootLoss = bestCandidate.rootLoss;
+            result.guaranteedCascadeLoss = bestCandidate.cascadeLoss;
+            result.guaranteedNodeGain = bestCandidate.netNodeGain;
+            result.guaranteedSelfLoss = bestCandidate.selfLoss;
+            result.opponentAttackReplies = bestCandidate.opponentAttackReplies;
+            result.inducedDefenseBranches = bestCandidate.inducedDefenseBranches;
+            result.inducementValidated = bestCandidate.inducedDefenseBranches > 0;
+            result.sacrificeValidated = bestCandidate.selfLoss > 0 &&
+                bestCandidate.netNodeGain >= minNetNodeGain;
+        }
+        return result;
+    }
+
+    countImmediateWinningReplies(game, side, bases, generateMoves, simulateMove) {
         const opponent = side === 'red' ? 'blue' : 'red';
         const originalTurn = game.currentTurn;
+        game.currentTurn = opponent;
+        try {
+            return this.analyzeOpponentReplies(
+                game, side, opponent, bases, generateMoves, simulateMove
+            ).immediateWinningMoves;
+        } finally {
+            game.currentTurn = originalTurn;
+        }
+    }
+
+    findMandatoryDefenses(
+        game, moves, side, bases, simulateMove, generateMoves,
+        { maxNodes = 4000, shouldStop = () => false } = {}
+    ) {
+        let nodes = 0;
+        let workUnits = 0;
+        const consume = (units = 1) => {
+            const cost = Math.max(1, units);
+            if (workUnits + cost > maxNodes || shouldStop()) throw TacticalAnalyzer.BUDGET_EXHAUSTED;
+            nodes++;
+            workUnits += cost;
+        };
+        const boundedGenerate = (...args) => {
+            consume();
+            const generated = generateMoves(...args);
+            consume(generated.length);
+            return generated;
+        };
+        const boundedSimulate = (...args) => {
+            consume();
+            return simulateMove(...args);
+        };
+        try {
+            const immediateWinningMoves = this.countImmediateWinningReplies(
+                game, side, bases, boundedGenerate, boundedSimulate
+            );
+            // Structural safety matters even when the opponent has no
+            // immediate winning move. Preserve every legal candidate in that
+            // case, but order candidates by the opponent's strongest and
+            // aggregate root/cascade attack outcomes.
+            const ranked = immediateWinningMoves
+                ? this.rankDefenses(
+                    game, moves, side, bases, boundedSimulate, boundedGenerate, immediateWinningMoves
+                )
+                : this.orderByStructuralRisk(
+                    game, moves, side, bases, boundedSimulate, boundedGenerate
+                );
+            return { moves: ranked, hasImmediateThreat: immediateWinningMoves > 0,
+                immediateWinningMoves, nodes, workUnits, complete: true };
+        } catch (error) {
+            if (error !== TacticalAnalyzer.BUDGET_EXHAUSTED) throw error;
+            // An incomplete threat scan must never narrow the legal candidate set.
+            return { moves, hasImmediateThreat: false, immediateWinningMoves: 0,
+                nodes, workUnits, complete: false };
+        }
+    }
+
+    rankDefenses(game, moves, side, bases, simulateMove, generateMoves, knownCurrentThreats = undefined) {
+        const opponent = side === 'red' ? 'blue' : 'red';
         const analysisCache = new WeakMap();
         const analyze = state => {
             let result = analysisCache.get(state);
@@ -92,15 +705,8 @@ export class TacticalAnalyzer {
             return result;
         };
 
-        game.currentTurn = opponent;
-        let currentThreats;
-        try {
-            currentThreats = this.analyzeOpponentReplies(
-                game, side, opponent, bases, generateMoves, simulateMove
-            ).immediateWinningMoves;
-        } finally {
-            game.currentTurn = originalTurn;
-        }
+        const currentThreats = knownCurrentThreats ??
+            this.countImmediateWinningReplies(game, side, bases, generateMoves, simulateMove);
 
         // Immediate wins remain the highest-priority tactical threat.
         if (currentThreats) {
@@ -148,4 +754,58 @@ export class TacticalAnalyzer {
             .filter(item => item.maxCascadeLoss === minimumCascadeLoss)
             .map(item => item.move);
     }
+
+    orderByStructuralRisk(game, moves, side, bases, simulateMove, generateMoves) {
+        const opponent = side === 'red' ? 'blue' : 'red';
+        const analysisCache = new WeakMap();
+        const analyze = state => {
+            let result = analysisCache.get(state);
+            if (!result) {
+                result = this.analyzeOpponentReplies(
+                    state, side, opponent, bases, generateMoves, simulateMove
+                );
+                analysisCache.set(state, result);
+            }
+            return result;
+        };
+
+        // Analyze every candidate and preserve the complete legal set. The
+        // resulting order prioritizes structural safety without pruning
+        // tactically justified counterattacks.
+        const rootRisk = moves.map((move, index) => {
+            const next = move._nextState || simulateMove(game, move, side, bases);
+            if (!next || !next.getPlayerRootNodes(side).length) {
+                return {
+                    move, index, immediateWinningMoves: Infinity, maxRootLoss: Infinity,
+                    rootLossReplies: Infinity, totalRootLoss: Infinity,
+                    structuralLossReplies: Infinity, maxCascadeLoss: Infinity,
+                    totalCascadeLoss: Infinity, maxNodeLoss: Infinity, totalNodeLoss: Infinity,
+                    worstReply: { rootLoss: Infinity, cascadeLoss: Infinity, nodeLoss: Infinity }
+                };
+            }
+            if (next.isGameOver) {
+                return {
+                    move, index, immediateWinningMoves: 0, maxRootLoss: 0,
+                    rootLossReplies: 0, totalRootLoss: 0, structuralLossReplies: 0,
+                    maxCascadeLoss: 0, totalCascadeLoss: 0, maxNodeLoss: 0, totalNodeLoss: 0,
+                    worstReply: { rootLoss: 0, cascadeLoss: 0, nodeLoss: 0 }
+                };
+            }
+            return { move, index, ...analyze(next) };
+        });
+        const compareRisk = (left, right) =>
+            (left.immediateWinningMoves - right.immediateWinningMoves) ||
+            (left.worstReply.rootLoss - right.worstReply.rootLoss) ||
+            (left.worstReply.cascadeLoss - right.worstReply.cascadeLoss) ||
+            (left.worstReply.nodeLoss - right.worstReply.nodeLoss) ||
+            // Reply counts are secondary frequency signals. Aggregate losses
+            // are deliberately excluded because different replies are alternatives.
+            (left.rootLossReplies - right.rootLossReplies) ||
+            (left.structuralLossReplies - right.structuralLossReplies) ||
+            (left.index - right.index);
+
+        return rootRisk.sort(compareRisk).map(item => item.move);
+    }
 }
+
+TacticalAnalyzer.BUDGET_EXHAUSTED = Symbol('tactical-budget-exhausted');

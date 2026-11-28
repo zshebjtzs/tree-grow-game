@@ -121,8 +121,20 @@ export class TreeGrowAIAdapter {
             }
         }
 
+        if (selectionReason === 'forced-sequence-win') {
+            details.unshift('有限深度战术验证确认：无论对手选择哪一种合法回应，下一回合仍存在立即获胜行动。');
+            summary = '识别到经过对手回应验证的连续攻击组合，优先执行该行动。';
+        }
+        if (selectionReason === 'search-with-tactical-hints') {
+            const hintCount = searchStats?.tacticalHintCount ?? 0;
+            details.unshift(`战术分析提供了 ${hintCount} 个候选线索；最终行动仍由统一搜索对全部合法候选进行比较。`);
+            summary = '结合已验证的战术线索与全局搜索，选择该行动。';
+        }
         if (selectionReason === 'defense-priority') {
             details.unshift('战术筛选优先保留能最大限度减少对手立即获胜机会的行动。');
+        }
+        if (selectionReason === 'defense-risk-order') {
+            details.unshift('搜索优先检查可降低结构风险的行动，但仍保留全部合法候选。');
         }
         if (!details.length) details.push('该行动在当前难度配置的候选评分中排名靠前。');
         if (selectionReason === 'immediate-win') summary = '识别到立即获胜机会，优先执行胜利行动。';
@@ -131,8 +143,43 @@ export class TreeGrowAIAdapter {
         const search = searchStats ? {
             completedDepth: searchStats.completedDepth,
             nodes: searchStats.nodes,
+            workUnits: searchStats.workUnits ?? searchStats.nodes,
+            preparationWorkUnits: searchStats.preparationWorkUnits ?? 0,
+            preparationComplete: searchStats.preparationComplete ?? true,
+            totalWorkUnits: searchStats.totalWorkUnits ?? searchStats.workUnits ?? searchStats.nodes,
+            rootEvaluationComplete: searchStats.rootEvaluationComplete ?? true,
+            tacticalSequenceWorkUnits: searchStats.tacticalSequenceWorkUnits ?? searchStats.tacticalSequenceNodes ?? 0,
+            totalTacticalNodes: searchStats.totalTacticalNodes ?? 0,
+            totalTacticalWorkUnits: searchStats.totalTacticalWorkUnits ?? searchStats.totalTacticalNodes ?? 0,
+            mandatoryDefenseNodes: searchStats.mandatoryDefenseNodes ?? 0,
+            mandatoryDefenseWorkUnits: searchStats.mandatoryDefenseWorkUnits ?? searchStats.mandatoryDefenseNodes ?? 0,
+            tacticalDecisionComplete: searchStats.tacticalDecisionComplete ?? true,
+            rootEvaluations: searchStats.rootEvaluations ?? 0,
             elapsedMs: searchStats.elapsedMs,
-            transpositionHits: searchStats.transpositionHits
+            preparationMs: searchStats.preparationMs ?? 0,
+            totalMs: searchStats.totalMs ?? searchStats.elapsedMs,
+            configuredTargetMs: searchStats.configuredTargetMs ?? null,
+            decisionReason: searchStats.decisionReason ?? null,
+            immediateWinningMove: searchStats.immediateWinningMove ?? false,
+            transpositionHits: searchStats.transpositionHits,
+            tacticalSequenceNodes: searchStats.tacticalSequenceNodes ?? 0,
+            tacticalSequenceComplete: searchStats.tacticalSequenceComplete ?? true,
+            tacticalHintCount: searchStats.tacticalHintCount ?? 0,
+            deadlineExceeded: searchStats.deadlineExceeded ?? false,
+            targetLatencyExceeded: searchStats.targetLatencyExceeded ?? false,
+            forcedWinInTwoMoves: searchStats.forcedWinInTwoMoves ?? false,
+            forcedMaterialGainInTwoMoves: searchStats.forcedMaterialGainInTwoMoves ?? false,
+            guaranteedTacticalRootLoss: searchStats.guaranteedTacticalRootLoss ?? 0,
+            guaranteedTacticalCascadeLoss: searchStats.guaranteedTacticalCascadeLoss ?? 0,
+            guaranteedTacticalNodeLoss: searchStats.guaranteedTacticalNodeLoss ?? 0,
+            guaranteedTacticalNetNodeGain: searchStats.guaranteedTacticalNetNodeGain ?? 0,
+            forcedTacticalSequenceInThreeMoves: searchStats.forcedTacticalSequenceInThreeMoves ?? false,
+            counterattackSequence: searchStats.counterattackSequence ?? false,
+            inducementValidated: searchStats.inducementValidated ?? false,
+            inducedDefenseBranches: searchStats.inducedDefenseBranches ?? 0,
+            sacrificeValidated: searchStats.sacrificeValidated ?? false,
+            tacticalOpponentAttackReplies: searchStats.tacticalOpponentAttackReplies ?? 0,
+            guaranteedTacticalSelfLoss: searchStats.guaranteedTacticalSelfLoss ?? 0,
         } : null;
         return { title: 'AI 行动分析', summary, details: details.slice(0, 4), search };
     }

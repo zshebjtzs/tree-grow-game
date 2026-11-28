@@ -265,7 +265,7 @@ test('all difficulty profiles share evaluation weights and vary only by search b
 
 test('all six difficulties configure bounded iterative search', async () => {
     const { getDifficultyProfile } = await import('./DifficultyProfiles.js');
-    const expectedDepths = [1, 2, 4, 5, 7, 8];
+    const expectedDepths = [1, 2, 4, 5, 9, 10];
     const profiles = ['beginner', 'easy', 'medium', 'advanced', 'hard', 'expert']
         .map(getDifficultyProfile);
 
@@ -409,10 +409,18 @@ test('AI decision explanation reports measurable route and search evidence', () 
     assert.ok(ai.lastDecisionExplanation.details.some(detail => detail.includes('图论距离')));
     assert.ok(ai.lastDecisionExplanation.search.completedDepth > 0);
     assert.ok(ai.lastDecisionExplanation.search.nodes > 0);
+    assert.ok(ai.lastDecisionExplanation.search.rootEvaluations > 0);
+    assert.equal(ai.lastDecisionExplanation.search.decisionReason, 'search-selection');
     assert.ok(ai.lastSearchStats.preparationMs >= 0);
     assert.ok(ai.lastSearchStats.totalMs >= ai.lastSearchStats.preparationMs);
+    assert.ok(ai.lastSearchStats.totalWorkUnits <= ai.profile.maxNodes,
+        'preparation, tactical analysis, and general search must share one decision work budget');
     assert.equal(ai.lastSearchStats.deadlineMs, ai.profile.searchBudgetMs);
-    assert.equal(typeof ai.lastSearchStats.deadlineExceeded, 'boolean');
+    assert.equal(ai.lastSearchStats.targetLatencyExceeded,
+        ai.lastSearchStats.totalMs > ai.profile.searchBudgetMs);
+    assert.equal(ai.lastSearchStats.deadlineExceeded,
+        ai.lastSearchStats.targetLatencyExceeded);
+    assert.ok(ai.lastSearchStats.completedDepth >= 1);
     assert.ok(progress.some(item => item.phase === 'evaluating'));
     assert.ok(progress.some(item => item.phase === 'search'));
     assert.equal(progress.at(-1).phase, 'complete');
@@ -529,4 +537,321 @@ test('AIController rejects adapters that do not satisfy the game-mode contract',
         () => new AIController('medium', line, centers, {}),
         /AI 适配器接口无效/
     );
+});
+
+test('AIController validates the forced-material tactical adapter method', () => {
+    const adapter = new AIController('medium', line, centers).adapter;
+    adapter.tacticalAnalyzer.findForcedMaterialGainInTwoMoves = undefined;
+    assert.throws(
+        () => new AIController('medium', line, centers, adapter),
+        /AI 适配器接口无效/
+    );
+});
+
+
+test('AIController prioritizes a proven forcing sequence and exposes its tactical telemetry', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 6, 'red');
+    game.addNode(null, 0, 0, 1, 'blue');
+    const ai = new AIController('medium', line, centers);
+    let analyzedRoot = null;
+    ai.tacticalAnalyzer.findForcedWinInTwoMoves = (root, moves) => {
+        analyzedRoot = root;
+        return { moves: [moves[0]], nodes: 17, complete: true };
+    };
+    ai._search = () => {
+        throw new Error('general search must not override a proven forcing win');
+    };
+
+    const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+
+    assert.ok(move);
+    assert.equal(analyzedRoot.currentTurn, 'blue');
+    assert.equal(ai.lastSearchStats.tacticalSequenceNodes, 17);
+    assert.equal(ai.lastSearchStats.tacticalSequenceComplete, true);
+    assert.equal(ai.lastSearchStats.forcedWinInTwoMoves, true);
+    assert.match(ai.lastDecisionExplanation.summary, /连续攻击组合/);
+    assert.ok(ai.lastDecisionExplanation.details.some(detail => detail.includes('对手选择哪一种合法回应')));
+});
+
+
+test('AIController prioritizes an attack that destroys the opponent final root immediately', () => {
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const redRoot = game.addNode(null, 0, 0, 1, 'red');
+    const first = game.addNode(redRoot.id, 10, 0, 2, 'red');
+    const second = game.addNode(first.id, 20, 0, 3, 'red');
+    game.addNode(second.id, 30, 0, 4, 'red');
+    game.currentTurn = 'blue';
+    const blueRoot = game.addNode(null, 50, 0, 6, 'blue');
+    game.addNode(blueRoot.id, 40, 0, 5, 'blue');
+
+    const ai = new AIController('medium', line, centers);
+    const move = ai.getBestMove(snapshot(game, 1, 6), 'blue');
+
+    assert.ok(move);
+    assert.equal(move.targetAreaId, 4);
+    assert.equal(ai.lastSearchStats.completedDepth, 0);
+    assert.match(ai.lastDecisionExplanation.summary, /立即获胜/);
+    assert.ok(ai.lastDecisionExplanation.details.some(detail => detail.includes('1 个根节点')));
+});
+
+
+test('AIController sends verified forced material gains into general search', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 6, 'red');
+    game.addNode(null, 0, 0, 1, 'blue');
+    const ai = new AIController('medium', line, centers);
+    ai.tacticalAnalyzer.findForcedWinInTwoMoves = () => ({
+        moves: [], nodes: 9, complete: true
+    });
+    ai.tacticalAnalyzer.findForcedMaterialGainInTwoMoves = (_root, moves) => ({
+        moves: [moves[0]],
+        nodes: 13,
+        complete: true,
+        guaranteedRootLoss: 1,
+        guaranteedCascadeLoss: 2,
+        guaranteedNodeLoss: 4
+    });
+    ai.tacticalAnalyzer.findForcedTacticalSequenceInThreeMoves = () => ({
+        moves: [], nodes: 0, complete: true
+    });
+    let searchedMoves;
+    let searchedHints;
+    ai._search = (_game, moves, _side, _bases, _deadline, _startedAt, _budget, hints) => {
+        searchedMoves = moves;
+        searchedHints = hints;
+        return moves[0];
+    };
+
+    const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+
+    assert.ok(move);
+    assert.ok(searchedMoves.length > 0);
+    assert.equal(searchedHints.length, 1);
+    assert.equal(searchedHints[0], searchedMoves[0]);
+    assert.equal(ai.lastSearchStats.tacticalSequenceNodes, 22);
+    assert.equal(ai.lastSearchStats.tacticalSequenceComplete, true);
+    assert.equal(ai.lastSearchStats.forcedMaterialGainInTwoMoves, true);
+    assert.equal(ai.lastSearchStats.guaranteedTacticalRootLoss, 1);
+    assert.equal(ai.lastSearchStats.guaranteedTacticalCascadeLoss, 2);
+    assert.equal(ai.lastDecisionReason, 'search-with-tactical-hints');
+});
+
+
+test('AIController sends verified tactical sacrifices into general search', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 6, 'red');
+    game.addNode(null, 0, 0, 1, 'blue');
+    const ai = new AIController('medium', line, centers);
+    ai.tacticalAnalyzer.findForcedWinInTwoMoves = () => ({
+        moves: [], nodes: 8, complete: true
+    });
+    ai.tacticalAnalyzer.findForcedMaterialGainInTwoMoves = () => ({
+        moves: [], nodes: 9, complete: true,
+        guaranteedRootLoss: 0, guaranteedCascadeLoss: 0, guaranteedNodeLoss: 0
+    });
+    ai.tacticalAnalyzer.findForcedTacticalSequenceInThreeMoves = (_root, moves) => ({
+        moves: [moves[0]], nodes: 17, complete: true,
+        guaranteedRootLoss: 0, guaranteedCascadeLoss: 3,
+        guaranteedNodeGain: 2, guaranteedSelfLoss: 2,
+        opponentAttackReplies: 2, sacrificeValidated: true
+    });
+    let searchedMoves;
+    let searchedHints;
+    ai._search = (_game, moves, _side, _bases, _deadline, _startedAt, _budget, hints) => {
+        searchedMoves = moves;
+        searchedHints = hints;
+        return moves[0];
+    };
+
+    const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+
+    assert.ok(move);
+    assert.ok(searchedMoves.length > 0);
+    assert.equal(searchedHints.length, 1);
+    assert.equal(searchedHints[0], searchedMoves[0]);
+    assert.equal(ai.lastSearchStats.tacticalSequenceNodes, 34);
+    assert.equal(ai.lastSearchStats.tacticalSequenceComplete, true);
+    assert.equal(ai.lastSearchStats.forcedTacticalSequenceInThreeMoves, true);
+    assert.equal(ai.lastSearchStats.counterattackSequence, true);
+    assert.equal(ai.lastSearchStats.sacrificeValidated, true);
+    assert.equal(ai.lastSearchStats.guaranteedTacticalSelfLoss, 2);
+    assert.equal(ai.lastDecisionReason, 'search-with-tactical-hints');
+});
+
+
+test('AI keeps all legal candidates available to search when no immediate defense is mandatory', () => {
+    const game = new GameState();
+    game.currentTurn = 'red';
+    game.addNode(null, 0, 0, 6, 'red');
+    game.currentTurn = 'blue';
+    const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
+
+    const ai = new AIController('medium', line, centers);
+    const candidates = [
+        { parentNodeId: blueRoot.id, targetAreaId: 2, x: 10, y: 0, attacks: false },
+        { parentNodeId: blueRoot.id, targetAreaId: 3, x: 20, y: 0, attacks: false }
+    ];
+    let searchedCandidateCount = 0;
+    ai._generateMoves = () => candidates;
+    ai._simulateMove = state => state.clone();
+    ai._scoreMove = () => 0;
+    ai.tacticalAnalyzer.findMandatoryDefenses = (_game, moves) => ({
+        moves: moves.slice(0, 1),
+        hasImmediateThreat: false,
+        immediateWinningMoves: 0
+    });
+    ai._search = (_game, moves) => {
+        searchedCandidateCount = moves.length;
+        return moves[moves.length - 1];
+    };
+
+    const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+
+    assert.ok(move);
+    assert.equal(searchedCandidateCount, 2);
+    assert.equal(ai.lastDecisionReason, 'search-selection');
+});
+
+
+test('expert AI neutralizes a branch-cut threat instead of growing past it', () => {
+    const adjacency = {
+        10: [30],
+        25: [29],
+        29: [25, 38],
+        38: [29]
+    };
+    const game = new GameState();
+    game.currentTurn = 'red';
+    const redRoot = game.addNode(null, 0, 0, 46, 'red');
+    const redA = game.addNode(redRoot.id, 0, 0, 47, 'red');
+    const redB = game.addNode(redA.id, 0, 0, 16, 'red');
+    const redC = game.addNode(redB.id, 0, 0, 11, 'red');
+    const redD = game.addNode(redC.id, 0, 0, 33, 'red');
+    const redAttacker = game.addNode(redD.id, 0, 0, 29, 'red');
+
+    game.currentTurn = 'blue';
+    const blueRoot = game.addNode(null, 0, 0, 19, 'blue');
+    const blueTrunk = game.addNode(blueRoot.id, 0, 0, 10, 'blue');
+    game.addNode(blueTrunk.id, 0, 0, 25, 'blue');
+    const exposed = game.addNode(blueTrunk.id, 0, 0, 38, 'blue');
+    const exposedChild = game.addNode(exposed.id, 0, 0, 7, 'blue');
+    game.addNode(exposed.id, 0, 0, 34, 'blue');
+    game.addNode(exposedChild.id, 0, 0, 21, 'blue');
+    game.addNode(blueTrunk.id, 0, 0, 36, 'blue');
+    exposed.isFrozen = true;
+
+    const bases = { red: 1, blue: 50 };
+    const ai = new AIController(
+        'expert',
+        adjacency,
+        Array.from({ length: 50 }, (_, index) => [index * 10, 0])
+    );
+    const gameSnapshot = snapshot(game, bases.red, bases.blue);
+    const legalMoves = ai._generateMoves(game, 'blue', bases);
+    const counterattack = legalMoves.find(move =>
+        move.parentNodeId === blueTrunk.childrenIds[0] && move.targetAreaId === 29
+    );
+    const exposedGrowth = legalMoves.find(move =>
+        move.parentNodeId === blueTrunk.id && move.targetAreaId === 30
+    );
+    assert.ok(counterattack, 'blue must be able to remove the red attacker in area 29');
+    assert.ok(exposedGrowth, 'the previously selected expansion into area 30 remains legal');
+
+    const selected = ai.getBestMove(gameSnapshot, 'blue');
+    assert.deepEqual(
+        { parentNodeId: selected.parentNodeId, targetAreaId: selected.targetAreaId },
+        { parentNodeId: counterattack.parentNodeId, targetAreaId: counterattack.targetAreaId }
+    );
+});
+
+test('non-terminal tactical hints reorder the root search without dropping candidates', () => {
+    const game = new GameState();
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 6, 'red');
+    const blueRoot = game.addNode(null, 0, 0, 1, 'blue');
+    const ai = new AIController('hard', line, centers);
+    const state = ai.adapter.createState(snapshot(game, 6, 1));
+    ai.adapter.setSideToMove(state, 'blue');
+    const candidates = [
+        { parentNodeId: blueRoot.id, targetAreaId: 2, x: 10, y: 0, _nextState: state.clone() },
+        { parentNodeId: blueRoot.id, targetAreaId: 3, x: 20, y: 0, _nextState: state.clone() },
+        { parentNodeId: blueRoot.id, targetAreaId: 4, x: 30, y: 0, _nextState: state.clone() }
+    ];
+    const hints = [candidates[2], candidates[0]];
+    let searchedMoves;
+
+    ai.searchEngine.search = options => {
+        searchedMoves = options.rootMoves;
+        return {
+            move: options.rootMoves[0],
+            value: 0,
+            completedDepth: 1,
+            nodes: 1,
+            workUnits: 1,
+            elapsedMs: 0
+        };
+    };
+
+    const selected = ai._search(
+        state, candidates, 'blue', { red: 6, blue: 1 },
+        Infinity, ai.searchEngine.now(), 100, hints
+    );
+
+    assert.deepEqual(searchedMoves, [candidates[2], candidates[0], candidates[1]]);
+    assert.equal(searchedMoves.length, candidates.length);
+    assert.equal(selected, candidates[2]);
+    assert.equal(ai.lastSearchStats.tacticalHintCount, 2);
+});
+
+test('root preparation stops at the shared deadline without dropping legal candidates', () => {
+    const game = new GameState();
+    game.currentTurn = 'red';
+    game.addNode(null, 0, 0, 6, 'red');
+    game.currentTurn = 'blue';
+    game.addNode(null, 0, 0, 1, 'blue');
+    const ai = new AIController('medium', line, centers);
+    let now = 0;
+    ai.searchEngine.now = () => now;
+    const moves = [
+        { parentNodeId: 2, targetAreaId: 2, x: 10, y: 0 },
+        { parentNodeId: 2, targetAreaId: 3, x: 20, y: 0 },
+        { parentNodeId: 2, targetAreaId: 4, x: 30, y: 0 }
+    ];
+    ai._generateMoves = () => moves;
+    ai._simulateMove = () => {
+        now = 200;
+        return game.clone();
+    };
+    let scoreCalls = 0;
+    ai._scoreMove = () => {
+        scoreCalls++;
+        return 1;
+    };
+    let capturedCandidates;
+    ai.decisionCoordinator.resolve = ({ rankedMoves }) => {
+        capturedCandidates = rankedMoves;
+        return {
+            move: rankedMoves[0],
+            reason: 'search-selection',
+            tacticalStats: { nodes: 0, workUnits: 0, totalNodes: 0, totalWorkUnits: 0 }
+        };
+    };
+
+    const move = ai.getBestMove(snapshot(game, 6, 1), 'blue');
+
+    assert.ok(move);
+    assert.equal(capturedCandidates.length, moves.length);
+    assert.ok(capturedCandidates[0]._nextState);
+    assert.equal(capturedCandidates[0].score, Number.NEGATIVE_INFINITY);
+    assert.equal(scoreCalls, 0, 'do not start scoring after simulation has exhausted the deadline');
+    assert.equal(capturedCandidates[1]._nextState, undefined);
+    assert.equal(capturedCandidates[1].score, Number.NEGATIVE_INFINITY);
+    assert.equal(ai.lastPreparationComplete, false);
+    assert.equal(ai.lastSearchStats.preparationComplete, false);
+    assert.equal(ai.lastSearchStats.deadlineExceeded, true);
 });

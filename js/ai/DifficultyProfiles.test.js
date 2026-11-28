@@ -18,10 +18,11 @@ test('six AI difficulty profiles have strictly increasing search budgets', () =>
 test('all difficulty profiles share the same evaluation weights', () => {
     const profiles = DIFFICULTY_LEVELS.map(getDifficultyProfile);
     const keys = [
-        'progressWeight', 'attackWeight', 'rootAttackWeight', 'expansionWeight',
-        'safetyWeight', 'structureWeight', 'branchingWeight', 'rootSafetyWeight',
-        'rootChainRiskWeight', 'softDistanceWeight', 'growthHeadroomWeight',
-        'baseThreatWeight', 'siegePreparationWeight', 'siegeFortressWeight'
+        'progressWeight', 'attackWeight', 'rootAttackWeight',
+        'expansionWeight', 'safetyWeight', 'structureWeight', 'branchingWeight',
+        'rootSafetyWeight', 'rootChainRiskWeight', 'softDistanceWeight',
+        'growthHeadroomWeight', 'baseThreatWeight', 'siegePreparationWeight',
+        'siegeFortressWeight'
     ];
     for (const key of keys) {
         assert.ok(profiles.every(profile => profile[key] === profiles[0][key]), `${key} must be shared`);

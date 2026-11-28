@@ -34,7 +34,7 @@ test('budget exhaustion keeps the last fully completed iteration', () => {
         rootMoves: ['first', 'second'],
         maxDepth: 5,
         timeBudgetMs: 1000,
-        maxNodes: 2,
+        maxNodes: 15,
         getPositionKey: state => JSON.stringify(state),
         applyMove: (state, move, side) => side === 'red'
             ? { currentTurn: 'blue', isGameOver: false, branch: move, score: move === 'first' ? 5 : 1 }
@@ -49,7 +49,7 @@ test('budget exhaustion keeps the last fully completed iteration', () => {
 });
 
 
-test('search never exceeds the configured node budget', () => {
+test('search never exceeds the configured work budget', () => {
     const engine = new SearchEngine({ now: () => 0 });
     const result = engine.search({
         rootState: { currentTurn: 'red', isGameOver: false, ply: 0 },
@@ -68,8 +68,9 @@ test('search never exceeds the configured node budget', () => {
         orderMoves: (state, moves) => moves
     });
 
-    assert.equal(result.nodes, 1);
-    assert.ok(result.nodes <= 1);
+    assert.equal(result.workUnits, 1);
+    assert.ok(result.workUnits <= 1);
+    assert.equal(result.rootEvaluationComplete, false);
     assert.equal(result.completedDepth, 0,
         'an incomplete first iteration must not be reported as completed');
 });
@@ -567,4 +568,21 @@ test('search honors an absolute deadline shared with decision preparation', () =
     assert.equal(result.completedDepth, 0);
     assert.equal(result.nodes, 0,
         'the search phase must not restart a fresh budget after preparation used the shared deadline');
+});
+
+
+test('empty root candidate sets return the complete zero-work result shape', () => {
+    const result = new SearchEngine({ now: () => 0 }).search({
+        rootState: { currentTurn: 'red', score: 7 },
+        rootMoves: [],
+        evaluate: state => state.score,
+        maxDepth: 3,
+        maxNodes: 100
+    });
+    assert.equal(result.move, null);
+    assert.equal(result.value, 7);
+    assert.equal(result.nodes, 0);
+    assert.equal(result.workUnits, 0);
+    assert.equal(result.rootEvaluations, 0);
+    assert.equal(result.rootEvaluationComplete, true);
 });

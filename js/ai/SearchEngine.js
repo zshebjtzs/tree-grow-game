@@ -31,26 +31,37 @@ export class SearchEngine {
         onProgress = () => {}
     }) {
         if (!Array.isArray(rootMoves) || !rootMoves.length) {
-            return { move: null, value: evaluate(rootState), completedDepth: 0, nodes: 0, cutoffs: 0 };
+            return {
+                move: null, value: evaluate(rootState), completedDepth: 0,
+                nodes: 0, workUnits: 0, rootEvaluations: 0,
+                rootEvaluationComplete: true, cutoffs: 0
+            };
         }
         const startedAt = this.now();
-        const deadline = Number.isFinite(sharedDeadline)
-            ? sharedDeadline
-            : startedAt + Math.max(1, timeBudgetMs);
+        const deadline = sharedDeadline === Infinity
+            ? Infinity
+            : Number.isFinite(sharedDeadline)
+                ? sharedDeadline
+                : startedAt + Math.max(1, timeBudgetMs);
         const stats = {
             nodes: 0,
+            workUnits: 0,
             cutoffs: 0,
             transpositionHits: 0,
             aspirationResearches: 0,
             aspirationOneSidedResearches: 0,
             aspirationFailLow: 0,
-            aspirationFailHigh: 0
+            aspirationFailHigh: 0,
+            rootEvaluations: 0
         };
-        const checkBudget = () => {
-            if (stats.nodes >= maxNodes || this.now() >= deadline) {
+        const consumeWork = (units = 1) => {
+            const cost = Math.max(1, units);
+            if (stats.workUnits + cost > maxNodes || this.now() >= deadline) {
                 throw SearchEngine.BUDGET_EXHAUSTED;
             }
+            stats.workUnits += cost;
         };
+        const checkBudget = () => consumeWork();
         const table = new Map();
         const promoteMove = (moves, preferredKey) => {
             if (preferredKey === undefined || preferredKey === null) return moves;
@@ -60,16 +71,34 @@ export class SearchEngine {
         };
         let bestMove = rootMoves[0];
         let bestValue = -Infinity;
+        // Establish a full one-ply root evaluation before iterative deepening.
+        // An interrupted deeper iteration never falls back to static ordering.
+        let rootEvaluationComplete = true;
+        try {
+            for (const move of rootMoves) {
+                consumeWork();
+                const next = applyMove(rootState, move, getSideToMove(rootState));
+                if (!next) continue;
+                consumeWork();
+                const value = evaluate(next);
+                stats.rootEvaluations++;
+                if (value > bestValue) {
+                    bestValue = value;
+                    bestMove = move;
+                }
+            }
+        } catch (error) {
+            if (error !== SearchEngine.BUDGET_EXHAUSTED) throw error;
+            rootEvaluationComplete = false;
+        }
         let previousScoreDelta = 0;
         let completedDepth = 0;
         let preferredRootMoveKey;
 
         const visit = (state, depth, alpha, beta, maximizing) => {
-            if (stats.nodes >= maxNodes || this.now() >= deadline) {
-                throw SearchEngine.BUDGET_EXHAUSTED;
-            }
+            consumeWork();
             stats.nodes++;
-            if (isTerminal(state) || depth === 0) return evaluate(state);
+            if (isTerminal(state) || depth === 0) { consumeWork(); return evaluate(state); }
 
             const key = getPositionKey(state);
             const cached = table.get(key);
@@ -84,19 +113,22 @@ export class SearchEngine {
             }
 
             const side = getSideToMove(state);
+            consumeWork();
             let moves = generateMoves(state, side);
-            checkBudget();
+            consumeWork(moves.length + 1);
             if (!moves.length) {
                 const passed = passTurn?.(state, side);
                 return passed ? visit(passed, depth - 1, alpha, beta, !maximizing) : evaluate(state);
             }
             moves = orderMoves(state, moves, maximizing, checkBudget);
+            consumeWork(Math.max(1, moves.length * Math.ceil(Math.log2(Math.max(2, moves.length)))));
             moves = promoteMove(moves, cached?.bestMoveKey);
             let value = maximizing ? -Infinity : Infinity;
             let bestMoveKey;
 
             for (let index = 0; index < moves.length; index++) {
                 const move = moves[index];
+                consumeWork();
                 const next = applyMove(state, move, side);
                 if (!next) continue;
 
@@ -137,7 +169,7 @@ export class SearchEngine {
                     break;
                 }
             }
-            if (!Number.isFinite(value)) value = evaluate(state);
+            if (!Number.isFinite(value)) { consumeWork(); value = evaluate(state); }
             const bound = value <= originalAlpha ? 'upper'
                 : value >= originalBeta ? 'lower' : 'exact';
             const previous = table.get(key);
@@ -152,15 +184,18 @@ export class SearchEngine {
             let iterationValue = -Infinity;
             let alpha = initialAlpha;
             const beta = initialBeta;
+            consumeWork();
             let ordered = orderMoves(rootState, rootMoves, true, checkBudget);
+            consumeWork(Math.max(1, ordered.length * Math.ceil(Math.log2(Math.max(2, ordered.length)))));
             ordered = promoteMove(ordered, preferredRootMoveKey);
 
             for (const move of ordered) {
                 checkBudget();
+                consumeWork();
                 const next = applyMove(rootState, move, getSideToMove(rootState));
                 if (!next) continue;
                 const value = isTerminal(next)
-                    ? evaluate(next)
+                    ? (consumeWork(), evaluate(next))
                     : visit(next, depth - 1, alpha, beta, false);
                 if (value > iterationValue) {
                     iterationValue = value;
@@ -172,7 +207,7 @@ export class SearchEngine {
             return { move: iterationMove, value: iterationValue };
         };
 
-        for (let depth = 1; depth <= maxDepth; depth++) {
+        for (let depth = 1; rootEvaluationComplete && depth <= maxDepth; depth++) {
             try {
                 const window = Math.max(1, aspirationWindow + previousScoreDelta * 2);
                 const alpha = aspirationWindows && depth > 1 && Number.isFinite(bestValue)
@@ -227,7 +262,7 @@ export class SearchEngine {
                 if (error !== SearchEngine.BUDGET_EXHAUSTED) throw error;
                 break;
             }
-            if (this.now() >= deadline || stats.nodes >= maxNodes) break;
+            if (this.now() >= deadline || stats.workUnits >= maxNodes) break;
         }
 
         return {
@@ -235,6 +270,9 @@ export class SearchEngine {
             value: bestValue,
             completedDepth,
             nodes: stats.nodes,
+            workUnits: stats.workUnits,
+            rootEvaluations: stats.rootEvaluations,
+            rootEvaluationComplete,
             cutoffs: stats.cutoffs,
             transpositionHits: stats.transpositionHits,
             aspirationResearches: stats.aspirationResearches,
