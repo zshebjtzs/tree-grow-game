@@ -36,7 +36,9 @@ test('unsafe root and full descendant metrics follow the authoritative combat an
     );
     assert.equal(metrics.unsafeRoots, 1);
     assert.equal(metrics.rootChainRisk, 3);
-    assert.deepEqual(metrics.exposedNodeIds, new Set([first.id, second.id, game.getAliveNodesByOwner('red')[3].id]));
+    const rootSafety = adapter.positionEvaluator.getRootSafetyMetrics(game, 'red');
+    assert.deepEqual(rootSafety.exposedNodeIds,
+        new Set([first.id, second.id, game.getAliveNodesByOwner('red')[3].id]));
 
     const safeGame = new GameState();
     safeGame.currentTurn = 'red';
@@ -53,7 +55,8 @@ test('unsafe root and full descendant metrics follow the authoritative combat an
     );
     assert.equal(safeMetrics.unsafeRoots, 0);
     assert.equal(safeMetrics.rootChainRisk, 0);
-    assert.equal(safeMetrics.exposedNodeIds.size, 0);
+    assert.equal(adapter.positionEvaluator.getRootSafetyMetrics(safeGame, 'red')
+        .exposedNodeIds.size, 0);
 
     const forkedGame = new GameState();
     forkedGame.currentTurn = 'red';

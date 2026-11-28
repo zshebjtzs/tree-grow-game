@@ -55,30 +55,14 @@ export class PositionEvaluator {
 
         // Keep move ordering consistent with the full evaluator: creating an
         // exposed root branch is costly, while removing an enemy root is valuable.
-        // Combat only removes nodes from the defending side. The acting side
-        // can change its exposure only by extending an already exposed root
-        // chain or creating the first branch of an unused root.
-        const parent = game.getNode(move.parentNodeId);
-        const createsFirstRootBranch = Boolean(
-            parent?.isRoot && parent.childrenIds.length === 0
-        );
-        const ownSafetyBefore = this.getRootSafetyMetrics(game, side);
-        const extendsExposedRootChain = ownSafetyBefore.exposedNodeIds.has(move.parentNodeId);
-        if (createsFirstRootBranch || extendsExposedRootChain) {
-            if (createsFirstRootBranch) score -= profile.rootSafetyWeight;
-            score -= profile.rootChainRiskWeight;
-        }
-
-        // Quiet growth cannot change the opponent's root exposure. Rebuild
-        // opponent metrics only after combat has changed its defending tree.
-        if (move.attacks) {
-            const beforeEnemySafety = this.getRootSafetyMetrics(game, enemy);
-            const afterEnemySafety = this.getRootSafetyMetrics(next, enemy);
-            score += (afterEnemySafety.unsafeRoots - beforeEnemySafety.unsafeRoots) *
-                profile.rootSafetyWeight;
-            score += (afterEnemySafety.rootChainRisk - beforeEnemySafety.rootChainRisk) *
-                profile.rootChainRiskWeight;
-        }
+        const beforeOwnSafety = this.getRootSafetyMetrics(game, side);
+        const afterOwnSafety = this.getRootSafetyMetrics(next, side);
+        const beforeEnemySafety = this.getRootSafetyMetrics(game, enemy);
+        const afterEnemySafety = this.getRootSafetyMetrics(next, enemy);
+        score += (beforeOwnSafety.unsafeRoots - afterOwnSafety.unsafeRoots +
+            afterEnemySafety.unsafeRoots - beforeEnemySafety.unsafeRoots) * profile.rootSafetyWeight;
+        score += (beforeOwnSafety.rootChainRisk - afterOwnSafety.rootChainRisk +
+            afterEnemySafety.rootChainRisk - beforeEnemySafety.rootChainRisk) * profile.rootChainRiskWeight;
 
         // Structural value: preserve branching flexibility and avoid leaving
         // the newly created frontier as an isolated, immediately vulnerable leaf.
@@ -130,7 +114,6 @@ export class PositionEvaluator {
 
         let unsafeRoots = 0;
         let rootChainRisk = 0;
-        const exposedNodeIds = new Set();
         for (const root of game.getPlayerRootNodes(side)) {
             const firstChild = root.childrenIds.map(childId => game.getNode(childId)).find(Boolean);
             // An unused root has no exposed branch and cannot be lost through branch combat.
@@ -145,11 +128,10 @@ export class PositionEvaluator {
                 const node = game.getNode(nodeId);
                 if (!node || node.isDestroyed || node.owner !== side) continue;
                 rootChainRisk++;
-                exposedNodeIds.add(nodeId);
                 for (const childId of node.childrenIds) stack.push(childId);
             }
         }
-        const metrics = Object.freeze({ unsafeRoots, rootChainRisk, exposedNodeIds });
+        const metrics = Object.freeze({ unsafeRoots, rootChainRisk });
         cache.set(side, metrics);
         return metrics;
     }
